@@ -1736,6 +1736,17 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
   // A DeclRefExpr for a reference initialized by a constant expression can
   // appear without being odr-used. Directly emit the constant initializer.
   if (const VarDecl *VD = dyn_cast<VarDecl>(ND)) {
+
+    // CodeGen for threadprivate variables.
+    if (getLangOpts().OpenMP) {
+      if (llvm::Value *Val =
+               CGM.CreateOpenMPThreadPrivateCached(VD, E->getExprLoc(), *this))
+        return MakeAddrLValue(Val, T, Alignment);
+      // CodeGen for OpenMP private variables - works only in CapturedStmt.
+      else if (llvm::Value *Val = CGM.OpenMPSupport.getOpenMPPrivateVar(VD))
+        return MakeAddrLValue(Val, T, Alignment);
+    }
+
     const Expr *Init = VD->getAnyInitializer(VD);
     if (Init && !isa<ParmVarDecl>(VD) && VD->getType()->isReferenceType() &&
         VD->isUsableInConstantExpressions(getContext()) &&

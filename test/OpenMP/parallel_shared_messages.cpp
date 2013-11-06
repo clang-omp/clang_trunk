@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -verify -fopenmp -ferror-limit 100 %s
+// RUN: %clang_cc1 -triple x86_64-apple-macos10.7.0 -verify -fopenmp -ferror-limit 100 %s
 
 void foo() {
 }
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
   S5 g(5);
   int i;
   int &j = i;
-  #pragma omp parallel shared // expected-error {{expected '(' after 'shared'}}
+  #pragma omp parallel shared // expected-error {{expected '(' after 'shared'}} expected-error {{expected expression}}
   #pragma omp parallel shared ( // expected-error {{expected expression}} expected-error {{expected ')'}} expected-note {{to match this '('}}
   #pragma omp parallel shared () // expected-error {{expected expression}}
   #pragma omp parallel shared (argc // expected-error {{expected ')'}} expected-note {{to match this '('}}
@@ -68,13 +68,7 @@ int main(int argc, char **argv) {
   #pragma omp parallel shared(h) // expected-error {{threadprivate or thread local variable cannot be shared}}
   #pragma omp parallel private(i), shared(i) // expected-error {{private variable cannot be shared}} expected-note {{defined as private}}
   foo();
-  #pragma omp parallel firstprivate(i), shared(i) // expected-error {{firstprivate variable cannot be shared}} expected-note {{defined as firstprivate}}
-  foo();
   #pragma omp parallel private(i)
-  #pragma omp parallel shared(i)
-  #pragma omp parallel shared(j)
-  foo();
-  #pragma omp parallel firstprivate(i)
   #pragma omp parallel shared(i)
   #pragma omp parallel shared(j)
   foo();

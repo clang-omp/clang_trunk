@@ -11408,8 +11408,21 @@ static bool isVariableCapturable(CapturingScopeInfo *CSI, VarDecl *Var,
     return false;
   }
 
+  // Not support multi-dimension VLA
+  if (isa<VariableArrayType>(Var->getType())) {
+    const VariableArrayType *vlaType = cast<VariableArrayType>(Var->getType());
+    if (vlaType->getElementType()->isArrayType()) {
+      if (Diagnose) {
+        S.Diag(Loc, diag::err_capture_vm_type) << Var->getDeclName();
+        S.Diag(Var->getLocation(), diag::note_previous_decl)
+          << Var->getDeclName();
+      }
+      return true;
+    }
+  }
+
   // Prohibit variably-modified types; they're difficult to deal with.
-  if (Var->getType()->isVariablyModifiedType()) {
+  if (Var->getType()->isVariablyModifiedType() && (IsBlock || IsLambda)) {
     if (Diagnose) {
       if (IsBlock)
         S.Diag(Loc, diag::err_ref_vm_type);

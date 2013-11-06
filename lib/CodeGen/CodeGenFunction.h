@@ -23,6 +23,7 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/Type.h"
+#include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/ABI.h"
 #include "clang/Basic/CapturedStmt.h"
 #include "clang/Basic/TargetInfo.h"
@@ -213,6 +214,18 @@ public:
 
     /// \brief Captured 'this' type.
     FieldDecl *CXXThisFieldDecl;
+  };
+  /// \brief API for captured statement code generation for OpenMP regions.
+  class CGOpenMPCapturedStmtInfo : public CGCapturedStmtInfo {
+    //CodeGenModule &CGM;
+  public:
+    explicit CGOpenMPCapturedStmtInfo(llvm::Value* Context,
+                                      const CapturedStmt &S,
+                                      CodeGenModule &CGM,
+                                      CapturedRegionKind K = CR_Default)
+      : CGCapturedStmtInfo(S, K)/*, CGM(CGM)*/ { setContextValue(Context); }
+
+    virtual ~CGOpenMPCapturedStmtInfo() { };
   };
   CGCapturedStmtInfo *CapturedStmtInfo;
 
@@ -1847,6 +1860,100 @@ public:
   llvm::Function *GenerateCapturedStmtFunction(const CapturedDecl *CD,
                                                const RecordDecl *RD,
                                                SourceLocation Loc);
+  llvm::Value *GenerateCapturedStmtArgument(const CapturedStmt &S);
+  void EmitCapturedStmtInlined(const CapturedStmt &S, CapturedRegionKind K,
+                               llvm::Value *Arg,
+                               SourceLocation Loc);
+  LValue GetCapturedField(const VarDecl *VD);
+  void EmitUniversalStore(llvm::Value *Dst, llvm::Value *Src, QualType ExprTy);
+  void EmitUniversalStore(LValue Dst, llvm::Value *Src, QualType ExprTy);
+public:
+  void EmitOMPParallelDirective(const OMPParallelDirective &S);
+  void EmitOMPForDirective(const OMPForDirective &S);
+  void EmitOMPTaskDirective(const OMPTaskDirective &S);
+  void EmitOMPSectionsDirective(const OMPSectionsDirective &S);
+  void EmitOMPSectionDirective(const OMPSectionDirective &S);
+  void EmitInitOMPClause(const OMPClause &C,
+                         const OMPExecutableDirective &S);
+  void EmitAfterInitOMPClause(const OMPClause &C,
+                              const OMPExecutableDirective &S);
+  void EmitPreOMPClause(const OMPClause &C,
+                        const OMPExecutableDirective &S);
+  void EmitPostOMPClause(const OMPClause &C, const OMPExecutableDirective &S);
+  void EmitCloseOMPClause(const OMPClause &C,
+                          const OMPExecutableDirective &S);
+  void EmitFinalOMPClause(const OMPClause &C, const OMPExecutableDirective &S);
+  void EmitInitOMPNumThreadsClause(const OMPNumThreadsClause &C,
+                                   const OMPExecutableDirective &S);
+  void EmitInitOMPProcBindClause(const OMPProcBindClause &C,
+                                 const OMPExecutableDirective &S);
+  void EmitAfterInitOMPIfClause(const OMPIfClause &C,
+                                const OMPExecutableDirective &S);
+  void EmitFinalOMPIfClause(const OMPIfClause &C,
+                            const OMPExecutableDirective &S);
+  void EmitInitOMPNowaitClause(const OMPNowaitClause &C,
+                               const OMPExecutableDirective &S);
+  void EmitInitOMPOrderedClause(const OMPOrderedClause &C,
+                                const OMPExecutableDirective &S);
+  void EmitInitOMPUntiedClause(const OMPUntiedClause &C,
+                               const OMPExecutableDirective &S);
+  void EmitInitOMPFinalClause(const OMPFinalClause &C,
+                              const OMPExecutableDirective &S);
+  void EmitInitOMPMergeableClause(const OMPMergeableClause &C,
+                                  const OMPExecutableDirective &S);
+  void EmitPreOMPScheduleClause(const OMPScheduleClause &C,
+                                const OMPExecutableDirective &S);
+  void EmitPreOMPCopyinClause(const OMPCopyinClause &C,
+                              const OMPExecutableDirective &S);
+  void EmitPreOMPPrivateClause(const OMPPrivateClause &C,
+                               const OMPExecutableDirective &S);
+  void EmitPostOMPPrivateClause(const OMPPrivateClause &C,
+                                const OMPExecutableDirective &S);
+  void EmitPreOMPFirstPrivateClause(const OMPFirstPrivateClause &C,
+                                    const OMPExecutableDirective &S);
+  void EmitPostOMPFirstPrivateClause(const OMPFirstPrivateClause &C,
+                                     const OMPExecutableDirective &S);
+  void EmitPreOMPLastPrivateClause(const OMPLastPrivateClause &C,
+                                   const OMPExecutableDirective &S);
+  void EmitPostOMPLastPrivateClause(const OMPLastPrivateClause &C,
+                                    const OMPExecutableDirective &S);
+  void EmitCloseOMPLastPrivateClause(const OMPLastPrivateClause &C,
+                                     const OMPExecutableDirective &S);
+  void EmitInitOMPReductionClause(const OMPReductionClause &C,
+                                  const OMPExecutableDirective &S);
+  void EmitPreOMPReductionClause(const OMPReductionClause &C,
+                                 const OMPExecutableDirective &S);
+  void EmitPostOMPReductionClause(const OMPReductionClause &C,
+                                  const OMPExecutableDirective &S);
+  void EmitCloseOMPReductionClause(const OMPReductionClause &C,
+                                   const OMPExecutableDirective &S);
+  void EmitFinalOMPReductionClause(const OMPReductionClause &C,
+                                   const OMPExecutableDirective &S);
+  void EmitOMPBarrierDirective(const OMPBarrierDirective &S);
+  void EmitOMPTaskyieldDirective(const OMPTaskyieldDirective &S);
+  void EmitOMPTaskwaitDirective(const OMPTaskwaitDirective &S);
+  void EmitOMPFlushDirective(const OMPFlushDirective &S);
+  void EmitOMPAtomicDirective(const OMPAtomicDirective &S);
+  void EmitOMPTaskgroupDirective(const OMPTaskgroupDirective &S);
+  void EmitOMPMasterDirective(const OMPMasterDirective &S);
+  void EmitOMPSingleDirective(const OMPSingleDirective &S);
+  void EmitOMPCriticalDirective(const OMPCriticalDirective &S);
+  void EmitOMPOrderedDirective(const OMPOrderedDirective &S);
+  llvm::CallInst *EmitOMPCallWithLocAndTidHelper(llvm::Value *F,
+        SourceLocation L, unsigned Flags = 0x02);
+  void EmitOMPConditionalIfHelper(const OMPExecutableDirective &S,
+        llvm::Value *Func, SourceLocation Loc,
+        llvm::Value *EndFunc, SourceLocation EndLoc,
+        bool HasClauses, llvm::AllocaInst *DidIt,
+        const std::string &NameStr);
+  void EmitOMPCapturedBodyHelper(const OMPExecutableDirective &S);
+  void EmitCopyAssignment(
+    ArrayRef<const Expr *>::iterator I,
+    ArrayRef<const Expr *>::iterator AssignIter,
+    ArrayRef<const Expr *>::iterator VarIter1,
+    ArrayRef<const Expr *>::iterator VarIter2,
+    llvm::Value *Dst,
+    llvm::Value *Src);
 
   //===--------------------------------------------------------------------===//
   //                         LValue Expression Emission

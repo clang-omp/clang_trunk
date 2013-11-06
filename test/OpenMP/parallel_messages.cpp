@@ -35,19 +35,5 @@ int main(int argc, char **argv) {
   #pragma omp parallel default(none)
   ++argc; // expected-error {{variable 'argc' must have explicitly specified data sharing attributes}}
 
-  goto L2; // expected-error {{use of undeclared label 'L2'}}
-  #pragma omp parallel
-  L2:
-  foo();
-  #pragma omp parallel
-  {
-    return 1; // expected-error {{cannot return from OpenMP region}}
-  }
-
-  [[]] // expected-error {{an attribute list cannot appear here}}
-  #pragma omp parallel
-  for (int n = 0; n < 100; ++n) {}
-
   return 0;
 }
-
