@@ -293,7 +293,7 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
       //  associated with the loop construct.
       // Parse statement
       Sema::CompoundScopeRAII CompoundScope(Actions);
-      Actions.ActOnCapturedRegionStart(Loc, getCurScope(), CR_Default, 1);
+      Actions.ActOnCapturedRegionStart(Loc, getCurScope(), CR_OpenMP, 1);
       Actions.ActOnStartOfCompoundStmt();
       AssociatedStmt = ParseStatement();
       Actions.ActOnFinishOfCompoundStmt();
