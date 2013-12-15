@@ -17,6 +17,7 @@
 #include "clang/AST/Attr.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
+#include "clang/AST/DeclOpenMP.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
@@ -1379,6 +1380,9 @@ bool NamedDecl::declarationReplaces(NamedDecl *OldD) const {
 
   // For method declarations, we keep track of redeclarations.
   if (isa<ObjCMethodDecl>(this))
+    return false;
+
+  if (isa<OMPDeclareReductionDecl>(this))
     return false;
 
   if (isa<ObjCInterfaceDecl>(this) && isa<ObjCCompatibleAliasDecl>(OldD))

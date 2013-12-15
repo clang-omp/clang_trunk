@@ -2165,7 +2165,7 @@ private:
   //===--------------------------------------------------------------------===//
   // OpenMP: Directives and clauses.
   /// \brief Parses declarative OpenMP directives.
-  DeclGroupPtrTy ParseOpenMPDeclarativeDirective();
+  DeclGroupPtrTy ParseOpenMPDeclarativeDirective(AccessSpecifier AS);
   /// \brief Parses simple list of variables.
   ///
   /// \param Kind Kind of the directive.
@@ -2176,6 +2176,14 @@ private:
   bool ParseOpenMPSimpleVarList(OpenMPDirectiveKind Kind,
                                 SmallVectorImpl<Expr *> &VarList,
                                 bool AllowScopeSpecifier);
+
+  /// \param [out] Inits List of inits.
+  ///
+  Decl *ParseOpenMPDeclareReduction(SmallVectorImpl<QualType> &Types,
+                                    SmallVectorImpl<SourceRange> &TyRanges,
+                                    SmallVectorImpl<Expr *> &Combiners,
+                                    SmallVectorImpl<Expr *> &Inits,
+                                    AccessSpecifier AS);
 
   /// \brief Parses declarative or executable directive.
   ///

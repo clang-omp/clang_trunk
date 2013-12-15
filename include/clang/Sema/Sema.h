@@ -138,6 +138,7 @@ namespace clang {
   class ObjCMethodDecl;
   class ObjCPropertyDecl;
   class ObjCProtocolDecl;
+  class OMPDeclareReductionDecl;
   class OMPThreadPrivateDecl;
   class OMPClause;
   class OverloadCandidateSet;
@@ -968,8 +969,7 @@ public:
   void RecordParsingTemplateParameterDepth(unsigned Depth);
   
   void PushCapturedRegionScope(Scope *RegionScope, CapturedDecl *CD,
-                               RecordDecl *RD,
-                               CapturedRegionKind K);
+                               RecordDecl *RD, CapturedRegionKind K);
   void PopFunctionScopeInfo(const sema::AnalysisBasedWarnings::Policy *WP =0,
                             const Decl *D = 0, const BlockExpr *blkExpr = 0);
 
@@ -2375,6 +2375,8 @@ public:
     LookupObjCProtocolName,
     /// Look up implicit 'self' parameter of an objective-c method.
     LookupObjCImplicitSelfParam,
+    // Look up OpenMP declare reduction constructs only.
+    LookupOMPDeclareReduction,
     /// \brief Look up any declaration with any name.
     LookupAnyName
   };
@@ -7002,6 +7004,25 @@ private:
   bool isNotOpenMPCanonicalLoopForm(Stmt *S, OpenMPDirectiveKind Kind,
                                     Expr *&NewEnd, Expr *&NewIncr, Expr *&InitVal,
                                     Expr *&VarCnt, BinaryOperatorKind &OpKind);
+
+  /// \brief A helper routine for OpenMP loops collapsing.
+  bool CollapseOpenMPLoop(OpenMPDirectiveKind Kind,
+                          ArrayRef<OMPClause *> Clauses,
+                          Stmt *AStmt,
+                          SourceLocation StartLoc,
+                          SourceLocation EndLoc,
+                          Expr *&NewEnd,
+                          Expr *&NewVar,
+                          Expr *&NewVarCntExpr,
+                          Expr *&NewFinal,
+                          SmallVector<Expr *, 8> &VarCnts);
+
+  /// \brief A helper to rebuild a constant positive integer expression.
+  Expr *ActOnConstantPositiveSubExpressionInClause(Expr *E);
+
+  /// \brief A helper to add two simd-specific arguments into captured stmt.
+  CapturedStmt *AddSimdArgsIntoCapturedStmt(CapturedStmt *Cap, Expr *NewVar);
+
 public:
 
   /// \brief Called on correct id-expression from the '#pragma omp
@@ -7017,6 +7038,114 @@ public:
   OMPThreadPrivateDecl *CheckOMPThreadPrivateDecl(
                                      SourceLocation Loc,
                                      ArrayRef<Expr *> VarList);
+
+  /// \brief A RAII object to enter scope of a declare reduction.
+  class OMPDeclareReductionRAII {
+  public:
+    OMPDeclareReductionRAII(Sema &S, Scope *CS, DeclContext *DC,
+                            SourceLocation Loc, DeclarationName DN,
+                            unsigned NumTypes, AccessSpecifier AS);
+
+    Decl *getDecl();
+  private:
+    /// \brief Called on well-formed '#pragma omp declare reduction'.
+    OMPDeclareReductionDecl *InitDeclareReduction(Scope *CS,
+                                                  DeclContext *DC,
+                                                  SourceLocation Loc,
+                                                  DeclarationName Name,
+                                                  unsigned NumTypes,
+                                                  AccessSpecifier AS);
+    Sema &S;
+    OMPDeclareReductionDecl *D;
+    ContextRAII SavedContext;
+  };
+
+  class OMPDeclareReductionFunctionScope {
+  public:
+    OMPDeclareReductionFunctionScope(Sema &S, SourceLocation Loc,
+                                     DeclarationName Name, QualType QTy)
+      : S(S), FD(ActOnOMPDeclareReductionFunction(S, Loc, Name, QTy)) { }
+
+    ~OMPDeclareReductionFunctionScope() {
+      if (S.CurContext) {
+        S.DiscardCleanupsInEvaluationContext();
+        S.PopExpressionEvaluationContext();
+        S.PopFunctionScopeInfo();
+        S.PopDeclContext();
+      }
+    }
+
+    void setBody(Expr *E);
+    Expr *getCombiner();
+
+  private:
+    FunctionDecl *ActOnOMPDeclareReductionFunction(Sema &S,
+                                                   SourceLocation Loc,
+                                                   DeclarationName Name,
+                                                   QualType QTy);
+
+    Sema &S;
+    FunctionDecl *FD;
+    ParmVarDecl *ParLHS, *ParRHS;
+    VarDecl *OmpOut, *OmpIn;
+  };
+
+  void CreateDefaultDeclareReductionInitFunctionBody(FunctionDecl *FD,
+                                                     VarDecl *OmpPriv,
+                                                     ParmVarDecl *ParLHS);
+  class OMPDeclareReductionInitFunctionScope {
+  public:
+    OMPDeclareReductionInitFunctionScope(Sema &S, SourceLocation Loc,
+                                         DeclarationName Name, QualType QTy,
+                                         SourceLocation OmpPrivLoc,
+                                         bool IsInit)
+      : S(S), OmpPrivLoc(OmpPrivLoc), IsInit(IsInit),
+        FD(ActOnOMPDeclareReductionInitFunction(S, Loc, Name, QTy)) { }
+
+    ~OMPDeclareReductionInitFunctionScope() {
+      if (S.CurContext) {
+        S.DiscardCleanupsInEvaluationContext();
+        S.PopExpressionEvaluationContext();
+        S.PopFunctionScopeInfo();
+        S.PopDeclContext();
+      }
+    }
+
+    void setInit(Expr *E = 0);
+    Expr *getInitializer();
+
+  private:
+    FunctionDecl *ActOnOMPDeclareReductionInitFunction(Sema &S,
+                                                       SourceLocation Loc,
+                                                       DeclarationName Name,
+                                                       QualType QTy);
+
+    Sema &S;
+    SourceLocation OmpPrivLoc;
+    bool IsInit;
+    FunctionDecl *FD;
+    ParmVarDecl *ParLHS, *ParRHS;
+    VarDecl *OmpPriv, *OmpOrig;
+  };
+
+  llvm::SmallDenseMap<Decl *, Decl *> OMPInstantiatedDecls;
+
+  bool IsOMPDeclareReductionTypeAllowed(SourceRange Range, QualType QTy,
+                                        ArrayRef<QualType> Types,
+                                        ArrayRef<SourceRange> TyRanges);
+
+  DeclGroupPtrTy ActOnOpenMPDeclareReductionDirective(
+                                                   Decl *D,
+                                                   ArrayRef<QualType> Types,
+                                                   ArrayRef<SourceRange> TyRanges,
+                                                   ArrayRef<Expr *> Combiners,
+                                                   ArrayRef<Expr *> Inits);
+  // \brief Builds a new OpenMPThreadPrivateDecl and checks its correctness.
+  void CompleteOMPDeclareReductionDecl(OMPDeclareReductionDecl *D,
+                                       ArrayRef<QualType> Types,
+                                       ArrayRef<SourceRange> TyRanges,
+                                       ArrayRef<Expr *> Combiners,
+                                       ArrayRef<Expr *> Inits);
 
   /// \brief Called on start of new data sharing attribute block.
   void StartOpenMPDSABlock(OpenMPDirectiveKind K,
@@ -7043,6 +7172,21 @@ public:
                                      Stmt *AStmt,
                                      SourceLocation StartLoc,
                                      SourceLocation EndLoc);
+  /// \brief Called on well-formed '\#pragma omp simd' after parsing
+  /// of the associated statement.
+  StmtResult ActOnOpenMPSimdDirective(OpenMPDirectiveKind Kind,
+                                      ArrayRef<OMPClause *> Clauses,
+                                      Stmt *AStmt,
+                                      SourceLocation StartLoc,
+                                      SourceLocation EndLoc);
+  /// \brief Called on well-formed '\#pragma omp for simd' after parsing
+  /// of the associated statement.
+  StmtResult ActOnOpenMPForSimdDirective(OpenMPDirectiveKind Kind,
+                                         ArrayRef<OMPClause *> Clauses,
+                                         Stmt *AStmt,
+                                         SourceLocation StartLoc,
+                                         SourceLocation EndLoc);
+
   /// \brief Called on well-formed '\#pragma omp sections' after parsing
   /// of the  associated statement.
   StmtResult ActOnOpenMPSectionsDirective(OpenMPDirectiveKind Kind,
@@ -7145,13 +7289,16 @@ public:
                                        SourceLocation KindLoc,
                                        SourceLocation StartLoc,
                                        SourceLocation EndLoc);
-
+  /// \brief Helper for all clauses with varlists.
   OMPClause *ActOnOpenMPVarListClause(OpenMPClauseKind Kind,
                                       ArrayRef<Expr *> Vars,
                                       SourceLocation StartLoc,
                                       SourceLocation EndLoc,
                                       unsigned Op,
+                                      Expr *TailExpr,
+                                      DeclarationName OpName,
                                       SourceLocation OpLoc);
+
   /// \brief Called on well-formed 'private' clause.
   OMPClause *ActOnOpenMPPrivateClause(ArrayRef<Expr *> VarList,
                                       SourceLocation StartLoc,
@@ -7181,12 +7328,16 @@ public:
                                         SourceLocation StartLoc,
                                         SourceLocation EndLoc,
                                         OpenMPReductionClauseOperator Op,
+                                        DeclarationName OpName,
                                         SourceLocation OpLoc);
   /// \brief Called on well-formed 'flush' clause.
   OMPClause *ActOnOpenMPFlushClause(ArrayRef<Expr *> VarList,
                                     SourceLocation StartLoc,
                                     SourceLocation EndLoc);
-
+  /// \brief Called on well-formed 'uniform' clause.
+  OMPClause *ActOnOpenMPUniformClause(ArrayRef<Expr *> VarList,
+                                      SourceLocation StartLoc,
+                                      SourceLocation EndLoc);
   OMPClause *ActOnOpenMPClause(OpenMPClauseKind Kind,
                                SourceLocation StartLoc,
                                SourceLocation EndLoc);
@@ -7217,6 +7368,40 @@ public:
   /// \brief Called on well-formed 'seq_cst' clause.
   OMPClause *ActOnOpenMPSeqCstClause(SourceLocation StartLoc,
                                      SourceLocation EndLoc);
+  /// \brief Called on well-formed 'inbranch' clause.
+  OMPClause *ActOnOpenMPInBranchClause(SourceLocation StartLoc,
+                                       SourceLocation EndLoc);
+  /// \brief Called on well-formed 'notinbranch' clause.
+  OMPClause *ActOnOpenMPNotInBranchClause(SourceLocation StartLoc,
+                                          SourceLocation EndLoc);
+  /// \brief Called on well-formed 'safelen' clause.
+  OMPClause *ActOnOpenMPSafelenClause(Expr *Length,
+                                      SourceLocation StartLoc,
+                                      SourceLocation EndLoc);
+  /// \brief Called on well-formed 'simdlen' clause.
+  OMPClause *ActOnOpenMPSimdlenClause(Expr *Length,
+                                      SourceLocation StartLoc,
+                                      SourceLocation EndLoc);
+  /// \brief Called on well-formed 'num_teams' clause.
+  OMPClause *ActOnOpenMPNumTeamsClause(Expr *NumTeams,
+                                       SourceLocation StartLoc,
+                                       SourceLocation EndLoc);
+  /// \brief Called on well-formed 'thread_limit' clause.
+  OMPClause *ActOnOpenMPThreadLimitClause(Expr *ThreadLimit,
+                                          SourceLocation StartLoc,
+                                          SourceLocation EndLoc);
+  /// \brief Called on well-formed 'linear' clause.
+  OMPClause *ActOnOpenMPLinearClause(ArrayRef<Expr *> VarList,
+                                     SourceLocation StartLoc,
+                                     SourceLocation EndLoc,
+                                     Expr *Step,
+                                     SourceLocation StepLoc);
+  /// \brief Called on well-formed 'aligned' clause.
+  OMPClause *ActOnOpenMPAlignedClause(ArrayRef<Expr *> VarList,
+                                      SourceLocation StartLoc,
+                                      SourceLocation EndLoc,
+                                      Expr *Alignment,
+                                      SourceLocation AlignmentLoc);
 
   OMPClause *ActOnOpenMPSingleExprWithTypeClause(OpenMPClauseKind Kind,
                                                  unsigned Argument,
@@ -7230,6 +7415,12 @@ public:
                                        Expr *ChunkSize,
                                        SourceLocation StartLoc,
                                        SourceLocation EndLoc);
+  /// \brief Called on well-formed 'dist_schedule' clause.
+  OMPClause *ActOnOpenMPDistScheduleClause(OpenMPScheduleClauseKind Argument,
+                                           SourceLocation ArgumentLoc,
+                                           Expr *ChunkSize,
+                                           SourceLocation StartLoc,
+                                           SourceLocation EndLoc);
 
   /// \brief Marks all decls as used in associated captured statement.
   void MarkOpenMPClauses(ArrayRef<OMPClause *> Clauses);

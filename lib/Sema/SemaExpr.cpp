@@ -1598,6 +1598,31 @@ Sema::BuildDeclRefExpr(ValueDecl *D, QualType Ty, ExprValueKind VK,
   return BuildDeclRefExpr(D, Ty, VK, NameInfo, SS);
 }
 
+static bool CheckOMPDeclareReductionVar(Sema &S, ValueDecl *D,
+                                        SourceLocation Loc) {
+  if (S.CurrentInstantiationScope) return true;
+  if (!D || !isa<VarDecl>(D)) return true;
+  if (!S.getCurScope() || !S.getCurScope()->getEntity()) return true;
+  if (S.getCurScope()->getEntity() != S.CurContext) return true;
+  DeclContext *Parent =
+    static_cast<DeclContext *>(S.getCurScope()->getEntity());
+  if (FunctionDecl *FD = dyn_cast_or_null<FunctionDecl>(Parent)) {
+    Parent = FD->getDeclContext();
+    if (OMPDeclareReductionDecl *OMPDR =
+          dyn_cast_or_null<OMPDeclareReductionDecl>(Parent)) {
+      if (D->getDeclContext() != FD) {
+        S.Diag(Loc,
+               (FD->getDeclName() == OMPDR->getDeclName()) ?
+                                       diag::err_omp_wrong_var_in_combiner :
+                                       diag::err_omp_wrong_var_in_initializer)
+          << cast<NamedDecl>(D);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 /// BuildDeclRefExpr - Build an expression that references a
 /// declaration that does not require a closure capture.
 ExprResult
@@ -1605,6 +1630,13 @@ Sema::BuildDeclRefExpr(ValueDecl *D, QualType Ty, ExprValueKind VK,
                        const DeclarationNameInfo &NameInfo,
                        const CXXScopeSpec *SS, NamedDecl *FoundD,
                        const TemplateArgumentListInfo *TemplateArgs) {
+  // Check that only 'omp_in' and 'omp_out' can be used in
+  // 'omp declare reduction' combiner.
+  // Check that only 'omp_priv' and 'omp_orig' can be used in
+  // 'omp declare reduction' initializer.
+  if (!CheckOMPDeclareReductionVar(*this, D, NameInfo.getLoc()))
+    return ExprError();
+
   if (getLangOpts().CUDA)
     if (const FunctionDecl *Caller = dyn_cast<FunctionDecl>(CurContext))
       if (const FunctionDecl *Callee = dyn_cast<FunctionDecl>(D)) {

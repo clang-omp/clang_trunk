@@ -2625,7 +2625,7 @@ void Parser::ParseCXXMemberSpecification(SourceLocation RecordLoc,
       }
 
       if (Tok.is(tok::annot_pragma_openmp)) {
-        ParseOpenMPDeclarativeDirective();
+        ParseOpenMPDeclarativeDirective(CurAS);
         continue;
       }
 

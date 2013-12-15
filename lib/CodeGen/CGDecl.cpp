@@ -94,6 +94,9 @@ void CodeGenFunction::EmitDecl(const Decl &D) {
   case Decl::OMPThreadPrivate:
     CGM.EmitOMPThreadPrivate(cast<OMPThreadPrivateDecl>(&D));
     break;
+  case Decl::OMPDeclareReduction:
+    CGM.EmitOMPDeclareReduction(cast<OMPDeclareReductionDecl>(&D));
+    break;
 
   case Decl::NamespaceAlias:
     if (CGDebugInfo *DI = getDebugInfo())
