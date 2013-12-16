@@ -17,6 +17,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/Expr.h"
+#include "clang/AST/DeclOpenMP.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/CodeGenOptions.h"
@@ -98,11 +99,13 @@ namespace {
         for (DeclContext::decl_iterator M = D->decls_begin(), 
                                      MEnd = D->decls_end();
              M != MEnd; ++M)
-          if (CXXMethodDecl *Method = dyn_cast<CXXMethodDecl>(*M))
+          if (CXXMethodDecl *Method = dyn_cast<CXXMethodDecl>(*M)) {
             if (Method->doesThisDeclarationHaveABody() &&
                 (Method->hasAttr<UsedAttr>() || 
                  Method->hasAttr<ConstructorAttr>()))
               Builder->EmitTopLevelDecl(Method);
+          } else if (OMPThreadPrivateDecl *TD = dyn_cast<OMPThreadPrivateDecl>(*M))
+            Builder->EmitTopLevelDecl(TD);
       }
     }
 

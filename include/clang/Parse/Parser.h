@@ -745,23 +745,29 @@ public:
   /// If SkipUntil finds the specified token, it returns true, otherwise it
   /// returns false.
   bool SkipUntil(tok::TokenKind T, bool StopAtSemi = true,
-                 bool DontConsume = false, bool StopAtCodeCompletion = false) {
+                 bool DontConsume = false, bool StopAtCodeCompletion = false,
+                 bool NoCount = false) {
     return SkipUntil(llvm::makeArrayRef(T), StopAtSemi, DontConsume,
-                     StopAtCodeCompletion);
+                     StopAtCodeCompletion, NoCount);
   }
   bool SkipUntil(tok::TokenKind T1, tok::TokenKind T2, bool StopAtSemi = true,
-                 bool DontConsume = false, bool StopAtCodeCompletion = false) {
+                 bool DontConsume = false, bool StopAtCodeCompletion = false,
+                 bool NoCount = false) {
     tok::TokenKind TokArray[] = {T1, T2};
-    return SkipUntil(TokArray, StopAtSemi, DontConsume,StopAtCodeCompletion);
+    return SkipUntil(TokArray, StopAtSemi, DontConsume,StopAtCodeCompletion,
+                     NoCount);
   }
   bool SkipUntil(tok::TokenKind T1, tok::TokenKind T2, tok::TokenKind T3,
                  bool StopAtSemi = true, bool DontConsume = false,
-                 bool StopAtCodeCompletion = false) {
+                 bool StopAtCodeCompletion = false,
+                 bool NoCount = false) {
     tok::TokenKind TokArray[] = {T1, T2, T3};
-    return SkipUntil(TokArray, StopAtSemi, DontConsume,StopAtCodeCompletion);
+    return SkipUntil(TokArray, StopAtSemi, DontConsume,StopAtCodeCompletion,
+                     NoCount);
   }
   bool SkipUntil(ArrayRef<tok::TokenKind> Toks, bool StopAtSemi = true,
-                 bool DontConsume = false, bool StopAtCodeCompletion = false);
+                 bool DontConsume = false, bool StopAtCodeCompletion = false,
+                 bool NoCount = false);
 
   /// SkipMalformedDecl - Read tokens until we get to some likely good stopping
   /// point for skipping past a simple-declaration.
@@ -2170,8 +2176,15 @@ private:
   bool ParseOpenMPSimpleVarList(OpenMPDirectiveKind Kind,
                                 SmallVectorImpl<Expr *> &VarList,
                                 bool AllowScopeSpecifier);
+
   /// \brief Parses declarative or executable directive.
-  StmtResult ParseOpenMPDeclarativeOrExecutableDirective();
+  ///
+  /// \param StandAloneAllowed true if allowed stand-alone directives,
+  /// false - otherwise
+  ///
+  StmtResult ParseOpenMPDeclarativeOrExecutableDirective(
+                                                bool StandAloneAllowed);
+
   /// \brief Parses clause of kind \a CKind for directive of a kind \a Kind.
   ///
   /// \param DKind Kind of current directive.
@@ -2196,6 +2209,17 @@ private:
   /// \param Kind Kind of current clause.
   ///
   OMPClause *ParseOpenMPVarListClause(OpenMPClauseKind Kind);
+  /// \brief Parses clause with a single expression and a type of a kind
+  /// \a Kind.
+  ///
+  /// \param Kind Kind of current clause.
+  ///
+  OMPClause *ParseOpenMPSingleExprWithTypeClause(OpenMPClauseKind Kind);
+  /// \brief Parses clause with type of a kind \a Kind.
+  ///
+  /// \param Kind Kind of current clause.
+  ///
+  OMPClause *ParseOpenMPClause(OpenMPClauseKind Kind);
 public:
   bool ParseUnqualifiedId(CXXScopeSpec &SS, bool EnteringContext,
                           bool AllowDestructorName,

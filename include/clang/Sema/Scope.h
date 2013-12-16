@@ -303,14 +303,14 @@ public:
     }
     return false;
   }
+  
+  /// \brief Determine whether this scope is a C++ 'try' block.
+  bool isTryScope() const { return getFlags() & Scope::TryScope; }
 
   /// \brief Determines whether this scope is the OpenMP directive scope
   bool isOpenMPDirectiveScope() const {
     return (getFlags() & Scope::OpenMPDirectiveScope);
   }
-
-  /// \brief Determine whether this scope is a C++ 'try' block.
-  bool isTryScope() const { return getFlags() & Scope::TryScope; }
 
   /// containedInPrototypeScope - Return true if this or a parent scope
   /// is a FunctionPrototypeScope.

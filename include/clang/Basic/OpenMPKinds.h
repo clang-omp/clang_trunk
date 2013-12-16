@@ -25,6 +25,8 @@ enum OpenMPDirectiveKind {
 #define OPENMP_DIRECTIVE(Name) \
   OMPD_##Name,
 #include "clang/Basic/OpenMPKinds.def"
+  OMPD_parallel_for,
+  OMPD_parallel_sections,
   NUM_OPENMP_DIRECTIVES
 };
 
@@ -47,6 +49,33 @@ enum OpenMPDefaultClauseKind {
   NUM_OPENMP_DEFAULT_KINDS
 };
 
+/// \brief OpenMP attributes for 'proc_bind' clause.
+enum OpenMPProcBindClauseKind {
+  OMPC_PROC_BIND_unknown = 0,
+#define OPENMP_PROC_BIND_KIND(Name) \
+  OMPC_PROC_BIND_##Name,
+#include "clang/Basic/OpenMPKinds.def"
+  NUM_OPENMP_PROC_BIND_KINDS
+};
+
+/// \brief OpenMP operators for 'reduction' clause.
+enum OpenMPReductionClauseOperator {
+  OMPC_REDUCTION_unknown = 0,
+#define OPENMP_REDUCTION_OPERATOR(Name, Symbol) \
+  OMPC_REDUCTION_##Name,
+#include "clang/Basic/OpenMPKinds.def"
+  NUM_OPENMP_REDUCTION_OPERATORS
+};
+
+/// \brief OpenMP attributes for 'schedule' clause.
+enum OpenMPScheduleClauseKind {
+  OMPC_SCHEDULE_unknown = 0,
+#define OPENMP_SCHEDULE_KIND(Name) \
+  OMPC_SCHEDULE_##Name,
+#include "clang/Basic/OpenMPKinds.def"
+  NUM_OPENMP_SCHEDULE_KINDS
+};
+
 OpenMPDirectiveKind getOpenMPDirectiveKind(llvm::StringRef Str);
 const char *getOpenMPDirectiveName(OpenMPDirectiveKind Kind);
 
@@ -62,4 +91,3 @@ bool isAllowedClauseForDirective(OpenMPDirectiveKind DKind,
 }
 
 #endif
-

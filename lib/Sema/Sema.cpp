@@ -184,6 +184,9 @@ Sema::~Sema() {
     delete I->second;
   if (PackContext) FreePackedContext();
   if (VisContext) FreeVisContext();
+  // Destroys data sharing attributes stack for OpenMP
+  DestroyDataSharingAttributesStack();
+
   delete TheTargetAttributesSema;
   MSStructPragmaOn = false;
   // Kill all the active scopes.
@@ -204,9 +207,6 @@ Sema::~Sema() {
   // If Sema's ExternalSource is the multiplexer - we own it.
   if (isMultiplexExternalSource)
     delete ExternalSource;
-
-  // Destroys data sharing attributes stack for OpenMP
-  DestroyDataSharingAttributesStack();
 }
 
 /// makeUnavailableInSystemHeader - There is an error in the current
