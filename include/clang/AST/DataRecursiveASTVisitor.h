@@ -2340,12 +2340,12 @@ DEF_TRAVERSE_STMT(AsTypeExpr, { })
 // OpenMP directives
 namespace {
 template <class T>
-class RecursiveOMPClauseVisitor :
-          public OMPClauseVisitor<RecursiveOMPClauseVisitor<T>, bool> {
-  RecursiveASTVisitor<T> *Visitor;
-  RecursiveASTVisitor<T> &getDerived() { return *Visitor; }
+class DataRecursiveOMPClauseVisitor :
+          public OMPClauseVisitor<DataRecursiveOMPClauseVisitor<T>, bool> {
+  DataRecursiveASTVisitor<T> *Visitor;
+  DataRecursiveASTVisitor<T> &getDerived() { return *Visitor; }
 public:
-  RecursiveOMPClauseVisitor(RecursiveASTVisitor<T> *V) : Visitor(V) { }
+  DataRecursiveOMPClauseVisitor(DataRecursiveASTVisitor<T> *V) : Visitor(V) { }
 #define OPENMP_CLAUSE(Name, Class)                                      \
   bool Visit##Class(Class *S) {                                         \
     for (Stmt::child_range Range = S->children(); Range; ++Range) {     \
@@ -2358,7 +2358,7 @@ public:
 }
 
 DEF_TRAVERSE_STMT(OMPExecutableDirective, {
-  RecursiveOMPClauseVisitor<Derived> V(this);
+  DataRecursiveOMPClauseVisitor<Derived> V(this);
   ArrayRef<OMPClause *> Clauses = S->clauses();
   for (ArrayRef<OMPClause *>::iterator I = Clauses.begin(), E = Clauses.end();
        I != E; ++I)
@@ -2434,6 +2434,7 @@ DEF_TRAVERSE_STMT(OMPOrderedDirective, {
   return TraverseOMPExecutableDirective(S);
 })
 
+#if 0 // FIXME
 // OpenMP clauses.
 template<typename Derived>
 bool DataRecursiveASTVisitor<Derived>::TraverseOMPClause(OMPClause *C) {
@@ -2469,8 +2470,8 @@ bool DataRecursiveASTVisitor<Derived>::VisitOMPPrivateClause(OMPPrivateClause *C
 }
 
 template<typename Derived>
-bool DataRecursiveASTVisitor<Derived>::VisitOMPFirstprivateClause(
-                                                    OMPFirstprivateClause *C) {
+bool DataRecursiveASTVisitor<Derived>::VisitOMPFirstPrivateClause(
+                                                    OMPFirstPrivateClause *C) {
   VisitOMPClauseList(C);
   return true;
 }
@@ -2480,6 +2481,7 @@ bool DataRecursiveASTVisitor<Derived>::VisitOMPSharedClause(OMPSharedClause *C) 
   VisitOMPClauseList(C);
   return true;
 }
+#endif // FIXME
 
 // FIXME: look at the following tricky-seeming exprs to see if we
 // need to recurse on anything.  These are ones that have methods

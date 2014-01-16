@@ -2164,12 +2164,14 @@ void CodeGenFunction::EmitPragmaSimd(CodeGenFunction::CGPragmaSimdWrapper &W) {
   llvm::BasicBlock *ContBlock = createBasicBlock("if.end");
   llvm::BasicBlock *ThenBlock = createBasicBlock("if.then");
 
+  RegionCounter Cnt = getPGORegionCounter(W.getAssociatedStmt());
+
   // The following condition is zero trip test to skip last iteration if
   // the loopcount is zero.
   // In the 'omp simd' we may have more than one loop counter due to
   // 'collapse', so we check loopcount instead of loop counter.
   if (!W.isOmp()) {
-    EmitBranchOnBoolExpr(W.getCond(), ThenBlock, ContBlock);
+    EmitBranchOnBoolExpr(W.getCond(), ThenBlock, ContBlock, Cnt.getCount());
     EmitBlock(ThenBlock);
   }
   else {
@@ -2236,7 +2238,7 @@ void CodeGenFunction::EmitPragmaSimd(CodeGenFunction::CGPragmaSimdWrapper &W) {
     Continue = getJumpDestInCurrentScope("for.inc");
 
     // Store the blocks to use for break and continue.
-    BreakContinueStack.push_back(BreakContinue(LoopExit, Continue));
+    BreakContinueStack.push_back(BreakContinue(LoopExit, Continue, &Cnt));
 
     W.emitIncrement(*this, LoopIndex);
 
@@ -2289,6 +2291,8 @@ void CodeGenFunction::EmitSIMDForHelperBody(const Stmt *S) {
   assert(CapturedStmtInfo && "Should be only called inside a CapturedStmt");
   CGSIMDForStmtInfo *Info = cast<CGSIMDForStmtInfo>(CapturedStmtInfo);
 
+  RegionCounter Cnt = getPGORegionCounter(S);
+
   // Mark the loop body as an extended region of this SIMD loop.
   LoopStack.Push(Info->getLoopID());
   {
@@ -2304,7 +2308,7 @@ void CodeGenFunction::EmitSIMDForHelperBody(const Stmt *S) {
       // Continue statements are allowed and updates to the data
       // privatization variables will be emitted in a unified continue block.
       JumpDest LoopContinue = getJumpDestInCurrentScope("for.continue");
-      BreakContinueStack.push_back(BreakContinue(JumpDest(), LoopContinue));
+      BreakContinueStack.push_back(BreakContinue(JumpDest(), LoopContinue, &Cnt));
 
       EmitStmt(S);
 

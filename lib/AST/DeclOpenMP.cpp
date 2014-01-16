@@ -75,11 +75,9 @@ OMPDeclareReductionDecl::Create(ASTContext &C, DeclContext *DC,
                                 unsigned N) {
   unsigned Size = getFirstElementOffset() +
                   N * sizeof(OMPDeclareReductionDecl::ReductionData);
-
-  void *Mem = C.Allocate(Size);
-  OMPDeclareReductionDecl *D = new (Mem) OMPDeclareReductionDecl(OMPDeclareReduction,
-                                                                 DC, L,
-                                                                 Name);
+  OMPDeclareReductionDecl *D =
+    new (C, DC, Size) OMPDeclareReductionDecl(OMPDeclareReduction,
+                                              DC, L, Name);
   D->NumTypes = N;
   return D;
 }
@@ -90,10 +88,10 @@ OMPDeclareReductionDecl *OMPDeclareReductionDecl::CreateDeserialized(ASTContext 
   unsigned Size = getFirstElementOffset() +
                   N * sizeof(OMPDeclareReductionDecl::ReductionData);
 
-  void *Mem = AllocateDeserializedDecl(C, ID, Size);
-  OMPDeclareReductionDecl *D = new (Mem) OMPDeclareReductionDecl(OMPDeclareReduction,
-                                                                 0, SourceLocation(),
-                                                                 DeclarationName());
+  OMPDeclareReductionDecl *D =
+    new (C, ID, Size) OMPDeclareReductionDecl(OMPDeclareReduction,
+                                              0, SourceLocation(),
+                                              DeclarationName());
   D->NumTypes = N;
   return D;
 }

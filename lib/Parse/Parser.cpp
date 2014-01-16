@@ -301,9 +301,6 @@ bool Parser::SkipUntil(ArrayRef<tok::TokenKind> Toks, SkipUntilFlags Flags) {
     }
 
     switch (Tok.getKind()) {
-    case tok::annot_pragma_openmp_end:
-      // Stop before an OpenMP pragma boundary.
-      return false;
     case tok::eof:
       // Ran out of tokens.
       return false;

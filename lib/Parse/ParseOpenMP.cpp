@@ -101,7 +101,7 @@ Parser::DeclGroupPtrTy Parser::ParseOpenMPDeclarativeDirective(AccessSpecifier A
       if (Tok.isNot(tok::annot_pragma_openmp_end)) {
         Diag(Tok, diag::warn_omp_extra_tokens_at_eol)
           << getOpenMPDirectiveName(OMPD_declare_reduction);
-        while (!SkipUntil(tok::annot_pragma_openmp_end, false, true, false));
+        SkipUntil(tok::annot_pragma_openmp_end, StopBeforeMatch);
       }
       // Skip the last annot_pragma_openmp_end.
       ConsumeToken();
@@ -328,7 +328,7 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
       if (Tok.isNot(tok::annot_pragma_openmp_end)) {
         Diag(Tok, diag::warn_omp_extra_tokens_at_eol)
           << getOpenMPDirectiveName(OMPD_declare_reduction);
-        while (!SkipUntil(tok::annot_pragma_openmp_end, false, true, false));
+        SkipUntil(tok::annot_pragma_openmp_end, StopBeforeMatch);
       }
       // Skip the last annot_pragma_openmp_end.
       DeclGroupPtrTy Res =
@@ -336,7 +336,7 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
                                                      Combiners, Inits);
       Directive = Actions.ActOnDeclStmt(Res, Loc, Tok.getLocation());
     }
-    while (!SkipUntil(tok::annot_pragma_openmp_end, false, false, false));
+    SkipUntil(tok::annot_pragma_openmp_end);
     }
     break;
   case OMPD_critical:
@@ -348,7 +348,7 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
       // Parse <name>.
       ConsumeAnyToken();
       if (!Tok.isAnyIdentifier()) {
-        Diag(Tok, diag::err_expected_ident);
+        Diag(Tok, diag::err_expected) << tok::identifier;
       } else {
         DirName = DeclarationNameInfo(Tok.getIdentifierInfo(),
                                       Tok.getLocation());
@@ -356,8 +356,8 @@ StmtResult Parser::ParseOpenMPDeclarativeOrExecutableDirective(
       }
       // Parse ')'.
       if (Tok.isNot(tok::r_paren)) {
-        Diag(Tok, diag::err_expected_rparen);
-        Diag(LOpen, diag::note_matching) << "(";
+        Diag(Tok, diag::err_expected) << tok::r_paren;
+        Diag(LOpen, diag::note_matching) << tok::l_paren;
       }
     }
     StandAloneAllowed = true;
@@ -687,8 +687,8 @@ Decl *Parser::ParseOpenMPDeclareReduction(SmallVectorImpl<QualType> &Types,
   default:
     IsCorrect = false;
     Diag(Tok.getLocation(), diag::err_omp_expected_reduction_identifier);
-    while (!SkipUntil(tok::colon, tok::r_paren, tok::annot_pragma_openmp_end,
-                      false, true, false)) ;
+    SkipUntil(tok::colon, tok::r_paren, tok::annot_pragma_openmp_end,
+              StopBeforeMatch);
     break;
   }
 
@@ -699,7 +699,7 @@ Decl *Parser::ParseOpenMPDeclareReduction(SmallVectorImpl<QualType> &Types,
     ConsumeToken();
   }
   else {
-    Diag(Tok.getLocation(), diag::err_expected_colon);
+    Diag(Tok.getLocation(), diag::err_expected) << tok::colon;
     IsCorrect = false;
   }
 
@@ -730,9 +730,9 @@ Decl *Parser::ParseOpenMPDeclareReduction(SmallVectorImpl<QualType> &Types,
         FunctionsCorrect = false;
       }
     } else {
-      while (!SkipUntil(tok::comma, tok::colon,
-                        tok::annot_pragma_openmp_end,
-                        false, true, false)) ;
+      SkipUntil(tok::comma, tok::colon,
+                tok::annot_pragma_openmp_end,
+                StopBeforeMatch);
       FunctionsCorrect = false;
     }
 
@@ -742,7 +742,7 @@ Decl *Parser::ParseOpenMPDeclareReduction(SmallVectorImpl<QualType> &Types,
       IsCommaFound = true;
     }
     else if (Tok.isNot(tok::colon) && Tok.isNot(tok::annot_pragma_openmp_end)) {
-      Diag(Tok.getLocation(), diag::err_expected_comma);
+      Diag(Tok.getLocation(), diag::err_expected) << tok::comma;
       IsCorrect = false;
     }
   }
@@ -754,7 +754,7 @@ Decl *Parser::ParseOpenMPDeclareReduction(SmallVectorImpl<QualType> &Types,
   }
 
   if (Types.empty()) {
-    while (!SkipUntil(tok::annot_pragma_openmp_end, false, true, false)) ;
+    SkipUntil(tok::annot_pragma_openmp_end, StopBeforeMatch);
     return 0;
   }
 
@@ -765,7 +765,7 @@ Decl *Parser::ParseOpenMPDeclareReduction(SmallVectorImpl<QualType> &Types,
     ConsumeToken();
   }
   else {
-    Diag(Tok.getLocation(), diag::err_expected_colon);
+    Diag(Tok.getLocation(), diag::err_expected) << tok::colon;
     IsCorrect = false;
   }
 
@@ -826,7 +826,7 @@ Decl *Parser::ParseOpenMPDeclareReduction(SmallVectorImpl<QualType> &Types,
       if (!getLangOpts().CPlusPlus) {
         // Expect '='
         if (Tok.isNot(tok::equal)) {
-          Diag(Tok, diag::err_expected_equal_after) << "'omp_priv'";
+          Diag(Tok, diag::err_expected_after) << "'omp_priv'" << tok::equal;
           IsCorrect = false;
         } else
           ConsumeToken();
@@ -1051,10 +1051,9 @@ OMPClause *Parser::ParseOpenMPSingleExprClause(OpenMPClauseKind Kind) {
   ExprResult Val(ParseRHSOfBinaryExpression(LHS, prec::Conditional));
 
   if (LParen && Tok.isNot(tok::r_paren)) {
-    Diag(Tok, diag::err_expected_rparen);
-    Diag(LOpen, diag::note_matching) << "(";
-    while (!SkipUntil(tok::r_paren, tok::comma, tok::annot_pragma_openmp_end,
-                      false, true, false)) ;
+    Diag(Tok, diag::err_expected) << tok::r_paren;
+    Diag(LOpen, diag::note_matching) << tok::l_paren;
+    SkipUntil(tok::r_paren, tok::comma, StopBeforeMatch);
   }
   if (Tok.is(tok::r_paren))
     ConsumeAnyToken();
@@ -1101,10 +1100,10 @@ OMPClause *Parser::ParseOpenMPSingleExprWithTypeClause(OpenMPClauseKind Kind) {
     Val = ParseRHSOfBinaryExpression(LHS, prec::Conditional);
   }
   if (LParen && Tok.isNot(tok::r_paren)) {
-    Diag(Tok, diag::err_expected_rparen);
-    Diag(LOpen, diag::note_matching) << "(";
-    while (!SkipUntil(tok::r_paren, tok::comma, tok::annot_pragma_openmp_end,
-                      false, true, false)) ;
+    Diag(Tok, diag::err_expected) << tok::r_paren;
+    Diag(LOpen, diag::note_matching) << tok::l_paren;
+    SkipUntil(tok::r_paren, tok::comma, tok::annot_pragma_openmp_end,
+              StopBeforeMatch);
   }
   if (Tok.is(tok::r_paren))
     ConsumeAnyToken();
@@ -1144,10 +1143,10 @@ OMPClause *Parser::ParseOpenMPSimpleClause(OpenMPClauseKind Kind) {
     ConsumeAnyToken();
 
   if (LParen && Tok.isNot(tok::r_paren)) {
-    Diag(Tok, diag::err_expected_rparen);
-    Diag(LOpen, diag::note_matching) << "(";
-    while (!SkipUntil(tok::r_paren, tok::comma, tok::annot_pragma_openmp_end,
-                      false, true, false)) ;
+    Diag(Tok, diag::err_expected) << tok::r_paren;
+    Diag(LOpen, diag::note_matching) << tok::l_paren;
+    SkipUntil(tok::r_paren, tok::comma, tok::annot_pragma_openmp_end,
+              StopBeforeMatch);
   }
   if (Tok.is(tok::r_paren))
     ConsumeAnyToken();
@@ -1305,17 +1304,17 @@ OMPClause *Parser::ParseOpenMPVarListClause(OpenMPClauseKind Kind) {
         TailExpr = Tail.take();
       }
       else {
-        while (!SkipUntil(tok::r_paren, tok::annot_pragma_openmp_end,
-                          false, true)) ;
+        SkipUntil(tok::r_paren, tok::annot_pragma_openmp_end,
+                  StopBeforeMatch);
       }
     }
   }
 
   if (LParen && Tok.isNot(tok::r_paren)) {
-    Diag(Tok, diag::err_expected_rparen);
-    Diag(LOpen, diag::note_matching) << "(";
-    while (!SkipUntil(tok::r_paren, tok::comma, tok::annot_pragma_openmp_end,
-                      false, true, false)) ;
+    Diag(Tok, diag::err_expected) << tok::r_paren;
+    Diag(LOpen, diag::note_matching) << tok::l_paren;
+    SkipUntil(tok::r_paren, tok::comma, tok::annot_pragma_openmp_end,
+              StopBeforeMatch);
   }
   if (Tok.is(tok::r_paren))
     ConsumeAnyToken();

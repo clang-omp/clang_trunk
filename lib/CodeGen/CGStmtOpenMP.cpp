@@ -899,6 +899,8 @@ void CodeGenFunction::EmitOMPDirectiveWithLoop(
     ArrayRef<Expr *> Arr = getCountersFromLoopDirective(&S);
 //    llvm::SmallVector<const Expr *, 16> Incs;
     const Stmt *Body = S.getAssociatedStmt();
+    RegionCounter Cnt = getPGORegionCounter(Body);
+
     if (const CapturedStmt *CS = dyn_cast_or_null<CapturedStmt>(Body))
       Body = CS->getCapturedStmt();
     for (unsigned I = 0; I < getCollapsedNumberFromLoopDirective(&S); ++I) {
@@ -1062,7 +1064,8 @@ void CodeGenFunction::EmitOMPDirectiveWithLoop(
       llvm::BasicBlock *ContBlock = createBasicBlock("omp.cont.block");
 
       BreakContinueStack.push_back(BreakContinue(getJumpDestInCurrentScope(EndBB),
-                                                 getJumpDestInCurrentScope(ContBlock)));
+                                                 getJumpDestInCurrentScope(ContBlock),
+                                                 &Cnt));
       if (HasSimd) {
         RunCleanupsScope Scope(*this);
         BodyFunction = EmitSimdFunction(SimdWrapper);
@@ -1970,7 +1973,8 @@ void CodeGenFunction::EmitInitOMPFinalClause(const OMPFinalClause &C,
   llvm::Value *Flags = CGM.OpenMPSupport.getTaskFlags();
   llvm::BasicBlock *ThenBlock = createBasicBlock("task.final.then");
   llvm::BasicBlock *EndBlock = createBasicBlock("task.final.end");
-  EmitBranchOnBoolExpr(C.getCondition(), ThenBlock, EndBlock);
+  RegionCounter Cnt = getPGORegionCounter(&S);
+  EmitBranchOnBoolExpr(C.getCondition(), ThenBlock, EndBlock, Cnt.getCount());
   EmitBlock(ThenBlock);
   llvm::Value *Val = Builder.CreateOr(Builder.CreateLoad(Flags, ".flags."), OMP_TASK_FINAL);
   Builder.CreateStore(Val, Flags);
@@ -2034,10 +2038,11 @@ void CodeGenFunction::EmitInitOMPProcBindClause(
 
 void CodeGenFunction::EmitAfterInitOMPIfClause(const OMPIfClause &C,
                                                const OMPExecutableDirective &S) {
+  RegionCounter Cnt = getPGORegionCounter(&S);
   if (isa<OMPTaskDirective>(&S)) {
     llvm::BasicBlock *ThenBlock = createBasicBlock("omp.if.then");
     llvm::BasicBlock *ElseBlock = createBasicBlock("omp.if.else");
-    EmitBranchOnBoolExpr(C.getCondition(), ThenBlock, ElseBlock);
+    EmitBranchOnBoolExpr(C.getCondition(), ThenBlock, ElseBlock, Cnt.getCount());
     EmitBlock(ThenBlock);
     CGM.OpenMPSupport.setIfDest(ElseBlock);
   } else {
@@ -2045,7 +2050,7 @@ void CodeGenFunction::EmitAfterInitOMPIfClause(const OMPIfClause &C,
     llvm::BasicBlock *ThenBlock = createBasicBlock("omp.if.then");
     llvm::BasicBlock *ElseBlock = createBasicBlock("omp.if.else");
     llvm::BasicBlock *ContBlock = createBasicBlock("omp.if.end");
-    EmitBranchOnBoolExpr(C.getCondition(), ThenBlock, ElseBlock);
+    EmitBranchOnBoolExpr(C.getCondition(), ThenBlock, ElseBlock, Cnt.getCount());
     EmitBlock(ElseBlock);
     {
       RunCleanupsScope ElseScope(*this);

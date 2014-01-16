@@ -1728,7 +1728,7 @@ bool Sema::CollapseOpenMPLoop(OpenMPDirectiveKind Kind,
                               Context, Context.getTranslationUnitDecl(), StartLoc,
                               StartLoc, 0, IdxTy, TI, SC_Static);
     Idx->setImplicit();
-    Idx->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+    Idx->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
     Context.getTranslationUnitDecl()->addHiddenDecl(Idx);
     ExprResult IdxExprRes = BuildDeclRefExpr(Idx, IdxTy,
                                              VK_LValue, StartLoc);
@@ -2756,7 +2756,7 @@ OMPClause *Sema::ActOnOpenMPIfClause(Expr *Condition,
                               SourceLocation(), Id, QTy, TI,
                               SC_Static);
       PseudoVar->setImplicit();
-      PseudoVar->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+      PseudoVar->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
       ExprResult Init = ActOnIntegerConstant(SourceLocation(), 0);
       CastKind CK = PrepareScalarCast(Init, QTy);
       if (CK != CK_NoOp) {
@@ -2801,7 +2801,7 @@ OMPClause *Sema::ActOnOpenMPFinalClause(Expr *Condition,
                               SourceLocation(), Id, QTy, TI,
                               SC_Static);
       PseudoVar->setImplicit();
-      PseudoVar->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+      PseudoVar->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
       ExprResult Init = ActOnIntegerConstant(SourceLocation(), 0);
       CastKind CK = PrepareScalarCast(Init, QTy);
       if (CK != CK_NoOp) {
@@ -3262,7 +3262,7 @@ OMPClause *Sema::ActOnOpenMPScheduleClause(OpenMPScheduleClauseKind Kind,
                             SourceLocation(), Id, QTy, TI,
                             SC_Static);
     PseudoVar->setImplicit();
-    PseudoVar->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+    PseudoVar->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
     ExprResult Init = ActOnIntegerConstant(SourceLocation(), 0);
     CastKind CK = PrepareScalarCast(Init, QTy);
     if (CK != CK_NoOp) {
@@ -3375,7 +3375,7 @@ OMPClause *Sema::ActOnOpenMPDistScheduleClause(OpenMPScheduleClauseKind Kind,
                             SourceLocation(), Id, QTy, TI,
                             SC_Static);
     PseudoVar->setImplicit();
-    PseudoVar->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+    PseudoVar->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
     ExprResult Init = ActOnIntegerConstant(SourceLocation(), 0);
     CastKind CK = PrepareScalarCast(Init, QTy);
     if (CK != CK_NoOp) {
@@ -3584,7 +3584,7 @@ OMPClause *Sema::ActOnOpenMPPrivateClause(ArrayRef<Expr *> VarList,
                             SourceLocation(), Id, Type, TI,
                             SC_Static);
     PseudoVar->setImplicit();
-    PseudoVar->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+    PseudoVar->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
     InitializedEntity Entity = InitializedEntity::InitializeVariable(PseudoVar);
     InitializationKind InitKind = InitializationKind::CreateDefault(ELoc);
     InitializationSequence InitSeq(*this, Entity, InitKind, MultiExprArg());
@@ -3824,7 +3824,7 @@ OMPClause *Sema::ActOnOpenMPFirstPrivateClause(ArrayRef<Expr *> VarList,
                               SourceLocation(), Id, Type, TI,
                               SC_Static);
       PseudoVar->setImplicit();
-      PseudoVar->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+      PseudoVar->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
       Context.getTranslationUnitDecl()->addHiddenDecl(PseudoVar);
       PseudoDE = cast<DeclRefExpr>(BuildDeclRefExpr(PseudoVar,
                                                     Type,
@@ -4035,7 +4035,7 @@ OMPClause *Sema::ActOnOpenMPLastPrivateClause(ArrayRef<Expr *> VarList,
                             SourceLocation(), Id, Type, TI,
                             SC_Static);
     PseudoVar1->setImplicit();
-    PseudoVar1->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+    PseudoVar1->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
     Context.getTranslationUnitDecl()->addHiddenDecl(PseudoVar1);
     DeclRefExpr *PseudoDE1 = cast<DeclRefExpr>(BuildDeclRefExpr(PseudoVar1,
                                                                 Type,
@@ -4048,7 +4048,7 @@ OMPClause *Sema::ActOnOpenMPLastPrivateClause(ArrayRef<Expr *> VarList,
                               SourceLocation(), Id, Type, TI,
                               SC_Static);
       PseudoVar2->setImplicit();
-      PseudoVar2->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+      PseudoVar2->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
       Context.getTranslationUnitDecl()->addHiddenDecl(PseudoVar2);
       DeclRefExpr *PseudoDE2 = cast<DeclRefExpr>(BuildDeclRefExpr(PseudoVar2,
                                                                   Type,
@@ -4230,7 +4230,7 @@ OMPClause *Sema::ActOnOpenMPCopyinClause(ArrayRef<Expr *> VarList,
                             SourceLocation(), Id, Type, TI,
                             SC_Static);
     PseudoVar1->setImplicit();
-    PseudoVar1->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+    PseudoVar1->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
     Context.getTranslationUnitDecl()->addHiddenDecl(PseudoVar1);
     DeclRefExpr *PseudoDE1 = cast<DeclRefExpr>(BuildDeclRefExpr(PseudoVar1,
                                                                 Type,
@@ -4243,7 +4243,7 @@ OMPClause *Sema::ActOnOpenMPCopyinClause(ArrayRef<Expr *> VarList,
                               SourceLocation(), Id, Type, TI,
                               SC_Static);
       PseudoVar2->setImplicit();
-      PseudoVar2->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+      PseudoVar2->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
       Context.getTranslationUnitDecl()->addHiddenDecl(PseudoVar2);
       DeclRefExpr *PseudoDE2 = cast<DeclRefExpr>(BuildDeclRefExpr(PseudoVar2,
                                                                   Type,
@@ -4385,7 +4385,7 @@ OMPClause *Sema::ActOnOpenMPCopyPrivateClause(ArrayRef<Expr *> VarList,
                             SourceLocation(), Id, Type, TI,
                             SC_Static);
     PseudoVar1->setImplicit();
-    PseudoVar1->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+    PseudoVar1->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
     Context.getTranslationUnitDecl()->addHiddenDecl(PseudoVar1);
     DeclRefExpr *PseudoDE1 = cast<DeclRefExpr>(BuildDeclRefExpr(PseudoVar1,
                                                                 Type,
@@ -4396,7 +4396,7 @@ OMPClause *Sema::ActOnOpenMPCopyPrivateClause(ArrayRef<Expr *> VarList,
                             SourceLocation(), Id, Type, TI,
                             SC_Static);
     PseudoVar2->setImplicit();
-    PseudoVar2->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+    PseudoVar2->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
     Context.getTranslationUnitDecl()->addHiddenDecl(PseudoVar2);
     DeclRefExpr *PseudoDE2 = cast<DeclRefExpr>(BuildDeclRefExpr(PseudoVar2,
                                                                 Type,
@@ -4786,14 +4786,14 @@ OMPClause *Sema::ActOnOpenMPReductionClause(ArrayRef<Expr *> VarList,
                               SourceLocation(), Id1, PtrQTy, TI,
                               SC_Static);
       Parameter1->setImplicit();
-      Parameter1->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+      Parameter1->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
       IdentifierInfo *Id2 = &Context.Idents.get(".ptr2.");
       VarDecl *Parameter2 =
               VarDecl::Create(Context, Context.getTranslationUnitDecl(), SourceLocation(),
                               SourceLocation(), Id2, PtrQTy, TI,
                               SC_Static);
       Parameter2->setImplicit();
-      Parameter2->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+      Parameter2->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
       Context.getTranslationUnitDecl()->addHiddenDecl(Parameter1);
       Context.getTranslationUnitDecl()->addHiddenDecl(Parameter2);
       ExprResult PtrDE1 = BuildDeclRefExpr(Parameter1, PtrQTy,
@@ -4834,14 +4834,14 @@ OMPClause *Sema::ActOnOpenMPReductionClause(ArrayRef<Expr *> VarList,
                               SourceLocation(), Id1, PtrQTy, TI,
                               SC_Static);
       Parameter1->setImplicit();
-      Parameter1->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+      Parameter1->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
       IdentifierInfo *Id2 = &Context.Idents.get(".ptr2.");
       VarDecl *Parameter2 =
               VarDecl::Create(Context, Context.getTranslationUnitDecl(), SourceLocation(),
                               SourceLocation(), Id2, PtrQTy, TI,
                               SC_Static);
       Parameter2->setImplicit();
-      Parameter2->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+      Parameter2->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
       Context.getTranslationUnitDecl()->addHiddenDecl(Parameter1);
       Context.getTranslationUnitDecl()->addHiddenDecl(Parameter2);
       ExprResult PtrDE1 = BuildDeclRefExpr(Parameter1, PtrQTy,
@@ -4918,7 +4918,7 @@ OMPClause *Sema::ActOnOpenMPReductionClause(ArrayRef<Expr *> VarList,
                                 SourceLocation(), Id, Type, TI1,
                                 SC_Static);
         PseudoVar->setImplicit();
-        PseudoVar->addAttr(new (Context) UnusedAttr(SourceLocation(), Context));
+        PseudoVar->addAttr(UnusedAttr::CreateImplicit(Context, SourceLocation()));
         InitializedEntity Entity = InitializedEntity::InitializeVariable(PseudoVar);
         InitializationKind InitKind = InitializationKind::CreateDefault(ELoc);
         InitializationSequence InitSeq(*this, Entity, InitKind, MultiExprArg());
