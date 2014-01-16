@@ -720,6 +720,7 @@ void CodeGenFunction::EmitOMPParallelDirective(const OMPParallelDirective &S) {
   FnArgs.push_back(Arg1);
   FnArgs.push_back(Arg2);
   FnArgs.push_back(Arg3);
+  CGF.OpenMPRoot = OpenMPRoot ? OpenMPRoot : this;
   CGF.StartFunction(FD, getContext().VoidTy, Fn, FI, FnArgs, SourceLocation());
   CGF.Builder.CreateLoad(CGF.GetAddrOfLocalVar(Arg1), ".__kmpc_global_thread_num.");
 
@@ -1372,6 +1373,7 @@ void CodeGenFunction::EmitOMPTaskDirective(const OMPTaskDirective &S) {
   FunctionArgList FnArgs;
   FnArgs.push_back(Arg1);
   FnArgs.push_back(Arg2);
+  CGF.OpenMPRoot = OpenMPRoot ? OpenMPRoot : this;
   CGF.StartFunction(FD, getContext().IntTy, Fn, FI, FnArgs, SourceLocation());
   llvm::AllocaInst *GTid = CGF.CreateMemTemp(getContext().IntTy,
                                              ".__kmpc_global_thread_num.");
@@ -2345,10 +2347,13 @@ void CodeGenFunction::EmitPreOMPPrivateClause(
       Private = EmitLValueForField(MakeNaturalAlignAddrLValue(Base, PrivateQTy),
                                    CGM.OpenMPSupport.getTaskFields()[VD]).getAddress();
     } else {
-      Private = CreateMemTemp(QTy, CGM.getMangledName(VD) + ".private.");
+      LocalVarsDeclGuard Grd(*this, true);
+      AutoVarEmission Emission = EmitAutoVarAlloca(*VD);
+      Private = Emission.getAllocatedAddress();
     }
     // CodeGen for classes with the default constructor.
-    if ((!PTask || CurFn != PTask) && !isTrivialInitializer(*InitIter)) {
+    if (((!PTask || CurFn != PTask) && !isTrivialInitializer(*InitIter)) ||
+        (MainTy->isVariablyModifiedType() && !MainTy->isPointerType())) {
       RunCleanupsScope InitBlock(*this);
       if (const ArrayType *ArrayTy = MainTy->getAsArrayTypeUnsafe()) {
         // Create array.
@@ -2488,11 +2493,14 @@ void CodeGenFunction::EmitPreOMPFirstPrivateClause(
       Private = EmitLValueForField(MakeNaturalAlignAddrLValue(Base, PrivateQTy),
                                    CGM.OpenMPSupport.getTaskFields()[VD]).getAddress();
     } else {
-      Private = CreateMemTemp(QTy, CGM.getMangledName(VD) + ".firstprivate.");
+      LocalVarsDeclGuard Grd(*this, true);
+      AutoVarEmission Emission = EmitAutoVarAlloca(*VD);
+      Private = Emission.getAllocatedAddress();
     }
     // CodeGen for classes with the copy constructor.
     RunCleanupsScope InitBlock(*this);
-    if ((!PTask || CurFn != PTask) && !isTrivialInitializer(*InitIter)) {
+    if (((!PTask || CurFn != PTask) && !isTrivialInitializer(*InitIter)) ||
+        (MainTy->isVariablyModifiedType() && !MainTy->isPointerType())) {
       if (const ArrayType *ArrayTy = MainTy->getAsArrayTypeUnsafe()) {
         // Create array.
         QualType ElementTy;
@@ -2674,10 +2682,15 @@ void CodeGenFunction::EmitPreOMPLastPrivateClause(
     //  Ty = Ty->getArrayElementTypeNoTypeQual();
     //}
     //Ty = PrevTy;
-    llvm::AllocaInst *Private =
-             CreateMemTemp(QTy, CGM.getMangledName(VD) + ".lastprivate.");
+    llvm::Value *Private = 0;
+    {
+      LocalVarsDeclGuard Grd(*this, true);
+      AutoVarEmission Emission = EmitAutoVarAlloca(*VD);
+      Private = Emission.getAllocatedAddress();
+    }
     // CodeGen for classes with the default constructor.
-    if (!isTrivialInitializer(*InitIter)) {
+    if (!isTrivialInitializer(*InitIter) ||
+        (MainTy->isVariablyModifiedType() && !MainTy->isPointerType())) {
       RunCleanupsScope InitBlock(*this);
       if (const ArrayType *ArrayTy = MainTy->getAsArrayTypeUnsafe()) {
         // Create array.
@@ -2983,8 +2996,13 @@ void CodeGenFunction::EmitPreOMPReductionClause(
     //  LocalDeclMap[VD] = CreateMemTemp(VD->getType(), CGM.getMangledName(VD));
     //}
     QualType QTy = (*I)->getType();
-    llvm::AllocaInst *Private =
-             CreateMemTemp(QTy, CGM.getMangledName(VD) + ".reduction.");
+    llvm::AllocaInst *Private = 0;
+    {
+      LocalVarsDeclGuard Grd(*this, true);
+      AutoVarEmission Emission = EmitAutoVarAlloca(*VD);
+      Private = cast<llvm::AllocaInst>(Emission.getAllocatedAddress());
+    }
+    //         CreateMemTemp(QTy, CGM.getMangledName(VD) + ".reduction.");
 
     // CodeGen for classes with the constructor.
     //const Type *Ty = QTy.getTypePtr();
@@ -3600,9 +3618,11 @@ void CodeGenFunction::EmitOMPAtomicDirective(const OMPAtomicDirective &S) {
     case OMPC_write: {
       QualType QTy = S.getX()->getType();
       QualType AQTy = getAtomicType(*this, QTy);
+      QualType QTyIn = S.getExpr()->getType();
       llvm::Value *AtomicFunc = AQTy.isNull() ? 0 :
         OPENMPRTL_ATOMIC_FUNC_GENERAL(AQTy, AQTy, OMP_Atomic_wr, false, false);
-      if (X.isSimple() && AtomicFunc) {
+      if (X.isSimple() && AtomicFunc && QTyIn->isScalarType() &&
+          !QTyIn->isAnyComplexType()) {
         llvm::Type *ATy = ConvertTypeForMem(AQTy);
         llvm::SmallVector<llvm::Value *, 5> Args;
         // __kmpc_atomic_..._wr(&loc, global_tid, &x, expr);
@@ -3665,7 +3685,8 @@ void CodeGenFunction::EmitOMPAtomicDirective(const OMPAtomicDirective &S) {
       llvm::Value *AtomicFunc = (AQTyRes.isNull() || AQTyIn.isNull()) ? 0 :
         OPENMPRTL_ATOMIC_FUNC_GENERAL(AQTyRes, AQTyIn, Aop, false,
                                       S.isReversed());
-      if (X.isSimple() && AtomicFunc) {
+      if (X.isSimple() && AtomicFunc && QTyIn->isScalarType() &&
+          !QTyIn->isAnyComplexType()) {
         llvm::Type *ATyRes = ConvertTypeForMem(AQTyRes);
         llvm::SmallVector<llvm::Value *, 5> Args;
         // __kmpc_atomic_..._op(&loc, global_tid, &x, expr);
@@ -3730,7 +3751,8 @@ void CodeGenFunction::EmitOMPAtomicDirective(const OMPAtomicDirective &S) {
       llvm::Value *AtomicFunc = (AQTyRes.isNull() || AQTyIn.isNull()) ? 0 :
         OPENMPRTL_ATOMIC_FUNC_GENERAL(AQTyRes, AQTyIn, Aop, true,
                                       S.isReversed());
-      if (X.isSimple() && AtomicFunc) {
+      if (X.isSimple() && AtomicFunc && QTyIn->isScalarType() &&
+          !QTyIn->isAnyComplexType()) {
         llvm::Type *ATy = ConvertTypeForMem(AQTyRes);
         llvm::SmallVector<llvm::Value *, 5> Args;
         // __kmpc_atomic_..._op(&loc, global_tid, &x, expr);

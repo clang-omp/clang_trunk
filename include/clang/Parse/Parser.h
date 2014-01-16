@@ -745,29 +745,23 @@ public:
   /// If SkipUntil finds the specified token, it returns true, otherwise it
   /// returns false.
   bool SkipUntil(tok::TokenKind T, bool StopAtSemi = true,
-                 bool DontConsume = false, bool StopAtCodeCompletion = false,
-                 bool NoCount = false) {
+                 bool DontConsume = false, bool StopAtCodeCompletion = false) {
     return SkipUntil(llvm::makeArrayRef(T), StopAtSemi, DontConsume,
-                     StopAtCodeCompletion, NoCount);
+                     StopAtCodeCompletion);
   }
   bool SkipUntil(tok::TokenKind T1, tok::TokenKind T2, bool StopAtSemi = true,
-                 bool DontConsume = false, bool StopAtCodeCompletion = false,
-                 bool NoCount = false) {
+                 bool DontConsume = false, bool StopAtCodeCompletion = false) {
     tok::TokenKind TokArray[] = {T1, T2};
-    return SkipUntil(TokArray, StopAtSemi, DontConsume,StopAtCodeCompletion,
-                     NoCount);
+    return SkipUntil(TokArray, StopAtSemi, DontConsume,StopAtCodeCompletion);
   }
   bool SkipUntil(tok::TokenKind T1, tok::TokenKind T2, tok::TokenKind T3,
                  bool StopAtSemi = true, bool DontConsume = false,
-                 bool StopAtCodeCompletion = false,
-                 bool NoCount = false) {
+                 bool StopAtCodeCompletion = false) {
     tok::TokenKind TokArray[] = {T1, T2, T3};
-    return SkipUntil(TokArray, StopAtSemi, DontConsume,StopAtCodeCompletion,
-                     NoCount);
+    return SkipUntil(TokArray, StopAtSemi, DontConsume,StopAtCodeCompletion);
   }
   bool SkipUntil(ArrayRef<tok::TokenKind> Toks, bool StopAtSemi = true,
-                 bool DontConsume = false, bool StopAtCodeCompletion = false,
-                 bool NoCount = false);
+                 bool DontConsume = false, bool StopAtCodeCompletion = false);
 
   /// SkipMalformedDecl - Read tokens until we get to some likely good stopping
   /// point for skipping past a simple-declaration.
@@ -915,6 +909,21 @@ private:
     /// \brief The set of tokens that make up an exception-specification that
     /// has not yet been parsed.
     CachedTokens *ExceptionSpecTokens;
+  };
+
+  /// LateParsedOpenMPDeclaration - An OpenMP declaration inside a class.
+  struct LateParsedOpenMPDeclaration : public LateParsedDeclaration {
+    explicit LateParsedOpenMPDeclaration(Parser *P, AccessSpecifier AS)
+      : Self(P), AS(AS) { }
+
+    virtual void ParseLexedMethodDeclarations();
+
+    Parser* Self;
+    AccessSpecifier AS;
+
+    /// \brief The set of tokens that make up an exception-specification that
+    /// has not yet been parsed.
+    CachedTokens Tokens;
   };
 
   /// LateParsedMemberInitializer - An initializer for a non-static class data
@@ -2166,6 +2175,9 @@ private:
   // OpenMP: Directives and clauses.
   /// \brief Parses declarative OpenMP directives.
   DeclGroupPtrTy ParseOpenMPDeclarativeDirective(AccessSpecifier AS);
+  /// \brief Late parsing of declarative OpenMP directives.
+  void LateParseOpenMPDeclarativeDirective(AccessSpecifier AS);
+
   /// \brief Parses simple list of variables.
   ///
   /// \param Kind Kind of the directive.

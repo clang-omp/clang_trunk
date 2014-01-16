@@ -34,7 +34,7 @@ using namespace CodeGen;
 
 CodeGenFunction::CodeGenFunction(CodeGenModule &cgm, bool suppressNewContext)
     : CodeGenTypeCache(cgm), CGM(cgm), Target(cgm.getTarget()),
-      Builder(cgm.getModule().getContext()), CapturedStmtInfo(0),
+      Builder(cgm.getModule().getContext()), OpenMPRoot(0), CapturedStmtInfo(0),
       SanitizePerformTypeCheck(CGM.getSanOpts().Null |
                                CGM.getSanOpts().Alignment |
                                CGM.getSanOpts().ObjectSize |
