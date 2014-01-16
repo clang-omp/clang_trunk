@@ -1,9 +1,6 @@
 set(LLVM_LINK_COMPONENTS
-  ${LLVM_TARGETS_TO_BUILD}
-  asmparser
-  support
-  bitreader
-  mc
+  BitReader
+  Support
   )
 
 set(SOURCES
@@ -39,25 +36,18 @@ set(SOURCES
   Indexing.cpp
   IndexingContext.cpp
   IndexingContext.h
-  SimpleFormatContext.h
   ../../include/clang-c/Index.h
   )
 
 set(LIBRARIES
-  clangIndex
   clangARCMigrate
-  clangRewriteCore
-  clangRewriteFrontend
-  clangFrontend
-  clangDriver
-  clangSerialization
-  clangSema
-  clangEdit
   clangAST
-  clangLex
-  clangTooling
   clangBasic
-  clangFormat
+  clangFrontend
+  clangIndex
+  clangLex
+  clangSema
+  clangTooling
   )
 
 set(GENERATED_HEADERS
@@ -70,6 +60,8 @@ set(GENERATED_HEADERS
   ClangDeclNodes
   ClangStmtNodes
   )
+
+set(LLVM_EXPORTED_SYMBOL_FILE ${CMAKE_CURRENT_SOURCE_DIR}/libclang.exports)
 
 if( LLVM_ENABLE_PIC )
   set(SHARED_LIBRARY TRUE)
@@ -92,12 +84,17 @@ if( LLVM_ENABLE_PIC )
   endif()
 
   if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    set(LIBCLANG_LINK_FLAGS
-      "-Wl,-compatibility_version -Wl,1 -Wl,-dead_strip")
+    set(LIBCLANG_LINK_FLAGS " -Wl,-compatibility_version -Wl,1")
+    if (DEFINED ${LLVM_SUBMIT_VERSION})
+      set(LIBCLANG_LINK_FLAGS
+        "${LIBCLANG_LINK_FLAGS} -Wl,-current_version -Wl,${LLVM_SUBMIT_VERSION}.${LLVM_SUBMIT_SUBVERSION}")
+    endif()
+
+    set_property(TARGET libclang APPEND_STRING PROPERTY
+                 LINK_FLAGS ${LIBCLANG_LINK_FLAGS})
     set_target_properties(libclang
       PROPERTIES
-      LINK_FLAGS "${LIBCLANG_LINK_FLAGS}"
-      INSTALL_NAME_DIR "@executable_path/../lib")
+      INSTALL_NAME_DIR "@rpath")
   endif()
 
 

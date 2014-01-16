@@ -143,4 +143,17 @@
 // LINK_EXPORT_DYNAMIC: {{ld(.exe)?"}}
 // LINK_EXPORT_DYNAMIC: "-export_dynamic"
 
+// RUN: %clang -target x86_64h-apple-darwin -### %t.o 2> %t.log
+// RUN: FileCheck -check-prefix=LINK_X86_64H_ARCH %s < %t.log
+//
+// LINK_X86_64H_ARCH: {{ld(.exe)?"}}
+// LINK_X86_64H_ARCH: "x86_64h"
 
+// RUN: %clang -target x86_64-apple-darwin -arch x86_64 -arch x86_64h -### %t.o 2> %t.log
+// RUN: FileCheck -check-prefix=LINK_X86_64H_MULTIARCH %s < %t.log
+//
+// LINK_X86_64H_MULTIARCH: {{ld(.exe)?"}}
+// LINK_X86_64H_MULTIARCH: "x86_64"
+//
+// LINK_X86_64H_MULTIARCH: {{ld(.exe)?"}}
+// LINK_X86_64H_MULTIARCH: "x86_64h"

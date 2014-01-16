@@ -26,6 +26,7 @@
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/ScopeInfo.h"
+#include "clang/Sema/SemaInternal.h"
 using namespace clang;
 
 //===----------------------------------------------------------------------===//

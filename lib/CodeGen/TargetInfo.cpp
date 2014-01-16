@@ -395,7 +395,7 @@ llvm::Value *DefaultABIInfo::EmitVAArg(llvm::Value *VAListAddr, QualType Ty,
 
 ABIArgInfo DefaultABIInfo::classifyArgumentType(QualType Ty) const {
   if (isAggregateTypeForABI(Ty)) {
-    // Records with non trivial destructors/constructors should not be passed
+    // Records with non-trivial destructors/constructors should not be passed
     // by value.
     if (isRecordReturnIndirect(Ty, getCXXABI()))
       return ABIArgInfo::getIndirect(0, /*ByVal=*/false);
@@ -809,7 +809,7 @@ ABIArgInfo X86_32ABIInfo::getIndirectResult(QualType Ty, bool ByVal,
                                             unsigned &FreeRegs) const {
   if (!ByVal) {
     if (FreeRegs) {
-      --FreeRegs; // Non byval indirects just use one pointer.
+      --FreeRegs; // Non-byval indirects just use one pointer.
       return ABIArgInfo::getIndirectInReg(0, false);
     }
     return ABIArgInfo::getIndirect(0, false);
@@ -3071,9 +3071,26 @@ public:
   }
 
   bool isEABI() const {
-    StringRef Env = getTarget().getTriple().getEnvironmentName();
-    return (Env == "gnueabi" || Env == "eabi" ||
-            Env == "android" || Env == "androideabi");
+    switch (getTarget().getTriple().getEnvironment()) {
+    case llvm::Triple::Android:
+    case llvm::Triple::EABI:
+    case llvm::Triple::EABIHF:
+    case llvm::Triple::GNUEABI:
+    case llvm::Triple::GNUEABIHF:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  bool isEABIHF() const {
+    switch (getTarget().getTriple().getEnvironment()) {
+    case llvm::Triple::EABIHF:
+    case llvm::Triple::GNUEABIHF:
+      return true;
+    default:
+      return false;
+    }
   }
 
   ABIKind getABIKind() const { return Kind; }
@@ -3209,7 +3226,7 @@ void ARMABIInfo::computeInfo(CGFunctionInfo &FI) const {
 /// Return the default calling convention that LLVM will use.
 llvm::CallingConv::ID ARMABIInfo::getLLVMDefaultCC() const {
   // The default calling convention that LLVM will infer.
-  if (getTarget().getTriple().getEnvironmentName()=="gnueabihf")
+  if (isEABIHF())
     return llvm::CallingConv::ARM_AAPCS_VFP;
   else if (isEABI())
     return llvm::CallingConv::ARM_AAPCS;
@@ -4197,16 +4214,26 @@ private:
 ABIArgInfo NVPTXABIInfo::classifyReturnType(QualType RetTy) const {
   if (RetTy->isVoidType())
     return ABIArgInfo::getIgnore();
-  if (isAggregateTypeForABI(RetTy))
-    return ABIArgInfo::getIndirect(0);
-  return ABIArgInfo::getDirect();
+
+  // note: this is different from default ABI
+  if (!RetTy->isScalarType())
+    return ABIArgInfo::getDirect();
+
+  // Treat an enum type as its underlying type.
+  if (const EnumType *EnumTy = RetTy->getAs<EnumType>())
+    RetTy = EnumTy->getDecl()->getIntegerType();
+
+  return (RetTy->isPromotableIntegerType() ?
+          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
 }
 
 ABIArgInfo NVPTXABIInfo::classifyArgumentType(QualType Ty) const {
-  if (isAggregateTypeForABI(Ty))
-    return ABIArgInfo::getIndirect(0);
+  // Treat an enum type as its underlying type.
+  if (const EnumType *EnumTy = Ty->getAs<EnumType>())
+    Ty = EnumTy->getDecl()->getIntegerType();
 
-  return ABIArgInfo::getDirect();
+  return (Ty->isPromotableIntegerType() ?
+          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
 }
 
 void NVPTXABIInfo::computeInfo(CGFunctionInfo &FI) const {
@@ -4252,7 +4279,7 @@ SetTargetAttributes(const Decl *D, llvm::GlobalValue *GV,
     // CUDA __global__ functions get a kernel metadata entry.  Since
     // __global__ functions cannot be called from the device, we do not
     // need to set the noinline attribute.
-    if (FD->getAttr<CUDAGlobalAttr>())
+    if (FD->hasAttr<CUDAGlobalAttr>())
       addKernelMetadata(F);
   }
 }
@@ -4563,7 +4590,7 @@ ABIArgInfo SystemZABIInfo::classifyArgumentType(QualType Ty) const {
   // Values that are not 1, 2, 4 or 8 bytes in size are passed indirectly.
   uint64_t Size = getContext().getTypeSize(Ty);
   if (Size != 8 && Size != 16 && Size != 32 && Size != 64)
-    return ABIArgInfo::getIndirect(0);
+    return ABIArgInfo::getIndirect(0, /*ByVal=*/false);
 
   // Handle small structures.
   if (const RecordType *RT = Ty->getAs<RecordType>()) {
@@ -4571,7 +4598,7 @@ ABIArgInfo SystemZABIInfo::classifyArgumentType(QualType Ty) const {
     // fail the size test above.
     const RecordDecl *RD = RT->getDecl();
     if (RD->hasFlexibleArrayMember())
-      return ABIArgInfo::getIndirect(0);
+      return ABIArgInfo::getIndirect(0, /*ByVal=*/false);
 
     // The structure is passed as an unextended integer, a float, or a double.
     llvm::Type *PassTy;
@@ -4588,7 +4615,7 @@ ABIArgInfo SystemZABIInfo::classifyArgumentType(QualType Ty) const {
 
   // Non-structure compounds are passed indirectly.
   if (isCompoundType(Ty))
-    return ABIArgInfo::getIndirect(0);
+    return ABIArgInfo::getIndirect(0, /*ByVal=*/false);
 
   return ABIArgInfo::getDirect(0);
 }
@@ -4647,9 +4674,9 @@ class MipsABIInfo : public ABIInfo {
   llvm::Type* returnAggregateInRegs(QualType RetTy, uint64_t Size) const;
   llvm::Type* getPaddingType(uint64_t Align, uint64_t Offset) const;
 public:
-  MipsABIInfo(CodeGenTypes &CGT, bool _IsO32, bool HasFP64) :
+  MipsABIInfo(CodeGenTypes &CGT, bool _IsO32) :
     ABIInfo(CGT), IsO32(_IsO32), MinABIStackAlignInBytes(IsO32 ? 4 : 8),
-    StackAlignInBytes(IsO32 && !HasFP64 ? 8 : 16) {}
+    StackAlignInBytes(IsO32 ? 8 : 16) {}
 
   ABIArgInfo classifyReturnType(QualType RetTy) const;
   ABIArgInfo classifyArgumentType(QualType RetTy, uint64_t &Offset) const;
@@ -4661,8 +4688,8 @@ public:
 class MIPSTargetCodeGenInfo : public TargetCodeGenInfo {
   unsigned SizeOfUnwindException;
 public:
-  MIPSTargetCodeGenInfo(CodeGenTypes &CGT, bool IsO32, const TargetInfo &Info)
-    : TargetCodeGenInfo(new MipsABIInfo(CGT, IsO32, Info.hasFeature("fp64"))),
+  MIPSTargetCodeGenInfo(CodeGenTypes &CGT, bool IsO32)
+    : TargetCodeGenInfo(new MipsABIInfo(CGT, IsO32)),
       SizeOfUnwindException(IsO32 ? 24 : 32) {}
 
   int getDwarfEHStackPointer(CodeGen::CodeGenModule &CGM) const {
@@ -4993,9 +5020,8 @@ void TCETargetCodeGenInfo::SetTargetAttributes(const Decl *D,
     if (FD->hasAttr<OpenCLKernelAttr>()) {
       // OpenCL C Kernel functions are not subject to inlining
       F->addFnAttr(llvm::Attribute::NoInline);
-          
-      if (FD->hasAttr<ReqdWorkGroupSizeAttr>()) {
-
+      const ReqdWorkGroupSizeAttr *Attr = FD->getAttr<ReqdWorkGroupSizeAttr>();
+      if (Attr) {
         // Convert the reqd_work_group_size() attributes to metadata.
         llvm::LLVMContext &Context = F->getContext();
         llvm::NamedMDNode *OpenCLMetadata = 
@@ -5005,14 +5031,11 @@ void TCETargetCodeGenInfo::SetTargetAttributes(const Decl *D,
         Operands.push_back(F);
 
         Operands.push_back(llvm::Constant::getIntegerValue(M.Int32Ty, 
-                             llvm::APInt(32, 
-                             FD->getAttr<ReqdWorkGroupSizeAttr>()->getXDim())));
+                             llvm::APInt(32, Attr->getXDim())));
         Operands.push_back(llvm::Constant::getIntegerValue(M.Int32Ty,
-                             llvm::APInt(32,
-                               FD->getAttr<ReqdWorkGroupSizeAttr>()->getYDim())));
+                             llvm::APInt(32, Attr->getYDim())));
         Operands.push_back(llvm::Constant::getIntegerValue(M.Int32Ty, 
-                             llvm::APInt(32, 
-                               FD->getAttr<ReqdWorkGroupSizeAttr>()->getZDim())));
+                             llvm::APInt(32, Attr->getZDim())));
 
         // Add a boolean constant operand for "required" (true) or "hint" (false)
         // for implementing the work_group_size_hint attr later. Currently 
@@ -5339,6 +5362,11 @@ SparcV9ABIInfo::classifyType(QualType Ty, unsigned SizeLimit) const {
   if (!isAggregateTypeForABI(Ty))
     return ABIArgInfo::getDirect();
 
+  // If a C++ object has either a non-trivial copy constructor or a non-trivial
+  // destructor, it is passed with an explicit indirect pointer / sret pointer.
+  if (CGCXXABI::RecordArgABI RAA = getRecordArgABI(Ty, getCXXABI()))
+    return ABIArgInfo::getIndirect(0, RAA == CGCXXABI::RAA_DirectInMemory);
+
   // This is a small aggregate type that should be passed in registers.
   // Build a coercion type from the LLVM struct type.
   llvm::StructType *StrTy = dyn_cast<llvm::StructType>(CGT.ConvertType(Ty));
@@ -5507,12 +5535,12 @@ const TargetCodeGenInfo &CodeGenModule::getTargetCodeGenInfo() {
     return *(TheTargetCodeGenInfo = new PNaClTargetCodeGenInfo(Types));
   case llvm::Triple::mips:
   case llvm::Triple::mipsel:
-    return *(TheTargetCodeGenInfo = new MIPSTargetCodeGenInfo(Types, true,
-                                                              getTarget()));
+    return *(TheTargetCodeGenInfo = new MIPSTargetCodeGenInfo(Types, true));
+
   case llvm::Triple::mips64:
   case llvm::Triple::mips64el:
-    return *(TheTargetCodeGenInfo = new MIPSTargetCodeGenInfo(Types, false,
-                                                              getTarget()));
+    return *(TheTargetCodeGenInfo = new MIPSTargetCodeGenInfo(Types, false));
+
   case llvm::Triple::aarch64:
     return *(TheTargetCodeGenInfo = new AArch64TargetCodeGenInfo(Types));
 

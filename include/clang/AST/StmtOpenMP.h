@@ -17,9 +17,11 @@
 
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/OpenMPKinds.h"
-#include "clang/AST/Stmt.h"
-#include "clang/AST/Expr.h"
 #include "clang/AST/OpenMPClause.h"
+#include "clang/AST/Expr.h"
+#include "clang/AST/Stmt.h"
+#include "clang/Basic/OpenMPKinds.h"
+#include "clang/Basic/SourceLocation.h"
 
 namespace clang {
 
@@ -766,7 +768,6 @@ public:
                                   SourceLocation EndLoc,
                                   ArrayRef<OMPClause *> Clauses,
                                   Stmt *AssociatedStmt);
-
   /// \brief Creates an empty directive with the place for \a N clauses.
   ///
   /// \param C AST context.

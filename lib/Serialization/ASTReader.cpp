@@ -140,7 +140,6 @@ static bool checkTargetOptions(const TargetOptions &TargetOpts,
   CHECK_TARGET_OPT(Triple, "target");
   CHECK_TARGET_OPT(CPU, "target CPU");
   CHECK_TARGET_OPT(ABI, "target ABI");
-  CHECK_TARGET_OPT(CXXABI, "target C++ ABI");
   CHECK_TARGET_OPT(LinkerVersion, "target linker version");
 #undef CHECK_TARGET_OPT
 
@@ -1643,6 +1642,9 @@ InputFile ASTReader::getInputFile(ModuleFile &F, unsigned ID, bool Complain) {
   if (F.InputFilesLoaded[ID-1].getFile())
     return F.InputFilesLoaded[ID-1];
 
+  if (F.InputFilesLoaded[ID-1].isNotFound())
+    return InputFile();
+
   // Go find this input file.
   BitstreamCursor &Cursor = F.InputFilesCursor;
   SavedStreamPosition SavedPosition(Cursor);
@@ -1692,6 +1694,8 @@ InputFile ASTReader::getInputFile(ModuleFile &F, unsigned ID, bool Complain) {
         ErrorStr += "' referenced by AST file";
         Error(ErrorStr.c_str());
       }
+      // Record that we didn't find the file.
+      F.InputFilesLoaded[ID-1] = InputFile::getNotFound();
       return InputFile();
     }
 
@@ -4004,7 +4008,6 @@ bool ASTReader::ParseTargetOptions(const RecordData &Record,
   TargetOpts.Triple = ReadString(Record, Idx);
   TargetOpts.CPU = ReadString(Record, Idx);
   TargetOpts.ABI = ReadString(Record, Idx);
-  TargetOpts.CXXABI = ReadString(Record, Idx);
   TargetOpts.LinkerVersion = ReadString(Record, Idx);
   for (unsigned N = Record[Idx++]; N; --N) {
     TargetOpts.FeaturesAsWritten.push_back(ReadString(Record, Idx));
@@ -4548,6 +4551,16 @@ QualType ASTReader::readTypeRecord(unsigned Index) {
     return DT;
   }
 
+  case TYPE_ADJUSTED: {
+    if (Record.size() != 2) {
+      Error("Incorrect encoding of adjusted type");
+      return QualType();
+    }
+    QualType OriginalTy = readType(*Loc.F, Record, Idx);
+    QualType AdjustedTy = readType(*Loc.F, Record, Idx);
+    return Context.getAdjustedType(OriginalTy, AdjustedTy);
+  }
+
   case TYPE_BLOCK_POINTER: {
     if (Record.size() != 1) {
       Error("Incorrect encoding of block pointer type");
@@ -4995,6 +5008,9 @@ void TypeLocReader::VisitPointerTypeLoc(PointerTypeLoc TL) {
   TL.setStarLoc(ReadSourceLocation(Record, Idx));
 }
 void TypeLocReader::VisitDecayedTypeLoc(DecayedTypeLoc TL) {
+  // nothing to do
+}
+void TypeLocReader::VisitAdjustedTypeLoc(AdjustedTypeLoc TL) {
   // nothing to do
 }
 void TypeLocReader::VisitBlockPointerTypeLoc(BlockPointerTypeLoc TL) {

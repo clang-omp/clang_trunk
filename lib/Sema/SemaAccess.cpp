@@ -797,7 +797,7 @@ static AccessResult HasAccess(Sema &S,
         // Emulate a MSVC bug where the creation of pointer-to-member
         // to protected member of base class is allowed but only from
         // static member functions.
-        if (S.getLangOpts().MicrosoftMode && !EC.Functions.empty())
+        if (S.getLangOpts().MSVCCompat && !EC.Functions.empty())
           if (CXXMethodDecl* MD = dyn_cast<CXXMethodDecl>(EC.Functions.front()))
             if (MD->isStatic()) return AR_accessible;
 
@@ -1422,7 +1422,7 @@ static AccessResult CheckEffectiveAccess(Sema &S,
                                          AccessTarget &Entity) {
   assert(Entity.getAccess() != AS_public && "called for public access!");
 
-  if (S.getLangOpts().MicrosoftMode &&
+  if (S.getLangOpts().MSVCCompat &&
       IsMicrosoftUsingDeclarationAccessBug(S, Loc, Entity))
     return AR_accessible;
 
@@ -1482,11 +1482,10 @@ void Sema::HandleDelayedAccessCheck(DelayedDiagnostic &DD, Decl *D) {
   // However, this does not apply to local extern declarations.
 
   DeclContext *DC = D->getDeclContext();
-  if (FunctionDecl *FN = dyn_cast<FunctionDecl>(D)) {
-    if (D->getLexicalDeclContext()->isFunctionOrMethod())
-      DC = D->getLexicalDeclContext();
-    else
-      DC = FN;
+  if (D->isLocalExternDecl()) {
+    DC = D->getLexicalDeclContext();
+  } else if (FunctionDecl *FN = dyn_cast<FunctionDecl>(D)) {
+    DC = FN;
   } else if (TemplateDecl *TD = dyn_cast<TemplateDecl>(D)) {
     DC = cast<DeclContext>(TD->getTemplatedDecl());
   }
@@ -1650,9 +1649,9 @@ Sema::AccessResult Sema::CheckConstructorAccess(SourceLocation UseLoc,
   }
 
   case InitializedEntity::EK_LambdaCapture: {
-    const VarDecl *Var = Entity.getCapturedVar();
+    StringRef VarName = Entity.getCapturedVarName();
     PD = PDiag(diag::err_access_lambda_capture);
-    PD << Var->getName() << Entity.getType() << getSpecialMember(Constructor);
+    PD << VarName << Entity.getType() << getSpecialMember(Constructor);
     break;
   }
 

@@ -608,6 +608,8 @@ void testWhileLoop1() {
   *var0; // expected-warning {{invalid invocation of method 'operator*' on object 'var0' while it is in the 'consumed' state}}
 }
 
+typedef const int*& IntegerPointerReference;
+void testIsRValueRefishAndCanonicalType(IntegerPointerReference a) {}
 
 namespace ContinueICETest {
 
@@ -643,9 +645,12 @@ void read(bool sf) {
 } // end namespace ContinueICETest
 
 
-namespace InitializerAssertionFailTest {
+namespace StatusUseCaseTests {
 
-class CONSUMABLE(unconsumed) Status {
+class CONSUMABLE(unconsumed)
+      __attribute__((consumable_auto_cast_state))
+      __attribute__((consumable_set_state_on_read))
+    Status {
   int code;
 
 public:
@@ -653,10 +658,10 @@ public:
   Status(int c) RETURN_TYPESTATE(unconsumed);
 
   Status(const Status &other);
-  //Status(Status &&other);
+  Status(Status &&other);
 
   Status& operator=(const Status &other) CALLABLE_WHEN("unknown", "consumed");
-  //Status& operator=(Status &&other) CALLABLE_WHEN("unknown", "consumed");
+  Status& operator=(Status &&other) CALLABLE_WHEN("unknown", "consumed");
 
   bool check()  const SET_TYPESTATE(consumed);
   void ignore() const SET_TYPESTATE(consumed);
@@ -670,18 +675,197 @@ public:
 
 bool   cond();
 Status doSomething();
-void   handleStatus(const Status& s);
-void   handleStatusPtr(const Status* s);
+void   handleStatus(const Status& s RETURN_TYPESTATE(consumed));
+void   handleStatusRef(Status& s);
+void   handleStatusPtr(Status* s);
+void   handleStatusUnmarked(const Status& s);
 
-int a;
+void testSimpleTemporaries0() {
+  doSomething(); // expected-warning {{invalid invocation of method '~Status' on a temporary object while it is in the 'unconsumed' state}}
+}
 
+void testSimpleTemporaries1() {
+  doSomething().ignore();
+}
 
-void test() {
+void testSimpleTemporaries2() {
+  handleStatus(doSomething());
+}
+
+void testSimpleTemporaries3() {
+  Status s = doSomething();
+}  // expected-warning {{invalid invocation of method '~Status' on object 's' while it is in the 'unconsumed' state}}
+
+Status testSimpleTemporariesReturn0() {
+  return doSomething();
+}
+
+Status testSimpleTemporariesReturn1() {
+  Status s = doSomething();
+  return s;
+}
+
+void testSimpleTemporaries4() {
+  Status s = doSomething();
+  s.check();
+}
+
+void testSimpleTemporaries5() {
+  Status s = doSomething();
+  s.clear(); // expected-warning {{invalid invocation of method 'clear' on object 's' while it is in the 'unconsumed' state}}
+}
+
+void testSimpleTemporaries6() {
+  Status s1 = doSomething();
+  handleStatus(s1);
+
+  Status s2 = doSomething();
+  handleStatusRef(s2);
+
+  Status s3 = doSomething();
+  handleStatusPtr(&s3);
+
+  Status s4 = doSomething();
+  handleStatusUnmarked(s4);
+}
+
+void testSimpleTemporaries7() {
+  Status s;
+  s = doSomething();
+}  // expected-warning {{invalid invocation of method '~Status' on object 's' while it is in the 'unconsumed' state}}
+
+void testTemporariesWithConditionals0() {
+  int a;
+
+  Status s = doSomething();
+  if (cond()) a = 0;
+  else        a = 1;
+} // expected-warning {{invalid invocation of method '~Status' on object 's' while it is in the 'unconsumed' state}}
+
+void testTemporariesWithConditionals1() {
+  int a;
+  
+  Status s = doSomething();
+  if (cond()) a = 0;
+  else        a = 1;
+  s.ignore();
+}
+
+void testTemporariesWithConditionals2() {
+  int a;
+  
+  Status s = doSomething();
+  s.ignore();
+  if (cond()) a = 0;
+  else        a = 1;
+}
+
+void testTemporariesWithConditionals3() {
+  Status s = doSomething();
   if (cond()) {
-    Status s = doSomething();
-    return;                     // Warning: Store it, but don't check.
+    s.check();
   }
+}
+
+void testTemporariesAndConstructors0() {
+  Status s(doSomething());    // Test the copy constructor.
+  s.check();
+}
+
+void testTemporariesAndConstructors1F() {
+  Status s1 = doSomething();  // Test the copy constructor.
+  Status s2 = s1;
+} // expected-warning {{invalid invocation of method '~Status' on object 's2' while it is in the 'unconsumed' state}}
+
+void testTemporariesAndConstructors1S() {
+  Status s1 = doSomething();  // Test the copy constructor.
+  Status s2(s1);
+  s2.check();
+}
+
+void testTemporariesAndConstructors2F() {
+  // Test the move constructor.
+  Status s1 = doSomething();
+  Status s2 = static_cast<Status&&>(s1);
+} // expected-warning {{invalid invocation of method '~Status' on object 's2' while it is in the 'unconsumed' state}}
+
+void testTemporariesAndConstructors2S() {
+  // Test the move constructor.
+  Status s1 = doSomething();
+  Status s2 = static_cast<Status&&>(s1);
+  s2.check();
+}
+
+void testTemporariesAndOperators0F() {
+  // Test the assignment operator.
+  Status s1 = doSomething();
+  Status s2;
+  s2 = s1;
+} // expected-warning {{invalid invocation of method '~Status' on object 's2' while it is in the 'unconsumed' state}}
+
+void testTemporariesAndOperators0S() {
+  // Test the assignment operator.
+  Status s1 = doSomething();
+  Status s2;
+  s2 = s1;
+  s2.check();
+}
+
+void testTemporariesAndOperators1F() {
+  // Test the move assignment operator.
+  Status s1 = doSomething();
+  Status s2;
+  s2 = static_cast<Status&&>(s1);
+} // expected-warning {{invalid invocation of method '~Status' on object 's2' while it is in the 'unconsumed' state}}
+
+void testTemporariesAndOperators1S() {
+  // Test the move assignment operator.
+  Status s1 = doSomething();
+  Status s2;
+  s2 = static_cast<Status&&>(s1);
+  s2.check();
+}
+
+void testTemporariesAndOperators2() {
+  Status s1 = doSomething();
+  Status s2 = doSomething();
+  s1 = s2; // expected-warning {{invalid invocation of method 'operator=' on object 's1' while it is in the 'unconsumed' state}}
+  s1.check();
+  s2.check();
+}
+
+Status testReturnAutocast() {
+  Status s = doSomething();
+  s.check();  // consume s
+  return s;   // should autocast back to unconsumed
 }
 
 } // end namespace InitializerAssertionFailTest
 
+
+namespace std {
+  void move();
+  template<class T>
+  void move(T&&);
+
+  namespace __1 {
+    void move();
+    template<class T>
+    void move(T&&);
+  }
+}
+
+namespace PR18260 {
+  class X {
+    public:
+      void move();
+  } x;
+
+  void test() {
+    x.move();
+    std::move();
+    std::move(x);
+    std::__1::move();
+    std::__1::move(x);
+  }
+} // end namespace PR18260

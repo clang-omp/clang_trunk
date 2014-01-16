@@ -32,9 +32,9 @@
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/Sema.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/raw_ostream.h"
 #include <limits>
@@ -339,7 +339,10 @@ static unsigned RFT(unsigned t, bool shift = false) {
   case NeonTypeFlags::Int32:
     return shift ? 31 : (2 << IsQuad) - 1;
   case NeonTypeFlags::Int64:
+  case NeonTypeFlags::Poly64:
     return shift ? 63 : (1 << IsQuad) - 1;
+  case NeonTypeFlags::Poly128:
+    return shift ? 127 : (1 << IsQuad) - 1;
   case NeonTypeFlags::Float16:
     assert(!shift && "cannot shift float types!");
     return (4 << IsQuad) - 1;
@@ -356,7 +359,8 @@ static unsigned RFT(unsigned t, bool shift = false) {
 /// getNeonEltType - Return the QualType corresponding to the elements of
 /// the vector type specified by the NeonTypeFlags.  This is used to check
 /// the pointer arguments for Neon load/store intrinsics.
-static QualType getNeonEltType(NeonTypeFlags Flags, ASTContext &Context) {
+static QualType getNeonEltType(NeonTypeFlags Flags, ASTContext &Context,
+                               bool IsAArch64) {
   switch (Flags.getEltType()) {
   case NeonTypeFlags::Int8:
     return Flags.isUnsigned() ? Context.UnsignedCharTy : Context.SignedCharTy;
@@ -367,11 +371,15 @@ static QualType getNeonEltType(NeonTypeFlags Flags, ASTContext &Context) {
   case NeonTypeFlags::Int64:
     return Flags.isUnsigned() ? Context.UnsignedLongLongTy : Context.LongLongTy;
   case NeonTypeFlags::Poly8:
-    return Context.SignedCharTy;
+    return IsAArch64 ? Context.UnsignedCharTy : Context.SignedCharTy;
   case NeonTypeFlags::Poly16:
-    return Context.ShortTy;
+    return IsAArch64 ? Context.UnsignedShortTy : Context.ShortTy;
+  case NeonTypeFlags::Poly64:
+    return Context.UnsignedLongLongTy;
+  case NeonTypeFlags::Poly128:
+    break;
   case NeonTypeFlags::Float16:
-    return Context.UnsignedShortTy;
+    return Context.HalfTy;
   case NeonTypeFlags::Float32:
     return Context.FloatTy;
   case NeonTypeFlags::Float64:
@@ -415,7 +423,7 @@ bool Sema::CheckAArch64BuiltinFunctionCall(unsigned BuiltinID,
       Arg = ICE->getSubExpr();
     ExprResult RHS = DefaultFunctionArrayLvalueConversion(Arg);
     QualType RHSTy = RHS.get()->getType();
-    QualType EltTy = getNeonEltType(NeonTypeFlags(TV), Context);
+    QualType EltTy = getNeonEltType(NeonTypeFlags(TV), Context, true);
     if (HasConstPtr)
       EltTy = EltTy.withConst();
     QualType LHSTy = Context.getPointerType(EltTy);
@@ -602,7 +610,7 @@ bool Sema::CheckARMBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
       Arg = ICE->getSubExpr();
     ExprResult RHS = DefaultFunctionArrayLvalueConversion(Arg);
     QualType RHSTy = RHS.get()->getType();
-    QualType EltTy = getNeonEltType(NeonTypeFlags(TV), Context);
+    QualType EltTy = getNeonEltType(NeonTypeFlags(TV), Context, false);
     if (HasConstPtr)
       EltTy = EltTy.withConst();
     QualType LHSTy = Context.getPointerType(EltTy);
@@ -614,7 +622,7 @@ bool Sema::CheckARMBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
                                  RHS.get(), AA_Assigning))
       return true;
   }
-  
+
   // For NEON intrinsics which take an immediate value as part of the 
   // instruction, range check them here.
   unsigned i = 0, l = 0, u = 0;
@@ -624,6 +632,8 @@ bool Sema::CheckARMBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
   case ARM::BI__builtin_arm_usat: i = 1; u = 31; break;
   case ARM::BI__builtin_arm_vcvtr_f:
   case ARM::BI__builtin_arm_vcvtr_d: i = 1; u = 1; break;
+  case ARM::BI__builtin_arm_dmb:
+  case ARM::BI__builtin_arm_dsb: l = 0; u = 15; break;
 #define GET_NEON_IMMEDIATE_CHECK
 #include "clang/Basic/arm_neon.inc"
 #undef GET_NEON_IMMEDIATE_CHECK
@@ -1651,6 +1661,7 @@ bool Sema::SemaBuiltinVAStart(CallExpr *TheCall) {
     Diag(ParamLoc, diag::note_parameter_type) << Type;
   }
 
+  TheCall->setType(Context.VoidTy);
   return false;
 }
 
@@ -3549,6 +3560,40 @@ void Sema::CheckFormatString(const StringLiteral *FExpr,
 
 //===--- CHECK: Standard memory functions ---------------------------------===//
 
+/// \brief Takes the expression passed to the size_t parameter of functions
+/// such as memcmp, strncat, etc and warns if it's a comparison.
+///
+/// This is to catch typos like `if (memcmp(&a, &b, sizeof(a) > 0))`.
+static bool CheckMemorySizeofForComparison(Sema &S, const Expr *E,
+                                           IdentifierInfo *FnName,
+                                           SourceLocation FnLoc,
+                                           SourceLocation RParenLoc) {
+  const BinaryOperator *Size = dyn_cast<BinaryOperator>(E);
+  if (!Size)
+    return false;
+
+  // if E is binop and op is >, <, >=, <=, ==, &&, ||:
+  if (!Size->isComparisonOp() && !Size->isEqualityOp() && !Size->isLogicalOp())
+    return false;
+
+  Preprocessor &PP = S.getPreprocessor();
+  SourceRange SizeRange = Size->getSourceRange();
+  S.Diag(Size->getOperatorLoc(), diag::warn_memsize_comparison)
+      << SizeRange << FnName;
+  S.Diag(FnLoc, diag::warn_memsize_comparison_paren_note)
+      << FnName
+      << FixItHint::CreateInsertion(
+             PP.getLocForEndOfToken(Size->getLHS()->getLocEnd()),
+             ")")
+      << FixItHint::CreateRemoval(RParenLoc);
+  S.Diag(SizeRange.getBegin(), diag::warn_memsize_comparison_cast_note)
+      << FixItHint::CreateInsertion(SizeRange.getBegin(), "(size_t)(")
+      << FixItHint::CreateInsertion(
+             PP.getLocForEndOfToken(SizeRange.getEnd()), ")");
+
+  return true;
+}
+
 /// \brief Determine whether the given type is a dynamic class type (e.g.,
 /// whether it has a vtable).
 static bool isDynamicClassType(QualType T) {
@@ -3603,6 +3648,10 @@ void Sema::CheckMemaccessArguments(const CallExpr *Call,
                       BId == Builtin::BIstrndup ? 1 : 2);
   unsigned LenArg = (BId == Builtin::BIstrndup ? 1 : 2);
   const Expr *LenExpr = Call->getArg(LenArg)->IgnoreParenImpCasts();
+
+  if (CheckMemorySizeofForComparison(*this, LenExpr, FnName,
+                                     Call->getLocStart(), Call->getRParenLoc()))
+    return;
 
   // We have special checking when the length is a sizeof expression.
   QualType SizeOfArgTy = getSizeOfArgType(LenExpr);
@@ -3787,6 +3836,10 @@ void Sema::CheckStrlcpycatArguments(const CallExpr *Call,
   const Expr *SrcArg = ignoreLiteralAdditions(Call->getArg(1), Context);
   const Expr *SizeArg = ignoreLiteralAdditions(Call->getArg(2), Context);
   const Expr *CompareWithSrc = NULL;
+
+  if (CheckMemorySizeofForComparison(*this, SizeArg, FnName,
+                                     Call->getLocStart(), Call->getRParenLoc()))
+    return;
   
   // Look for 'strlcpy(dst, x, sizeof(x))'
   if (const Expr *Ex = getSizeOfExprArg(SizeArg))
@@ -3794,8 +3847,8 @@ void Sema::CheckStrlcpycatArguments(const CallExpr *Call,
   else {
     // Look for 'strlcpy(dst, x, strlen(x))'
     if (const CallExpr *SizeCall = dyn_cast<CallExpr>(SizeArg)) {
-      if (SizeCall->isBuiltinCall() == Builtin::BIstrlen
-          && SizeCall->getNumArgs() == 1)
+      if (SizeCall->getBuiltinCallee() == Builtin::BIstrlen &&
+          SizeCall->getNumArgs() == 1)
         CompareWithSrc = ignoreLiteralAdditions(SizeCall->getArg(0), Context);
     }
   }
@@ -3868,6 +3921,10 @@ void Sema::CheckStrncatArguments(const CallExpr *CE,
   const Expr *DstArg = CE->getArg(0)->IgnoreParenCasts();
   const Expr *SrcArg = CE->getArg(1)->IgnoreParenCasts();
   const Expr *LenArg = CE->getArg(2)->IgnoreParenCasts();
+
+  if (CheckMemorySizeofForComparison(*this, LenArg, FnName, CE->getLocStart(),
+                                     CE->getRParenLoc()))
+    return;
 
   // Identify common expressions, which are wrongly used as the size argument
   // to strncat and may lead to buffer overflows.
@@ -4331,11 +4388,11 @@ void Sema::CheckFloatComparison(SourceLocation Loc, Expr* LHS, Expr *RHS) {
 
   // Check for comparisons with builtin types.
   if (CallExpr* CL = dyn_cast<CallExpr>(LeftExprSansParen))
-    if (CL->isBuiltinCall())
+    if (CL->getBuiltinCallee())
       return;
 
   if (CallExpr* CR = dyn_cast<CallExpr>(RightExprSansParen))
-    if (CR->isBuiltinCall())
+    if (CR->getBuiltinCallee())
       return;
 
   // Emit the diagnostic.
@@ -4913,9 +4970,11 @@ static void DiagnoseOutOfRangeComparison(Sema &S, BinaryOperator *E,
   else
     OS << Value;
 
-  S.Diag(E->getOperatorLoc(), diag::warn_out_of_range_compare)
-      << OS.str() << OtherT << IsTrue
-      << E->getLHS()->getSourceRange() << E->getRHS()->getSourceRange();
+  S.DiagRuntimeBehavior(E->getOperatorLoc(), E,
+                        S.PDiag(diag::warn_out_of_range_compare)
+                          << OS.str() << OtherT << IsTrue
+                          << E->getLHS()->getSourceRange()
+                          << E->getRHS()->getSourceRange());
 }
 
 /// Analyze the operands of the given comparison.  Implements the
@@ -5224,7 +5283,7 @@ void CheckImplicitConversion(Sema &S, Expr *E, QualType T,
   if (Target->isSpecificBuiltinType(BuiltinType::Bool)) {
     if (isa<StringLiteral>(E))
       // Warn on string literal to bool.  Checks for string literals in logical
-      // expressions, for instances, assert(0 && "error here"), is prevented
+      // expressions, for instances, assert(0 && "error here"), are prevented
       // by a check in AnalyzeImplicitConversions().
       return DiagnoseImpCast(S, E, T, CC,
                              diag::warn_impcast_string_literal_to_bool);
@@ -5620,10 +5679,8 @@ void Sema::CheckImplicitConversions(Expr *E, SourceLocation CC) {
 /// Diagnose when expression is an integer constant expression and its evaluation
 /// results in integer overflow
 void Sema::CheckForIntOverflow (Expr *E) {
-  if (isa<BinaryOperator>(E->IgnoreParens())) {
-    SmallVector<PartialDiagnosticAt, 4> Diags;
-    E->EvaluateForOverflow(Context, &Diags);
-  }
+  if (isa<BinaryOperator>(E->IgnoreParens()))
+    E->EvaluateForOverflow(Context);
 }
 
 namespace {
@@ -6184,11 +6241,23 @@ bool Sema::CheckParmsForFunctionDef(ParmVarDecl *const *P,
 
     // MSVC destroys objects passed by value in the callee.  Therefore a
     // function definition which takes such a parameter must be able to call the
-    // object's destructor.
-    if (getLangOpts().CPlusPlus &&
-        Context.getTargetInfo().getCXXABI().isArgumentDestroyedByCallee()) {
-      if (const RecordType *RT = Param->getType()->getAs<RecordType>())
-        FinalizeVarWithDestructor(Param, RT);
+    // object's destructor.  However, we don't perform any direct access check
+    // on the dtor.
+    if (getLangOpts().CPlusPlus && Context.getTargetInfo()
+                                       .getCXXABI()
+                                       .areArgsDestroyedLeftToRightInCallee()) {
+      if (!Param->isInvalidDecl()) {
+        if (const RecordType *RT = Param->getType()->getAs<RecordType>()) {
+          CXXRecordDecl *ClassDecl = cast<CXXRecordDecl>(RT->getDecl());
+          if (!ClassDecl->isInvalidDecl() &&
+              !ClassDecl->hasIrrelevantDestructor() &&
+              !ClassDecl->isDependentContext()) {
+            CXXDestructorDecl *Destructor = LookupDestructor(ClassDecl);
+            MarkFunctionReferenced(Param->getLocation(), Destructor);
+            DiagnoseUseOfDecl(Destructor, Param->getLocation());
+          }
+        }
+      }
     }
   }
 
@@ -6779,7 +6848,7 @@ void Sema::checkUnsafeExprAssigns(SourceLocation Loc,
                               Expr *LHS, Expr *RHS) {
   QualType LHSType;
   // PropertyRef on LHS type need be directly obtained from
-  // its declaration as it has a PsuedoType.
+  // its declaration as it has a PseudoType.
   ObjCPropertyRefExpr *PRE
     = dyn_cast<ObjCPropertyRefExpr>(LHS->IgnoreParens());
   if (PRE && !PRE->isImplicitProperty()) {
@@ -7367,7 +7436,7 @@ void Sema::CheckArgumentWithTypeTag(const ArgumentWithTypeTagAttr *Attr,
 
   if (mismatch)
     Diag(ArgumentExpr->getExprLoc(), diag::warn_type_safety_type_mismatch)
-        << ArgumentType << ArgumentKind->getName()
+        << ArgumentType << ArgumentKind
         << TypeInfo.LayoutCompatible << RequiredType
         << ArgumentExpr->getSourceRange()
         << TypeTagExpr->getSourceRange();
