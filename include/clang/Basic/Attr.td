@@ -275,6 +275,7 @@ def Aligned : InheritableAttr {
 }
 
 def AlignMac68k : InheritableAttr {
+  // This attribute has no spellings as it is only ever created implicitly.
   let Spellings = [];
   let SemaHandler = 0;
 }
@@ -602,6 +603,7 @@ def Malloc : InheritableAttr {
 }
 
 def MaxFieldAlignment : InheritableAttr {
+  // This attribute has no spellings as it is only ever created implicitly.
   let Spellings = [];
   let Args = [UnsignedArgument<"Alignment">];
   let SemaHandler = 0;
@@ -808,7 +810,7 @@ def Overloadable : Attr {
 }
 
 def Override : InheritableAttr { 
-  let Spellings = [];
+  let Spellings = [Keyword<"override">];
   let SemaHandler = 0;
 }
 
@@ -1375,16 +1377,11 @@ def MSInheritance : InheritableAttr {
   let Spellings = [Keyword<"__single_inheritance">,
                    Keyword<"__multiple_inheritance">,
                    Keyword<"__virtual_inheritance">,
-                   // We use an empty string to denote an unspecified
-                   // inheritance attribute.
-                   Keyword<"">];
+                   Keyword<"__unspecified_inheritance">];
   let Accessors = [Accessor<"IsSingle", [Keyword<"__single_inheritance">]>,
                    Accessor<"IsMultiple", [Keyword<"__multiple_inheritance">]>,
                    Accessor<"IsVirtual", [Keyword<"__virtual_inheritance">]>,
-                   Accessor<"IsUnspecified", [Keyword<"">]>];
-  // This index is based off the Spellings list and corresponds to the empty
-  // keyword "spelling."
-  let AdditionalMembers = [{static const int UnspecifiedSpellingIndex = 3;}];
+                   Accessor<"IsUnspecified", [Keyword<"__unspecified_inheritance">]>];
 }
 
 def Unaligned : IgnoredAttr {
