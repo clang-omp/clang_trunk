@@ -11532,6 +11532,14 @@ static bool isVariableCapturable(CapturingScopeInfo *CSI, VarDecl *Var,
       case Type::ObjCObjectPointer:
         llvm_unreachable("type class is never variably-modified!");
 
+      case Type::Adjusted:
+        type = cast<AdjustedType>(ty)->getAdjustedType();
+        break;
+
+      case Type::Decayed:
+        type = cast<DecayedType>(ty)->getPointeeType();
+        break;
+
       case Type::Pointer:
         type = cast<PointerType>(ty)->getPointeeType();
         break;
@@ -11578,6 +11586,7 @@ static bool isVariableCapturable(CapturingScopeInfo *CSI, VarDecl *Var,
       case Type::UnaryTransform:
       case Type::Attributed:
       case Type::SubstTemplateTypeParm:
+      case Type::PackExpansion:
         // Keep walking after single level desugaring.
         type = type.getSingleStepDesugaredType(S.getASTContext());
         break;
