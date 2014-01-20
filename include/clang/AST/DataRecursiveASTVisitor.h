@@ -2434,55 +2434,6 @@ DEF_TRAVERSE_STMT(OMPOrderedDirective, {
   return TraverseOMPExecutableDirective(S);
 })
 
-#if 0 // FIXME
-// OpenMP clauses.
-template<typename Derived>
-bool DataRecursiveASTVisitor<Derived>::TraverseOMPClause(OMPClause *C) {
-  if (!C) return true;
-  switch (C->getClauseKind()) {
-#define OPENMP_CLAUSE(Name, Class)                                      \
-  case OMPC_##Name:                                                     \
-    return getDerived().Visit##Class(static_cast<Class*>(C));
-#include "clang/Basic/OpenMPKinds.def"
-  default: break;
-  }
-  return true;
-}
-
-template<typename Derived>
-bool DataRecursiveASTVisitor<Derived>::VisitOMPDefaultClause(OMPDefaultClause *C) {
-  return true;
-}
-
-template<typename Derived>
-template<typename T>
-void DataRecursiveASTVisitor<Derived>::VisitOMPClauseList(T *Node) {
-  for (typename T::varlist_iterator I = Node->varlist_begin(),
-                                    E = Node->varlist_end();
-         I != E; ++I)
-    TraverseStmt(*I);
-}
-
-template<typename Derived>
-bool DataRecursiveASTVisitor<Derived>::VisitOMPPrivateClause(OMPPrivateClause *C) {
-  VisitOMPClauseList(C);
-  return true;
-}
-
-template<typename Derived>
-bool DataRecursiveASTVisitor<Derived>::VisitOMPFirstPrivateClause(
-                                                    OMPFirstPrivateClause *C) {
-  VisitOMPClauseList(C);
-  return true;
-}
-
-template<typename Derived>
-bool DataRecursiveASTVisitor<Derived>::VisitOMPSharedClause(OMPSharedClause *C) {
-  VisitOMPClauseList(C);
-  return true;
-}
-#endif // FIXME
-
 // FIXME: look at the following tricky-seeming exprs to see if we
 // need to recurse on anything.  These are ones that have methods
 // returning decls or qualtypes or nestednamespecifier -- though I'm
