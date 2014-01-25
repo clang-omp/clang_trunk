@@ -11584,7 +11584,7 @@ static bool isVariableCapturable(CapturingScopeInfo *CSI, VarDecl *Var,
 
       case Type::FunctionProto:
       case Type::FunctionNoProto:
-        type = cast<FunctionType>(ty)->getResultType();
+        type = cast<FunctionType>(ty)->getReturnType();
         break;
 
       case Type::Paren:
