@@ -226,6 +226,7 @@ def : DiagGroup<"overflow">;
 def ForwardClassReceiver : DiagGroup<"receiver-forward-class">;
 def MethodAccess : DiagGroup<"objc-method-access">;
 def ObjCReceiver : DiagGroup<"receiver-expr">;
+def OperatorNewReturnsNull : DiagGroup<"new-returns-null">;
 def OverlengthStrings : DiagGroup<"overlength-strings">;
 def OverloadedVirtual : DiagGroup<"overloaded-virtual">;
 def PrivateExtern : DiagGroup<"private-extern">;
@@ -339,8 +340,10 @@ def Uninitialized  : DiagGroup<"uninitialized", [UninitializedSometimes,
 def UnknownPragmas : DiagGroup<"unknown-pragmas">;
 def UnknownWarningOption : DiagGroup<"unknown-warning-option">;
 def NSobjectAttribute : DiagGroup<"NSObject-attribute">;
-def UnknownAttributes : DiagGroup<"attributes">;
+def UnknownAttributes : DiagGroup<"unknown-attributes">;
 def IgnoredAttributes : DiagGroup<"ignored-attributes">;
+def Attributes : DiagGroup<"attributes", [UnknownAttributes,
+                                          IgnoredAttributes]>;
 def UnnamedTypeTemplateArgs : DiagGroup<"unnamed-type-template-args",
                                         [CXX98CompatUnnamedTypeTemplateArgs]>;
 def UnsupportedFriend : DiagGroup<"unsupported-friend">;

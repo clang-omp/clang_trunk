@@ -171,6 +171,8 @@ private:
       }
       if (CurrentToken->isOneOf(tok::r_square, tok::r_brace))
         return false;
+      else if (CurrentToken->is(tok::l_brace))
+        Left->Type = TT_Unknown; // Not TT_ObjCBlockLParen
       updateParameterCount(Left, CurrentToken);
       if (CurrentToken->is(tok::comma) && CurrentToken->Next &&
           !CurrentToken->Next->HasUnescapedNewline &&
@@ -514,6 +516,7 @@ private:
       break;
     case tok::pp_if:
     case tok::pp_elif:
+      Contexts.back().IsExpression = true;
       parseLine();
       break;
     default:
@@ -529,6 +532,15 @@ public:
       parsePreprocessorDirective();
       return LT_PreprocessorDirective;
     }
+
+    // Directly allow to 'import <string-literal>' to support protocol buffer
+    // definitions (code.google.com/p/protobuf) or missing "#" (either way we
+    // should not break the line).
+    IdentifierInfo *Info = CurrentToken->Tok.getIdentifierInfo();
+    if (Info && Info->getPPKeywordID() == tok::pp_import &&
+        CurrentToken->Next && CurrentToken->Next->is(tok::string_literal))
+      parseIncludeDirective();
+
     while (CurrentToken != NULL) {
       if (CurrentToken->is(tok::kw_virtual))
         KeywordVirtualFound = true;
@@ -1153,9 +1165,12 @@ unsigned TokenAnnotator::splitPenalty(const AnnotatedLine &Line,
     return 0;
   if (Left.is(tok::comma))
     return 1;
-  if (Right.is(tok::l_square) && Right.Type != TT_ObjCMethodExpr)
-    return 250;
-
+  if (Right.is(tok::l_square)) {
+    if (Style.Language == FormatStyle::LK_Proto)
+      return 1;
+    if (Right.Type != TT_ObjCMethodExpr)
+      return 250;
+  }
   if (Right.Type == TT_StartOfName || Right.is(tok::kw_operator)) {
     if (Line.First->is(tok::kw_for) && Right.PartOfMultiVariableDeclStmt)
       return 3;
@@ -1169,7 +1184,8 @@ unsigned TokenAnnotator::splitPenalty(const AnnotatedLine &Line,
     return 150;
   if (Left.Type == TT_CastRParen)
     return 100;
-  if (Left.is(tok::coloncolon))
+  if (Left.is(tok::coloncolon) ||
+      (Right.is(tok::period) && Style.Language == FormatStyle::LK_Proto))
     return 500;
   if (Left.isOneOf(tok::kw_class, tok::kw_struct))
     return 5000;
@@ -1239,6 +1255,11 @@ unsigned TokenAnnotator::splitPenalty(const AnnotatedLine &Line,
 bool TokenAnnotator::spaceRequiredBetween(const AnnotatedLine &Line,
                                           const FormatToken &Left,
                                           const FormatToken &Right) {
+  if (Style.Language == FormatStyle::LK_Proto) {
+    if (Right.is(tok::l_paren) &&
+        (Left.TokenText == "returns" || Left.TokenText == "option"))
+      return true;
+  }
   if (Right.is(tok::hashhash))
     return Left.is(tok::hash);
   if (Left.isOneOf(tok::hashhash, tok::hash))
@@ -1382,7 +1403,7 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
            (Tok.Type != TT_DictLiteral || Style.SpacesInContainerLiterals);
   if (Tok.Previous->Type == TT_UnaryOperator ||
       Tok.Previous->Type == TT_CastRParen)
-    return false;
+    return Tok.Type == TT_BinaryOperator;
   if (Tok.Previous->is(tok::greater) && Tok.is(tok::greater)) {
     return Tok.Type == TT_TemplateCloser &&
            Tok.Previous->Type == TT_TemplateCloser &&
@@ -1441,6 +1462,10 @@ bool TokenAnnotator::mustBreakBefore(const AnnotatedLine &Line,
     // deliberate choice and might have aligned the contents of the string
     // literal accordingly. Thus, we try keep existing line breaks.
     return Right.NewlinesBefore > 0;
+  } else if (Right.Previous->is(tok::l_brace) &&
+             Style.Language == FormatStyle::LK_Proto) {
+    // Don't enums onto single lines in protocol buffers.
+    return true;
   }
   return false;
 }

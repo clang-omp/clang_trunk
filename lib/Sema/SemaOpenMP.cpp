@@ -823,8 +823,8 @@ Sema::OMPDeclareReductionFunctionScope::ActOnOMPDeclareReductionFunction(Sema &S
   ParRHS->setScopeInfo(0, 1);
   ParmVarDecl *Params[] = {ParLHS, ParRHS};
   FD->setParams(Params);
-  FTL.setArg(0, ParLHS);
-  FTL.setArg(1, ParRHS);
+  FTL.setParam(0, ParLHS);
+  FTL.setParam(1, ParRHS);
   OmpIn = VarDecl::Create(S.Context, FD, Loc, Loc,
                           &S.Context.Idents.get("omp_in"), QTy,
                           S.Context.getTrivialTypeSourceInfo(QTy), SC_Auto);
@@ -942,8 +942,8 @@ Sema::OMPDeclareReductionInitFunctionScope::ActOnOMPDeclareReductionInitFunction
   ParRHS->setScopeInfo(0, 1);
   ParmVarDecl *Params[] = {ParLHS, ParRHS};
   FD->setParams(Params);
-  FTL.setArg(0, ParLHS);
-  FTL.setArg(1, ParRHS);
+  FTL.setParam(0, ParLHS);
+  FTL.setParam(1, ParRHS);
   OmpOrig = VarDecl::Create(S.Context, FD, Loc, Loc,
                             &S.Context.Idents.get("omp_orig"), QTy,
                             S.Context.getTrivialTypeSourceInfo(QTy), SC_Auto);

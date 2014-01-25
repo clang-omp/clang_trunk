@@ -729,6 +729,11 @@ public:
   /// on to \arg Dest.
   void EmitBranchThroughCleanup(JumpDest Dest);
   
+  /// isObviouslyBranchWithoutCleanups - Return true if a branch to the
+  /// specified destination obviously has no cleanups to run.  'false' is always
+  /// a conservatively correct answer for this method.
+  bool isObviouslyBranchWithoutCleanups(JumpDest Dest) const;
+
   /// popCatchScope - Pops the catch scope at the top of the EHScope
   /// stack, emitting any required code (other than the catch handlers
   /// themselves).
@@ -2795,11 +2800,11 @@ public:
                     bool ForceColumnInfo = false) {
     if (CallArgTypeInfo) {
       EmitCallArgs(Args, CallArgTypeInfo->isVariadic(),
-                   CallArgTypeInfo->arg_type_begin(),
-                   CallArgTypeInfo->arg_type_end(), ArgBeg, ArgEnd,
+                   CallArgTypeInfo->param_type_begin(),
+                   CallArgTypeInfo->param_type_end(), ArgBeg, ArgEnd,
                    ForceColumnInfo);
     } else {
-      // T::arg_type_iterator might not have a default ctor.
+      // T::param_type_iterator might not have a default ctor.
       const QualType *NoIter = 0;
       EmitCallArgs(Args, /*AllowExtraArguments=*/true, NoIter, NoIter, ArgBeg,
                    ArgEnd, ForceColumnInfo);

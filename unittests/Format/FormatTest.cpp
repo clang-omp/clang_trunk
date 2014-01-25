@@ -4248,6 +4248,11 @@ TEST_F(FormatTest, UnderstandsOverloadedOperators) {
   verifyGoogleFormat("operator ::A();");
 
   verifyFormat("using A::operator+;");
+
+  verifyFormat("Deleted &operator=(const Deleted &)& = default;");
+  verifyFormat("Deleted &operator=(const Deleted &)&& = delete;");
+  verifyGoogleFormat("Deleted& operator=(const Deleted&)& = default;");
+  verifyGoogleFormat("Deleted& operator=(const Deleted&)&& = delete;");
 }
 
 TEST_F(FormatTest, UnderstandsNewAndDelete) {
@@ -4657,6 +4662,10 @@ TEST_F(FormatTest, HandlesIncludeDirectives) {
   verifyFormat("#if __has_include(<strstream>)\n"
                "#include <strstream>\n"
                "#endif");
+
+  // Protocol buffer definition or missing "#".
+  verifyFormat("import \"aaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaa\";",
+               getLLVMStyleWithColumns(30));
 }
 
 //===----------------------------------------------------------------------===//
@@ -5108,6 +5117,7 @@ TEST_F(FormatTest, DoNotInterfereWithErrorAndWarning) {
 }
 
 TEST_F(FormatTest, FormatHashIfExpressions) {
+  verifyFormat("#if AAAA && BBBB");
   // FIXME: Come up with a better indentation for #elif.
   verifyFormat(
       "#if !defined(AAAAAAA) && (defined CCCCCC || defined DDDDDD) &&  \\\n"
@@ -5398,11 +5408,6 @@ TEST_F(FormatTest, FormatForObjectiveCMethodDecls) {
   verifyFormat("- foo;");
   verifyFormat("- foo:(int)f;");
   verifyGoogleFormat("- foo:(int)foo;");
-}
-
-TEST_F(FormatTest, FormatObjCBlocks) {
-  verifyFormat("int (^Block)(int, int);");
-  verifyFormat("int (^Block1)(int, int) = ^(int i, int j)");
 }
 
 TEST_F(FormatTest, FormatObjCInterface) {
@@ -6479,12 +6484,16 @@ TEST_F(FormatTest, DoNotCreateUnreasonableUnwrappedLines) {
   verifyFormat("void f() {\n"
                "  return g() {}\n"
                "  void h() {}");
-  verifyFormat("if (foo)\n"
-               "  return { forgot_closing_brace();\n"
-               "test();");
   verifyFormat("int a[] = { void forgot_closing_brace() { f();\n"
                "g();\n"
                "}");
+}
+
+TEST_F(FormatTest, DoNotPrematurelyEndUnwrappedLineForReturnStatements) {
+  verifyFormat(
+      "void f() {\n"
+      "  return C{ param1, param2 }.SomeCall(param1, param2);\n"
+      "}\n");
 }
 
 TEST_F(FormatTest, FormatsClosingBracesInEmptyNestedBlocks) {
@@ -7855,15 +7864,6 @@ TEST_F(FormatTest, FormatsWithWebKitStyle) {
                    Style));
 }
 
-TEST_F(FormatTest, FormatsProtocolBufferDefinitions) {
-  // It seems that clang-format can format protocol buffer definitions
-  // (see https://code.google.com/p/protobuf/).
-  verifyFormat("message SomeMessage {\n"
-               "  required int32 field1 = 1;\n"
-               "  optional string field2 = 2 [default = \"2\"]\n"
-               "}");
-}
-
 TEST_F(FormatTest, FormatsLambdas) {
   verifyFormat("int c = [b]() mutable {\n"
                "  return [&b] { return b++; }();\n"
@@ -7898,9 +7898,16 @@ TEST_F(FormatTest, FormatsLambdas) {
   verifyFormat("constexpr char hello[]{ \"hello\" };");
   verifyFormat("double &operator[](int i) { return 0; }\n"
                "int i;");
+  verifyFormat("std::unique_ptr<int[]> foo() {}");
 }
 
 TEST_F(FormatTest, FormatsBlocks) {
+  verifyFormat("int (^Block)(int, int);");
+  verifyFormat("int (^Block1)(int, int) = ^(int i, int j)");
+
+  verifyFormat("foo(^{ bar(); });");
+  verifyFormat("foo(a, ^{ bar(); });");
+
   // FIXME: Make whitespace formatting consistent. Ask a ObjC dev how
   // it would ideally look.
   verifyFormat("[operation setCompletionBlock:^{ [self onOperationDone]; }];");

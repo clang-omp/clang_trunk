@@ -425,6 +425,7 @@ def ext_noreturn_main : ExtWarn<
 def note_main_remove_noreturn : Note<"remove '_Noreturn'">;
 def err_constexpr_main : Error<
   "'main' is not allowed to be declared constexpr">;
+def err_deleted_main : Error<"'main' is not allowed to be deleted">;
 def err_mainlike_template_decl : Error<"%0 cannot be a template">;
 def err_main_returns_nonint : Error<"'main' must return 'int'">;
 def ext_main_returns_nonint : ExtWarn<"return type of 'main' is not 'int'">,
@@ -437,6 +438,8 @@ def warn_main_one_arg : Warning<"only one parameter on 'main' declaration">,
 def err_main_arg_wrong : Error<"%select{first|second|third|fourth}0 "
     "parameter of 'main' (%select{argument count|argument array|environment|"
     "platform-specific data}0) must be of type %1">;
+def ext_main_used : Extension<
+  "ISO C++ does not allow 'main' to be used by a program">, InGroup<Main>;
 
 /// parser diagnostics
 def ext_no_declarators : ExtWarn<"declaration does not declare anything">,
@@ -1847,6 +1850,9 @@ def warn_attribute_pointers_only : Warning<
   "%0 attribute only applies to pointer arguments">,
   InGroup<IgnoredAttributes>;
 def err_attribute_pointers_only : Error<warn_attribute_pointers_only.Text>;
+def warn_attribute_return_pointers_only : Warning<
+  "%0 attribute only applies to return values that are pointers">,
+  InGroup<IgnoredAttributes>;
 def err_attribute_no_member_pointers : Error<
   "%0 attribute cannot be used with pointers to members">;
 def err_attribute_invalid_implicit_this_argument : Error<
@@ -2350,6 +2356,9 @@ def err_attr_wrong_decl : Error<
   "%0 attribute invalid on this declaration, requires typedef or value">;
 def warn_attribute_nonnull_no_pointers : Warning<
   "'nonnull' attribute applied to function with no pointer arguments">,
+  InGroup<IgnoredAttributes>;
+def warn_attribute_nonnull_parm_no_args : Warning<
+  "'nonnull' attribute when used on parameters takes no arguments">,
   InGroup<IgnoredAttributes>;
 def warn_attribute_malloc_pointer_only : Warning<
   "'malloc' attribute only applies to functions returning a pointer type">,
@@ -4531,6 +4540,9 @@ def ext_array_init_parens : ExtWarn<
 def warn_deprecated_string_literal_conversion : Warning<
   "conversion from string literal to %0 is deprecated">,
   InGroup<CXX11CompatDeprecatedWritableStr>;
+def ext_deprecated_string_literal_conversion : ExtWarn<
+  "ISO C++11 does not allow conversion from string literal to %0">,
+  InGroup<CXX11CompatDeprecatedWritableStr>, SFINAEFailure;
 def warn_deprecated_string_literal_conversion_c : Warning<
   "dummy warning to enable -fconst-strings">, InGroup<DeprecatedWritableStr>, DefaultIgnore;
 def err_realimag_invalid_type : Error<"invalid type %0 to %1 operator">;
@@ -5996,6 +6008,9 @@ def err_operator_new_delete_too_few_parameters : Error<
   "%0 must have at least one parameter">;
 def err_operator_new_delete_template_too_few_parameters : Error<
   "%0 template must have at least two parameters">;
+def warn_operator_new_returns_null : Warning<
+  "%0 should not return a null pointer unless it is declared 'throw()'"
+  "%select{| or 'noexcept'}1">, InGroup<OperatorNewReturnsNull>;
 
 def err_operator_new_dependent_param_type : Error<
   "%0 cannot take a dependent type as first parameter; "
@@ -6210,6 +6225,9 @@ def note_printf_c_str: Note<"did you mean to call the %0 method?">;
 def warn_null_arg : Warning<
   "null passed to a callee which requires a non-null argument">,
   InGroup<NonNull>;
+def warn_null_ret : Warning<
+  "null returned from %select{function|method}0 that requires a non-null return value">,
+  InGroup<NonNull>;
 
 // CHECK: returning address/reference of stack memory
 def warn_ret_stack_addr : Warning<
@@ -6323,6 +6341,12 @@ def err_continue_not_in_loop : Error<
   "'continue' statement not in loop statement">;
 def err_break_not_in_loop_or_switch : Error<
   "'break' statement not in loop or switch statement">;
+def warn_loop_ctrl_binds_to_inner : Warning<
+  "'%0' is bound to current loop, GCC binds it to the enclosing loop">,
+  InGroup<GccCompat>;
+def warn_break_binds_to_switch : Warning<
+  "'break' is bound to loop, GCC binds it to switch">,
+  InGroup<GccCompat>;
 def err_default_not_in_switch : Error<
   "'default' statement not in switch statement">;
 def err_case_not_in_switch : Error<"'case' statement not in switch statement">;

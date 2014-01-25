@@ -1638,8 +1638,8 @@ static bool NeedsInstantiationAsFunctionType(TypeSourceInfo *T) {
     return false;
 
   FunctionProtoTypeLoc FP = TL.castAs<FunctionProtoTypeLoc>();
-  for (unsigned I = 0, E = FP.getNumArgs(); I != E; ++I) {
-    ParmVarDecl *P = FP.getArg(I);
+  for (unsigned I = 0, E = FP.getNumParams(); I != E; ++I) {
+    ParmVarDecl *P = FP.getParam(I);
 
     // This must be synthesized from a typedef.
     if (!P) continue;
@@ -2134,16 +2134,14 @@ Sema::InstantiateClass(SourceLocation PointOfInstantiation,
       FieldDecl *NewField = FieldsWithMemberInitializers[I].second;
       Expr *OldInit = OldField->getInClassInitializer();
 
+      ActOnStartCXXInClassMemberInitializer();
       ExprResult NewInit = SubstInitializer(OldInit, TemplateArgs,
                                             /*CXXDirectInit=*/false);
-      if (NewInit.isInvalid())
-        NewField->setInvalidDecl();
-      else {
-        Expr *Init = NewInit.take();
-        assert(Init && "no-argument initializer in class");
-        assert(!isa<ParenListExpr>(Init) && "call-style init in class");
-        ActOnCXXInClassMemberInitializer(NewField, Init->getLocStart(), Init);
-      }
+      Expr *Init = NewInit.take();
+      assert((!Init || !isa<ParenListExpr>(Init)) &&
+             "call-style init in class");
+      ActOnFinishCXXInClassMemberInitializer(NewField, Init->getLocStart(),
+                                             Init);
     }
   }
   // Instantiate late parsed attributes, and attach them to their decls.
