@@ -66,8 +66,9 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
     message(FATAL_ERROR "Not found: ${LLVMCONFIG_FILE}")
   endif()
 
-  set(LLVM_RUNTIME_OUTPUT_INTDIR ${LLVM_TOOLS_BINARY_DIR})
-  set(LLVM_LIBRARY_OUTPUT_INTDIR ${LLVM_LIBRARY_DIR})
+  # They are used as destination of target generators.
+  set(LLVM_RUNTIME_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin)
+  set(LLVM_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/lib)
 
   option(LLVM_INSTALL_TOOLCHAIN_ONLY "Only include toolchain files in the 'install' target." OFF)
 
@@ -177,9 +178,6 @@ set(CLANG_VENDOR_UTI "org.llvm.clang" CACHE STRING
 set(CLANG_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(CLANG_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
-set(CLANG_RUNTIME_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin)
-set(CLANG_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/lib)
-
 if( CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR AND NOT MSVC_IDE )
   message(FATAL_ERROR "In-source builds are not allowed. CMake would overwrite "
 "the makefiles distributed with LLVM. Please create a directory and run cmake "
@@ -245,7 +243,7 @@ configure_file(
   ${CLANG_SOURCE_DIR}/include/clang/Config/config.h.cmake
   ${CLANG_BINARY_DIR}/include/clang/Config/config.h)
 
-include(LLVMParseArguments)
+include(CMakeParseArguments)
 
 function(clang_tablegen)
   # Syntax:
@@ -260,16 +258,16 @@ function(clang_tablegen)
   # executing the custom command depending on output-file. It is
   # possible to list more files to depend after DEPENDS.
 
-  parse_arguments( CTG "SOURCE;TARGET;DEPENDS" "" ${ARGN} )
+  cmake_parse_arguments(CTG "" "SOURCE;TARGET" "DEPENDS" ${ARGN})
 
   if( NOT CTG_SOURCE )
     message(FATAL_ERROR "SOURCE source-file required by clang_tablegen")
   endif()
 
   set( LLVM_TARGET_DEFINITIONS ${CTG_SOURCE} )
-  tablegen( CLANG ${CTG_DEFAULT_ARGS} )
+  tablegen(CLANG ${CTG_UNPARSED_ARGUMENTS})
 
-  list( GET CTG_DEFAULT_ARGS 0 output_file )
+  list(GET CTG_UNPARSED_ARGUMENTS 0 output_file)
   if( CTG_TARGET )
     add_custom_target( ${CTG_TARGET} DEPENDS ${output_file} ${CTG_DEPENDS} )
     set_target_properties( ${CTG_TARGET} PROPERTIES FOLDER "Clang tablegenning")
@@ -277,7 +275,8 @@ function(clang_tablegen)
 endfunction(clang_tablegen)
 
 macro(add_clang_library name)
-  llvm_process_sources(srcs ${ARGN})
+  cmake_parse_arguments(ARG "MODULE;SHARED;STATIC" "" "" ${ARGN})
+  llvm_process_sources(srcs ${ARG_UNPARSED_ARGUMENTS})
   if(MSVC_IDE OR XCODE)
     # Add public headers
     file(RELATIVE_PATH lib_path
@@ -300,16 +299,16 @@ macro(add_clang_library name)
       set(srcs ${srcs} ${headers} ${tds})
     endif()
   endif(MSVC_IDE OR XCODE)
-  if (MODULE)
+  if (ARG_MODULE)
     set(libkind MODULE)
-  elseif (SHARED_LIBRARY)
+  elseif (ARG_SHARED)
     set(libkind SHARED)
   else()
     set(libkind)
   endif()
   add_library( ${name} ${libkind} ${srcs} )
   add_dead_strip( ${name} )
-  set_output_directory(${name} ${CLANG_RUNTIME_OUTPUT_INTDIR} ${CLANG_LIBRARY_OUTPUT_INTDIR})
+  set_output_directory(${name} ${LLVM_RUNTIME_OUTPUT_INTDIR} ${LLVM_LIBRARY_OUTPUT_INTDIR})
   if( LLVM_COMMON_DEPENDS )
     add_dependencies( ${name} ${LLVM_COMMON_DEPENDS} )
   endif( LLVM_COMMON_DEPENDS )
@@ -318,7 +317,7 @@ macro(add_clang_library name)
   target_link_libraries( ${name} ${LLVM_COMMON_LIBS} )
   link_system_libs( ${name} )
   
-  if ((SHARED_LIBRARY OR MODULE) AND LLVM_EXPORTED_SYMBOL_FILE)
+  if ((ARG_SHARED OR ARG_MODULE) AND LLVM_EXPORTED_SYMBOL_FILE)
     add_llvm_symbol_exports( ${name} ${LLVM_EXPORTED_SYMBOL_FILE} )
   endif()
 
@@ -339,7 +338,6 @@ endmacro(add_clang_library)
 macro(add_clang_executable name)
   add_llvm_executable( ${name} ${ARGN} )
   set_target_properties(${name} PROPERTIES FOLDER "Clang executables")
-  set_output_directory(${name} ${CLANG_RUNTIME_OUTPUT_INTDIR} ${CLANG_LIBRARY_OUTPUT_INTDIR})
 endmacro(add_clang_executable)
 
 include_directories(BEFORE

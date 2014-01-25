@@ -1456,6 +1456,13 @@ QualType Sema::BuildArrayType(QualType T, ArrayType::ArraySizeModifier ASM,
                                diag::err_array_of_abstract_type))
       return QualType();
 
+    // Mentioning a member pointer type for an array type causes us to lock in
+    // an inheritance model, even if it's inside an unused typedef.
+    if (Context.getTargetInfo().getCXXABI().isMicrosoft())
+      if (const MemberPointerType *MPTy = T->getAs<MemberPointerType>())
+        if (!MPTy->getClass()->isDependentType())
+          RequireCompleteType(Loc, T, 0);
+
   } else {
     // C99 6.7.5.2p1: If the element type is an incomplete or function type,
     // reject it (e.g. void ary[7], struct foo ary[7], void ary[7]())
@@ -2870,9 +2877,9 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
         SmallVector<QualType, 16> ArgTys;
         ArgTys.reserve(FTI.NumArgs);
 
-        SmallVector<bool, 16> ConsumedArguments;
-        ConsumedArguments.reserve(FTI.NumArgs);
-        bool HasAnyConsumedArguments = false;
+        SmallVector<bool, 16> ConsumedParameters;
+        ConsumedParameters.reserve(FTI.NumArgs);
+        bool HasAnyConsumedParameters = false;
 
         for (unsigned i = 0, e = FTI.NumArgs; i != e; ++i) {
           ParmVarDecl *Param = cast<ParmVarDecl>(FTI.ArgInfo[i].Param);
@@ -2933,15 +2940,15 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
 
           if (LangOpts.ObjCAutoRefCount) {
             bool Consumed = Param->hasAttr<NSConsumedAttr>();
-            ConsumedArguments.push_back(Consumed);
-            HasAnyConsumedArguments |= Consumed;
+            ConsumedParameters.push_back(Consumed);
+            HasAnyConsumedParameters |= Consumed;
           }
 
           ArgTys.push_back(ArgTy);
         }
 
-        if (HasAnyConsumedArguments)
-          EPI.ConsumedArguments = ConsumedArguments.data();
+        if (HasAnyConsumedParameters)
+          EPI.ConsumedParameters = ConsumedParameters.data();
 
         SmallVector<QualType, 4> Exceptions;
         SmallVector<ParsedType, 2> DynamicExceptions;
@@ -3107,7 +3114,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
       EPI.TypeQuals = 0;
       EPI.RefQualifier = RQ_None;
 
-      T = Context.getFunctionType(FnTy->getResultType(), FnTy->getArgTypes(),
+      T = Context.getFunctionType(FnTy->getReturnType(), FnTy->getParamTypes(),
                                   EPI);
       // Rebuild any parens around the identifier in the function type.
       for (unsigned i = 0, e = D.getNumTypeObjects(); i != e; ++i) {
@@ -3708,9 +3715,9 @@ namespace {
       const DeclaratorChunk::FunctionTypeInfo &FTI = Chunk.Fun;
       TL.setLParenLoc(FTI.getLParenLoc());
       TL.setRParenLoc(FTI.getRParenLoc());
-      for (unsigned i = 0, e = TL.getNumArgs(), tpi = 0; i != e; ++i) {
+      for (unsigned i = 0, e = TL.getNumParams(), tpi = 0; i != e; ++i) {
         ParmVarDecl *Param = cast<ParmVarDecl>(FTI.ArgInfo[i].Param);
-        TL.setArg(tpi++, Param);
+        TL.setParam(tpi++, Param);
       }
       // FIXME: exception specs
     }

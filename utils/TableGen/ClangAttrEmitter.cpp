@@ -1140,6 +1140,65 @@ static bool SpellingNamesAreCommon(const std::vector<Record *>& Spellings) {
   return true;
 }
 
+typedef std::map<unsigned, std::string> SemanticSpellingMap;
+static std::string
+CreateSemanticSpellings(const std::vector<Record *> &Spellings,
+                        SemanticSpellingMap &Map) {
+  // The enumerants are automatically generated based on the variety,
+  // namespace (if present) and name for each attribute spelling. However,
+  // care is taken to avoid trampling on the reserved namespace due to
+  // underscores.
+  std::string Ret("  enum Spelling {\n");
+  std::set<std::string> Uniques;
+  unsigned Idx = 0;
+  for (std::vector<Record *>::const_iterator I = Spellings.begin(),
+        E = Spellings.end(); I != E; ++I, ++Idx) {
+    const Record &S = **I;
+    std::string Variety = S.getValueAsString("Variety");
+    std::string Spelling = S.getValueAsString("Name");
+    std::string Namespace = "";
+    std::string EnumName = "";
+
+    if (Variety == "CXX11")
+      Namespace = S.getValueAsString("Namespace");
+
+    EnumName += (Variety + "_");
+    if (!Namespace.empty())
+      EnumName += (NormalizeNameForSpellingComparison(Namespace).str() +
+      "_");
+    EnumName += NormalizeNameForSpellingComparison(Spelling);
+
+    // Even if the name is not unique, this spelling index corresponds to a
+    // particular enumerant name that we've calculated.
+    Map[Idx] = EnumName;
+
+    // Since we have been stripping underscores to avoid trampling on the
+    // reserved namespace, we may have inadvertently created duplicate
+    // enumerant names. These duplicates are not considered part of the
+    // semantic spelling, and can be elided.
+    if (Uniques.find(EnumName) != Uniques.end())
+      continue;
+
+    Uniques.insert(EnumName);
+    if (I != Spellings.begin())
+      Ret += ",\n";
+    Ret += "    " + EnumName;
+  }
+  Ret += "\n  };\n\n";
+  return Ret;
+}
+
+void WriteSemanticSpellingSwitch(const std::string &VarName,
+                                 const SemanticSpellingMap &Map,
+                                 raw_ostream &OS) {
+  OS << "  switch (" << VarName << ") {\n    default: "
+    << "llvm_unreachable(\"Unknown spelling list index\");\n";
+  for (SemanticSpellingMap::const_iterator I = Map.begin(), E = Map.end();
+       I != E; ++I)
+       OS << "    case " << I->first << ": return " << I->second << ";\n";
+  OS << "  }\n";
+}
+
 namespace clang {
 
 // Emits the class definitions for attributes.
@@ -1199,43 +1258,11 @@ void EmitClangAttrClass(RecordKeeper &Records, raw_ostream &OS) {
     bool ElideSpelling = (Spellings.size() <= 1) ||
                          SpellingNamesAreCommon(Spellings);
 
-    if (!ElideSpelling) {
-      // The enumerants are automatically generated based on the variety,
-      // namespace (if present) and name for each attribute spelling. However,
-      // care is taken to avoid trampling on the reserved namespace due to
-      // underscores.
-      OS << "  enum Spelling {\n";
-      std::set<std::string> Uniques;
-      for (std::vector<Record *>::const_iterator I = Spellings.begin(),
-           E = Spellings.end(); I != E; ++I) {
-        if (I != Spellings.begin())
-          OS << ",\n";
-        const Record &S = **I;
-        std::string Variety = S.getValueAsString("Variety");
-        std::string Spelling = S.getValueAsString("Name");
-        std::string Namespace = "";
-        std::string EnumName = "";
+    // This maps spelling index values to semantic Spelling enumerants.
+    SemanticSpellingMap SemanticToSyntacticMap;
 
-        if (Variety == "CXX11")
-          Namespace = S.getValueAsString("Namespace");
-
-        EnumName += (Variety + "_");
-        if (!Namespace.empty())
-          EnumName += (NormalizeNameForSpellingComparison(Namespace).str() +
-                      "_");
-        EnumName += NormalizeNameForSpellingComparison(Spelling);
-
-        // Since we have been stripping underscores to avoid trampling on the
-        // reserved namespace, we may have inadvertantly created duplicate
-        // enumerant names. Unique the name if required.
-        while (Uniques.find(EnumName) != Uniques.end())
-          EnumName += "_alternate";
-        Uniques.insert(EnumName);
-
-        OS << "    " << EnumName;
-      }
-      OS << "\n  };\n\n";
-    }
+    if (!ElideSpelling)
+      OS << CreateSemanticSpellings(Spellings, SemanticToSyntacticMap);
 
     OS << "  static " << R.getName() << "Attr *CreateImplicit(";
     OS << "ASTContext &Ctx";
@@ -1327,6 +1354,14 @@ void EmitClangAttrClass(RecordKeeper &Records, raw_ostream &OS) {
     OS << "  virtual void printPretty(raw_ostream &OS,\n"
        << "                           const PrintingPolicy &Policy) const;\n";
     OS << "  virtual const char *getSpelling() const;\n";
+    
+    if (!ElideSpelling) {
+      assert(!SemanticToSyntacticMap.empty() && "Empty semantic mapping list");
+      OS << "  Spelling getSemanticSpelling() const {\n";
+      WriteSemanticSpellingSwitch("SpellingListIndex", SemanticToSyntacticMap,
+                                  OS);
+      OS << "  }\n";
+    }
 
     writeAttrAccessorDefinition(R, OS);
 
@@ -1352,6 +1387,9 @@ void EmitClangAttrClass(RecordKeeper &Records, raw_ostream &OS) {
     bool LateParsed = R.getValueAsBit("LateParsed");
     OS << "  virtual bool isLateParsed() const { return "
        << LateParsed << "; }\n";
+
+    if (R.getValueAsBit("DuplicatesAllowedWhileMerging"))
+      OS << "  virtual bool duplicatesAllowed() const { return true; }\n\n";
 
     OS << "};\n\n";
   }
@@ -2006,6 +2044,7 @@ static std::string CalculateDiagnostic(const Record &S) {
 
     uint32_t V = StringSwitch<uint32_t>(Name)
                    .Case("Function", Func)
+                   .Case("FunctionDefinition", Func)
                    .Case("Var", Var)
                    .Case("ObjCMethod", ObjCMethod)
                    .Case("ParmVar", Param)
@@ -2081,6 +2120,8 @@ static std::string GetSubjectWithSuffix(const Record *R) {
   std::string B = R->getName();
   if (B == "DeclBase")
     return "Decl";
+  else if (B == "FunctionDefinition")
+    return "FunctionDecl";
   return B + "Decl";
 }
 static std::string GenerateCustomAppertainsTo(const Record &Subject,
@@ -2311,6 +2352,58 @@ static std::string GenerateTargetRequirements(const Record &Attr,
   return FnName;
 }
 
+static void GenerateDefaultSpellingIndexToSemanticSpelling(raw_ostream &OS) {
+  OS << "static unsigned defaultSpellingIndexToSemanticSpelling("
+     << "const AttributeList &Attr) {\n";
+  OS << "  return UINT_MAX;\n";
+  OS << "}\n\n";
+}
+
+static std::string GenerateSpellingIndexToSemanticSpelling(const Record &Attr,
+                                                           raw_ostream &OS) {
+  // If the attribute does not have a semantic form, we can bail out early.
+  if (!Attr.getValueAsBit("ASTNode"))
+    return "defaultSpellingIndexToSemanticSpelling";
+
+  std::vector<Record *> Spellings = Attr.getValueAsListOfDefs("Spellings");
+
+  // If there are zero or one spellings, or all of the spellings share the same
+  // name, we can also bail out early.
+  if (Spellings.size() <= 1 || SpellingNamesAreCommon(Spellings))
+    return "defaultSpellingIndexToSemanticSpelling";
+
+  // Generate the enumeration we will use for the mapping.
+  SemanticSpellingMap SemanticToSyntacticMap;
+  std::string Enum = CreateSemanticSpellings(Spellings, SemanticToSyntacticMap);
+  std::string Name = Attr.getName() + "AttrSpellingMap";
+
+  OS << "static unsigned " << Name << "(const AttributeList &Attr) {\n";
+  OS << Enum;
+  OS << "  unsigned Idx = Attr.getAttributeSpellingListIndex();\n";
+  WriteSemanticSpellingSwitch("Idx", SemanticToSyntacticMap, OS);
+  OS << "}\n\n";
+
+  return Name;
+}
+
+static bool CanAppearOnFuncDef(const Record &Attr) {
+  // Look at the subjects this function appertains to; if a FunctionDefinition
+  // appears in the list, then this attribute can appear on a function
+  // definition.
+  if (Attr.isValueUnset("Subjects"))
+    return false;
+
+  std::vector<Record *> Subjects = Attr.getValueAsDef("Subjects")->
+                                        getValueAsListOfDefs("Subjects");
+  for (std::vector<Record *>::const_iterator I = Subjects.begin(),
+       E = Subjects.end(); I != E; ++I) {
+    const Record &Subject = **I;
+    if (Subject.getName() == "FunctionDefinition")
+      return true;
+  }
+  return false;
+}
+
 /// Emits the parsed attribute helpers
 void EmitClangAttrParsedAttrImpl(RecordKeeper &Records, raw_ostream &OS) {
   emitSourceFileHeader("Parsed attribute helpers", OS);
@@ -2320,11 +2413,12 @@ void EmitClangAttrParsedAttrImpl(RecordKeeper &Records, raw_ostream &OS) {
   ParsedAttrMap Dupes;
   ParsedAttrMap Attrs = getParsedAttrList(Records, &Dupes);
 
-  // Generate the default appertainsTo, target and language option diagnostic
-  // methods.
+  // Generate the default appertainsTo, target and language option diagnostic,
+  // and spelling list index mapping methods.
   GenerateDefaultAppertainsTo(OS);
   GenerateDefaultLangOptRequirements(OS);
   GenerateDefaultTargetRequirements(OS);
+  GenerateDefaultSpellingIndexToSemanticSpelling(OS);
 
   // Generate the appertainsTo diagnostic methods and write their names into
   // another mapping. At the same time, generate the AttrInfoMap object
@@ -2337,7 +2431,7 @@ void EmitClangAttrParsedAttrImpl(RecordKeeper &Records, raw_ostream &OS) {
     // because it is a target-specific attribute that appears multiple times.
     // It would be beneficial to test whether the duplicates are "similar
     // enough" to each other to not cause problems. For instance, check that
-    // the spellings are identicial, and custom parsing rules match, etc.
+    // the spellings are identical, and custom parsing rules match, etc.
 
     // We need to generate struct instances based off ParsedAttrInfo from
     // AttributeList.cpp.
@@ -2346,9 +2440,11 @@ void EmitClangAttrParsedAttrImpl(RecordKeeper &Records, raw_ostream &OS) {
     SS << ", " << I->second->getValueAsBit("HasCustomParsing");
     SS << ", " << I->second->isSubClassOf("TargetSpecificAttr");
     SS << ", " << I->second->isSubClassOf("TypeAttr");
+    SS << ", " << CanAppearOnFuncDef(*I->second);
     SS << ", " << GenerateAppertainsTo(*I->second, OS);
     SS << ", " << GenerateLangOptRequirements(*I->second, OS);
     SS << ", " << GenerateTargetRequirements(*I->second, Dupes, OS);
+    SS << ", " << GenerateSpellingIndexToSemanticSpelling(*I->second, OS);
     SS << " }";
 
     if (I + 1 != E)
@@ -2457,6 +2553,14 @@ void EmitClangAttrDump(RecordKeeper &Records, raw_ostream &OS) {
     if (!R.getValueAsBit("ASTNode"))
       continue;
     OS << "  case attr::" << R.getName() << ": {\n";
+
+    // If the attribute has a semantically-meaningful name (which is determined
+    // by whether there is a Spelling enumeration for it), then write out the
+    // spelling used for the attribute.
+    std::vector<Record *> Spellings = R.getValueAsListOfDefs("Spellings");
+    if (Spellings.size() > 1 && !SpellingNamesAreCommon(Spellings))
+      OS << "    OS << \" \" << A->getSpelling();\n";
+
     Args = R.getValueAsListOfDefs("Args");
     if (!Args.empty()) {
       OS << "    const " << R.getName() << "Attr *SA = cast<" << R.getName()

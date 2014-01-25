@@ -845,7 +845,8 @@ Corrected:
   // seems likely a type is wanted instead of the non-type that was found.
   bool NextIsOp = NextToken.is(tok::amp) || NextToken.is(tok::star);
   if ((NextToken.is(tok::identifier) ||
-       (NextIsOp && FirstDecl->isFunctionOrFunctionTemplate())) &&
+       (NextIsOp &&
+        FirstDecl->getUnderlyingDecl()->isFunctionOrFunctionTemplate())) &&
       isTagTypeWithMissingTag(*this, Result, S, SS, Name, NameLoc)) {
     TypeDecl *Type = Result.getAsSingle<TypeDecl>();
     DiagnoseUseOfDecl(Type, NameLoc);
@@ -962,12 +963,9 @@ void Sema::ExitDeclaratorContext(Scope *S) {
 
 
 void Sema::ActOnReenterFunctionContext(Scope* S, Decl *D) {
-  FunctionDecl *FD = dyn_cast<FunctionDecl>(D);
-  if (FunctionTemplateDecl *TFD = dyn_cast_or_null<FunctionTemplateDecl>(D)) {
-    // We assume that the caller has already called
-    // ActOnReenterTemplateScope
-    FD = TFD->getTemplatedDecl();
-  }
+  // We assume that the caller has already called
+  // ActOnReenterTemplateScope so getTemplatedDecl() works.
+  FunctionDecl *FD = D->getAsFunction();
   if (!FD)
     return;
 
@@ -1563,12 +1561,10 @@ NamedDecl *Sema::LazilyCreateBuiltin(IdentifierInfo *II, unsigned bid,
   // FunctionDecl.
   if (const FunctionProtoType *FT = dyn_cast<FunctionProtoType>(R)) {
     SmallVector<ParmVarDecl*, 16> Params;
-    for (unsigned i = 0, e = FT->getNumArgs(); i != e; ++i) {
+    for (unsigned i = 0, e = FT->getNumParams(); i != e; ++i) {
       ParmVarDecl *parm =
-        ParmVarDecl::Create(Context, New, SourceLocation(),
-                            SourceLocation(), 0,
-                            FT->getArgType(i), /*TInfo=*/0,
-                            SC_None, 0);
+          ParmVarDecl::Create(Context, New, SourceLocation(), SourceLocation(),
+                              0, FT->getParamType(i), /*TInfo=*/0, SC_None, 0);
       parm->setScopeInfo(0, i);
       Params.push_back(parm);
     }
@@ -1795,34 +1791,7 @@ void Sema::MergeTypedefNameDecl(TypedefNameDecl *New, LookupResult &OldDecls) {
 
 /// DeclhasAttr - returns true if decl Declaration already has the target
 /// attribute.
-static bool
-DeclHasAttr(const Decl *D, const Attr *A) {
-  // There can be multiple AvailabilityAttr in a Decl. Make sure we copy
-  // all of them. It is mergeAvailabilityAttr in SemaDeclAttr.cpp that is
-  // responsible for making sure they are consistent.
-  const AvailabilityAttr *AA = dyn_cast<AvailabilityAttr>(A);
-  if (AA)
-    return false;
-
-  // The following thread safety attributes can also be duplicated.
-  switch (A->getKind()) {
-    case attr::ExclusiveLocksRequired:
-    case attr::SharedLocksRequired:
-    case attr::LocksExcluded:
-    case attr::ExclusiveLockFunction:
-    case attr::SharedLockFunction:
-    case attr::UnlockFunction:
-    case attr::ExclusiveTrylockFunction:
-    case attr::SharedTrylockFunction:
-    case attr::GuardedBy:
-    case attr::PtGuardedBy:
-    case attr::AcquiredBefore:
-    case attr::AcquiredAfter:
-      return false;
-    default:
-      ;
-  }
-
+static bool DeclHasAttr(const Decl *D, const Attr *A) {
   const OwnershipAttr *OA = dyn_cast<OwnershipAttr>(A);
   const AnnotateAttr *Ann = dyn_cast<AnnotateAttr>(A);
   for (Decl::attr_iterator i = D->attr_begin(), e = D->attr_end(); i != e; ++i)
@@ -1997,7 +1966,7 @@ static bool mergeDeclAttribute(Sema &S, NamedDecl *D, InheritableAttr *Attr,
     // AlignedAttrs are handled separately, because we need to handle all
     // such attributes on a declaration at the same time.
     NewAttr = 0;
-  else if (!DeclHasAttr(D, Attr))
+  else if (Attr->duplicatesAllowed() || !DeclHasAttr(D, Attr))
     NewAttr = cast<InheritableAttr>(Attr->clone(S.Context));
 
   if (NewAttr) {
@@ -2299,12 +2268,7 @@ static bool haveIncompatibleLanguageLinkages(const T *Old, const T *New) {
 bool Sema::MergeFunctionDecl(FunctionDecl *New, Decl *OldD, Scope *S,
                              bool MergeTypeWithOld) {
   // Verify the old decl was also a function.
-  FunctionDecl *Old = 0;
-  if (FunctionTemplateDecl *OldFunctionTemplate
-        = dyn_cast<FunctionTemplateDecl>(OldD))
-    Old = OldFunctionTemplate->getTemplatedDecl();
-  else
-    Old = dyn_cast<FunctionDecl>(OldD);
+  FunctionDecl *Old = OldD->getAsFunction();
   if (!Old) {
     if (UsingShadowDecl *Shadow = dyn_cast<UsingShadowDecl>(OldD)) {
       if (New->getFriendObjectKind()) {
@@ -2480,12 +2444,14 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, Decl *OldD, Scope *S,
     //   Redeclarations or specializations of a function or function template
     //   with a declared return type that uses a placeholder type shall also
     //   use that placeholder, not a deduced type.
-    QualType OldDeclaredReturnType = (Old->getTypeSourceInfo()
-      ? Old->getTypeSourceInfo()->getType()->castAs<FunctionType>()
-      : OldType)->getResultType();
-    QualType NewDeclaredReturnType = (New->getTypeSourceInfo()
-      ? New->getTypeSourceInfo()->getType()->castAs<FunctionType>()
-      : NewType)->getResultType();
+    QualType OldDeclaredReturnType =
+        (Old->getTypeSourceInfo()
+             ? Old->getTypeSourceInfo()->getType()->castAs<FunctionType>()
+             : OldType)->getReturnType();
+    QualType NewDeclaredReturnType =
+        (New->getTypeSourceInfo()
+             ? New->getTypeSourceInfo()->getType()->castAs<FunctionType>()
+             : NewType)->getReturnType();
     QualType ResQT;
     if (!Context.hasSameType(OldDeclaredReturnType, NewDeclaredReturnType) &&
         !((NewQType->isDependentType() || OldQType->isDependentType()) &&
@@ -2506,12 +2472,12 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, Decl *OldD, Scope *S,
         NewQType = ResQT;
     }
 
-    QualType OldReturnType = OldType->getResultType();
-    QualType NewReturnType = cast<FunctionType>(NewQType)->getResultType();
+    QualType OldReturnType = OldType->getReturnType();
+    QualType NewReturnType = cast<FunctionType>(NewQType)->getReturnType();
     if (OldReturnType != NewReturnType) {
       // If this function has a deduced return type and has already been
       // defined, copy the deduced value from the old declaration.
-      AutoType *OldAT = Old->getResultType()->getContainedAutoType();
+      AutoType *OldAT = Old->getReturnType()->getContainedAutoType();
       if (OldAT && OldAT->isDeduced()) {
         New->setType(
             SubstAutoType(New->getType(),
@@ -2676,19 +2642,19 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, Decl *OldD, Scope *S,
       // The old declaration provided a function prototype, but the
       // new declaration does not. Merge in the prototype.
       assert(!OldProto->hasExceptionSpec() && "Exception spec in C");
-      SmallVector<QualType, 16> ParamTypes(OldProto->arg_type_begin(),
-                                                 OldProto->arg_type_end());
-      NewQType = Context.getFunctionType(NewFuncType->getResultType(),
-                                         ParamTypes,
-                                         OldProto->getExtProtoInfo());
+      SmallVector<QualType, 16> ParamTypes(OldProto->param_type_begin(),
+                                           OldProto->param_type_end());
+      NewQType =
+          Context.getFunctionType(NewFuncType->getReturnType(), ParamTypes,
+                                  OldProto->getExtProtoInfo());
       New->setType(NewQType);
       New->setHasInheritedPrototype();
 
       // Synthesize a parameter for each argument type.
       SmallVector<ParmVarDecl*, 16> Params;
-      for (FunctionProtoType::arg_type_iterator
-             ParamType = OldProto->arg_type_begin(),
-             ParamEnd = OldProto->arg_type_end();
+      for (FunctionProtoType::param_type_iterator
+               ParamType = OldProto->param_type_begin(),
+               ParamEnd = OldProto->param_type_end();
            ParamType != ParamEnd; ++ParamType) {
         ParmVarDecl *Param = ParmVarDecl::Create(Context, New,
                                                  SourceLocation(),
@@ -2730,21 +2696,21 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, Decl *OldD, Scope *S,
       = New->getType()->getAs<FunctionProtoType>();
 
     // Determine whether this is the GNU C extension.
-    QualType MergedReturn = Context.mergeTypes(OldProto->getResultType(),
-                                               NewProto->getResultType());
+    QualType MergedReturn = Context.mergeTypes(OldProto->getReturnType(),
+                                               NewProto->getReturnType());
     bool LooseCompatible = !MergedReturn.isNull();
     for (unsigned Idx = 0, End = Old->getNumParams();
          LooseCompatible && Idx != End; ++Idx) {
       ParmVarDecl *OldParm = Old->getParamDecl(Idx);
       ParmVarDecl *NewParm = New->getParamDecl(Idx);
       if (Context.typesAreCompatible(OldParm->getType(),
-                                     NewProto->getArgType(Idx))) {
+                                     NewProto->getParamType(Idx))) {
         ArgTypes.push_back(NewParm->getType());
       } else if (Context.typesAreCompatible(OldParm->getType(),
                                             NewParm->getType(),
                                             /*CompareUnqualified=*/true)) {
-        GNUCompatibleParamWarning Warn
-          = { OldParm, NewParm, NewProto->getArgType(Idx) };
+        GNUCompatibleParamWarning Warn = { OldParm, NewParm,
+                                           NewProto->getParamType(Idx) };
         Warnings.push_back(Warn);
         ArgTypes.push_back(NewParm->getType());
       } else
@@ -4845,6 +4811,10 @@ bool Sema::inferObjCARCLifetime(ValueDecl *decl) {
 }
 
 static void checkAttributesAfterMerging(Sema &S, NamedDecl &ND) {
+  // Ensure that an auto decl is deduced otherwise the checks below might cache
+  // the wrong linkage.
+  assert(S.ParsingInitForAutoVars.count(&ND) == 0);
+
   // 'weak' only applies to declarations with external linkage.
   if (WeakAttr *Attr = ND.getAttr<WeakAttr>()) {
     if (!ND.isExternallyVisible()) {
@@ -5460,7 +5430,6 @@ Sema::ActOnVariableDeclarator(Scope *S, Declarator &D, DeclContext *DC,
   }
 
   ProcessPragmaWeak(S, NewVD);
-  checkAttributesAfterMerging(*this, *NewVD);
 
   // If this is the first declaration of an extern C variable, update
   // the map of such variables.
@@ -6256,10 +6225,9 @@ static FunctionDecl* CreateNewFunctionDecl(Sema &SemaRef, Declarator &D,
   // For record types, this is done by the AbstractClassUsageDiagnoser once
   // the class has been completely parsed.
   if (!DC->isRecord() &&
-      SemaRef.RequireNonAbstractType(D.getIdentifierLoc(),
-                                     R->getAs<FunctionType>()->getResultType(),
-                                     diag::err_abstract_type_in_decl,
-                                     SemaRef.AbstractReturnType))
+      SemaRef.RequireNonAbstractType(
+          D.getIdentifierLoc(), R->getAs<FunctionType>()->getReturnType(),
+          diag::err_abstract_type_in_decl, SemaRef.AbstractReturnType))
     D.setInvalidType();
 
   if (Name.getNameKind() == DeclarationName::CXXConstructorName) {
@@ -6744,14 +6712,14 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
       }
 
       if (getLangOpts().CPlusPlus1y &&
-          NewFD->getResultType()->isUndeducedType())
+          NewFD->getReturnType()->isUndeducedType())
         Diag(D.getDeclSpec().getVirtualSpecLoc(), diag::err_auto_fn_virtual);
     }
 
     if (getLangOpts().CPlusPlus1y &&
         (NewFD->isDependentContext() ||
          (isFriend && CurContext->isDependentContext())) &&
-        NewFD->getResultType()->isUndeducedType()) {
+        NewFD->getReturnType()->isUndeducedType()) {
       // If the function template is referenced directly (for instance, as a
       // member of the current instantiation), pretend it has a dependent type.
       // This is not really justified by the standard, but is the only sane
@@ -6760,9 +6728,9 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
       // a friend yet, so 'isDependentContext' on the FD doesn't work.
       const FunctionProtoType *FPT =
           NewFD->getType()->castAs<FunctionProtoType>();
-      QualType Result = SubstAutoType(FPT->getResultType(),
-                                       Context.DependentTy);
-      NewFD->setType(Context.getFunctionType(Result, FPT->getArgTypes(),
+      QualType Result =
+          SubstAutoType(FPT->getReturnType(), Context.DependentTy);
+      NewFD->setType(Context.getFunctionType(Result, FPT->getParamTypes(),
                                              FPT->getExtProtoInfo()));
     }
 
@@ -6835,6 +6803,8 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
     }
 
     // If a function is defined as defaulted or deleted, mark it as such now.
+    // FIXME: Does this ever happen? ActOnStartOfFunctionDef forces the function
+    // definition kind to FDK_Definition.
     switch (D.getFunctionDefinitionKind()) {
       case FDK_Declaration:
       case FDK_Definition:
@@ -6880,8 +6850,8 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
         getLangOpts().CPlusPlus11 && FPT && !FPT->hasExceptionSpec()) {
       FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
       EPI.ExceptionSpecType = EST_BasicNoexcept;
-      NewFD->setType(Context.getFunctionType(FPT->getResultType(),
-                                             FPT->getArgTypes(), EPI));
+      NewFD->setType(Context.getFunctionType(FPT->getReturnType(),
+                                             FPT->getParamTypes(), EPI));
     }
   }
 
@@ -6945,8 +6915,9 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
     // @endcode
 
     // Synthesize a parameter for each argument type.
-    for (FunctionProtoType::arg_type_iterator AI = FT->arg_type_begin(),
-         AE = FT->arg_type_end(); AI != AE; ++AI) {
+    for (FunctionProtoType::param_type_iterator AI = FT->param_type_begin(),
+                                                AE = FT->param_type_end();
+         AI != AE; ++AI) {
       ParmVarDecl *Param =
         BuildParmVarDeclForTypedef(NewFD, D.getIdentifierLoc(), *AI);
       Param->setScopeInfo(0, Params.size());
@@ -6977,7 +6948,7 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
   // Functions returning a variably modified type violate C99 6.7.5.2p2
   // because all functions have linkage.
   if (!NewFD->isInvalidDecl() &&
-      NewFD->getResultType()->isVariablyModifiedType()) {
+      NewFD->getReturnType()->isVariablyModifiedType()) {
     Diag(NewFD->getLocation(), diag::err_vm_func_decl);
     NewFD->setInvalidDecl();
   }
@@ -6985,7 +6956,7 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
   // Handle attributes.
   ProcessDeclAttributes(S, NewFD, D);
 
-  QualType RetType = NewFD->getResultType();
+  QualType RetType = NewFD->getReturnType();
   const CXXRecordDecl *Ret = RetType->isRecordType() ?
       RetType->getAsCXXRecordDecl() : RetType->getPointeeCXXRecordDecl();
   if (!NewFD->isInvalidDecl() && !NewFD->hasAttr<WarnUnusedResultAttr>() &&
@@ -7292,7 +7263,7 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
     EPI.Variadic = true;
     EPI.ExtInfo = FT->getExtInfo();
 
-    QualType R = Context.getFunctionType(FT->getResultType(), None, EPI);
+    QualType R = Context.getFunctionType(FT->getReturnType(), None, EPI);
     NewFD->setType(R);
   }
 
@@ -7331,7 +7302,7 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
     }
     
     // OpenCL v1.2, s6.9 -- Kernels can only have return type void.
-    if (!NewFD->getResultType()->isVoidType()) {
+    if (!NewFD->getReturnType()->isVoidType()) {
       Diag(D.getIdentifierLoc(),
            diag::err_expected_kernel_void_return_type);
       D.setInvalidType();
@@ -7352,7 +7323,7 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
       if (!NewFD->isInvalidDecl() &&
           NewFD->getDeclContext()->getRedeclContext()->isTranslationUnit()) {
         if (II->isStr("cudaConfigureCall")) {
-          if (!R->getAs<FunctionType>()->getResultType()->isScalarType())
+          if (!R->getAs<FunctionType>()->getReturnType()->isScalarType())
             Diag(NewFD->getLocation(), diag::err_config_scalar_return);
 
           Context.setcudaConfigureCallDecl(NewFD);
@@ -7394,8 +7365,8 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
 bool Sema::CheckFunctionDeclaration(Scope *S, FunctionDecl *NewFD,
                                     LookupResult &Previous,
                                     bool IsExplicitSpecialization) {
-  assert(!NewFD->getResultType()->isVariablyModifiedType() 
-         && "Variably modified return types are not handled here");
+  assert(!NewFD->getReturnType()->isVariablyModifiedType() &&
+         "Variably modified return types are not handled here");
 
   // Determine whether the type of this function should be merged with
   // a previous visible declaration. This never happens for functions in C++,
@@ -7497,17 +7468,16 @@ bool Sema::CheckFunctionDeclaration(Scope *S, FunctionDecl *NewFD,
   if (!getLangOpts().CPlusPlus1y && MD && MD->isConstexpr() &&
       !MD->isStatic() && !isa<CXXConstructorDecl>(MD) &&
       (MD->getTypeQualifiers() & Qualifiers::Const) == 0) {
-    CXXMethodDecl *OldMD = dyn_cast_or_null<CXXMethodDecl>(OldDecl);
-    if (FunctionTemplateDecl *OldTD =
-          dyn_cast_or_null<FunctionTemplateDecl>(OldDecl))
-      OldMD = dyn_cast<CXXMethodDecl>(OldTD->getTemplatedDecl());
+    CXXMethodDecl *OldMD = 0;
+    if (OldDecl)
+      OldMD = dyn_cast<CXXMethodDecl>(OldDecl->getAsFunction());
     if (!OldMD || !OldMD->isStatic()) {
       const FunctionProtoType *FPT =
         MD->getType()->castAs<FunctionProtoType>();
       FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
       EPI.TypeQuals |= Qualifiers::Const;
-      MD->setType(Context.getFunctionType(FPT->getResultType(),
-                                          FPT->getArgTypes(), EPI));
+      MD->setType(Context.getFunctionType(FPT->getReturnType(),
+                                          FPT->getParamTypes(), EPI));
 
       // Warn that we did this, if we're not performing template instantiation.
       // In that case, we'll have warned already when the template was defined.
@@ -7665,7 +7635,7 @@ bool Sema::CheckFunctionDeclaration(Scope *S, FunctionDecl *NewFD,
     // compatible, and if it does, warn the user.
     // But, issue any diagnostic on the first declaration only.
     if (NewFD->isExternC() && Previous.empty()) {
-      QualType R = NewFD->getResultType();
+      QualType R = NewFD->getReturnType();
       if (R->isIncompleteType() && !R->isVoidType())
         Diag(NewFD->getLocation(), diag::warn_return_value_udt_incomplete)
             << NewFD << R;
@@ -7695,8 +7665,9 @@ static SourceRange getResultSourceRange(const FunctionDecl *FD) {
 }
 
 void Sema::CheckMain(FunctionDecl* FD, const DeclSpec& DS) {
-  // C++11 [basic.start.main]p3:  A program that declares main to be inline,
-  //   static or constexpr is ill-formed.
+  // C++11 [basic.start.main]p3:
+  //   A program that [...] declares main to be inline, static or
+  //   constexpr is ill-formed.
   // C11 6.7.4p4:  In a hosted environment, no function specifier(s) shall
   //   appear in a declaration of main.
   // static main is not an error under C99, but we should warn about it.
@@ -7734,7 +7705,7 @@ void Sema::CheckMain(FunctionDecl* FD, const DeclSpec& DS) {
   const FunctionType* FT = T->castAs<FunctionType>();
 
   // All the standards say that main() should should return 'int'.
-  if (Context.hasSameUnqualifiedType(FT->getResultType(), Context.IntTy)) {
+  if (Context.hasSameUnqualifiedType(FT->getReturnType(), Context.IntTy)) {
     // In C and C++, main magically returns 0 if you fall off the end;
     // set the flag which tells us that.
     // This is C++ [basic.start.main]p5 and C99 5.1.2.2.3.
@@ -7767,7 +7738,7 @@ void Sema::CheckMain(FunctionDecl* FD, const DeclSpec& DS) {
   if (isa<FunctionNoProtoType>(FT)) return;
 
   const FunctionProtoType* FTP = cast<const FunctionProtoType>(FT);
-  unsigned nparams = FTP->getNumArgs();
+  unsigned nparams = FTP->getNumParams();
   assert(FD->getNumParams() == nparams);
 
   bool HasExtraParameters = (nparams > 3);
@@ -7792,7 +7763,7 @@ void Sema::CheckMain(FunctionDecl* FD, const DeclSpec& DS) {
   QualType Expected[] = { Context.IntTy, CharPP, CharPP, CharPP };
 
   for (unsigned i = 0; i < nparams; ++i) {
-    QualType AT = FTP->getArgType(i);
+    QualType AT = FTP->getParamType(i);
 
     bool mismatch = true;
 
@@ -7839,9 +7810,9 @@ void Sema::CheckMSVCRTEntryPoint(FunctionDecl *FD) {
 
   // Set an implicit return of 'zero' if the function can return some integral,
   // enumeration, pointer or nullptr type.
-  if (FT->getResultType()->isIntegralOrEnumerationType() ||
-      FT->getResultType()->isAnyPointerType() ||
-      FT->getResultType()->isNullPtrType())
+  if (FT->getReturnType()->isIntegralOrEnumerationType() ||
+      FT->getReturnType()->isAnyPointerType() ||
+      FT->getReturnType()->isNullPtrType())
     // DllMain is exempt because a return value of zero means it failed.
     if (FD->getName() != "DllMain")
       FD->setHasImplicitReturnZero(true);
@@ -8571,7 +8542,7 @@ void Sema::ActOnUninitializedDecl(Decl *RealDecl,
     // be initialized.
     if (!Var->isInvalidDecl() &&
         Var->getType().getAddressSpace() == LangAS::opencl_constant &&
-        !Var->getInit()) {
+        Var->getStorageClass() != SC_Extern && !Var->getInit()) {
       Diag(Var->getLocation(), diag::err_opencl_constant_no_init);
       Var->setInvalidDecl();
       return;
@@ -8919,6 +8890,8 @@ Sema::FinalizeDeclaration(Decl *ThisDecl) {
   VarDecl *VD = dyn_cast_or_null<VarDecl>(ThisDecl);
   if (!VD)
     return;
+
+  checkAttributesAfterMerging(*this, *VD);
 
   if (UsedAttr *Attr = VD->getAttr<UsedAttr>()) {
     if (!Attr->isInherited() && !VD->isThisDeclarationADefinition()) {
@@ -9475,7 +9448,7 @@ static void RebuildLambdaScopeInfo(CXXMethodDecl *CallOperator,
   LambdaScopeInfo *LSI = S.PushLambdaScope();
   LSI->CallOperator = CallOperator;
   LSI->Lambda = LambdaClass;
-  LSI->ReturnType = CallOperator->getResultType();
+  LSI->ReturnType = CallOperator->getReturnType();
   const LambdaCaptureDefault LCD = LambdaClass->getLambdaCaptureDefault();
 
   if (LCD == LCD_None)
@@ -9558,7 +9531,7 @@ Decl *Sema::ActOnStartOfFunctionDef(Scope *FnBodyScope, Decl *D) {
 
   // The return type of a function definition must be complete
   // (C99 6.9.1p3, C++ [dcl.fct]p6).
-  QualType ResultType = FD->getResultType();
+  QualType ResultType = FD->getReturnType();
   if (!ResultType->isDependentType() && !ResultType->isVoidType() &&
       !FD->isInvalidDecl() &&
       RequireCompleteType(FD->getLocation(), ResultType,
@@ -9719,24 +9692,15 @@ void Sema::computeNRVO(Stmt *Body, FunctionScopeInfo *Scope) {
 }
 
 bool Sema::canSkipFunctionBody(Decl *D) {
-  if (!Consumer.shouldSkipFunctionBody(D))
-    return false;
-
-  if (isa<ObjCMethodDecl>(D))
-    return true;
-
-  FunctionDecl *FD = 0;
-  if (FunctionTemplateDecl *FTD = dyn_cast<FunctionTemplateDecl>(D))
-    FD = FTD->getTemplatedDecl();
-  else
-    FD = cast<FunctionDecl>(D);
-
   // We cannot skip the body of a function (or function template) which is
   // constexpr, since we may need to evaluate its body in order to parse the
   // rest of the file.
   // We cannot skip the body of a function with an undeduced return type,
   // because any callers of that function need to know the type.
-  return !FD->isConstexpr() && !FD->getResultType()->isUndeducedType();
+  if (const FunctionDecl *FD = D->getAsFunction())
+    if (FD->isConstexpr() || FD->getReturnType()->isUndeducedType())
+      return false;
+  return Consumer.shouldSkipFunctionBody(D);
 }
 
 Decl *Sema::ActOnSkippedFunctionBody(Decl *Decl) {
@@ -9753,12 +9717,7 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *D, Stmt *BodyArg) {
 
 Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
                                     bool IsInstantiation) {
-  FunctionDecl *FD = 0;
-  FunctionTemplateDecl *FunTmpl = dyn_cast_or_null<FunctionTemplateDecl>(dcl);
-  if (FunTmpl)
-    FD = FunTmpl->getTemplatedDecl();
-  else
-    FD = dyn_cast_or_null<FunctionDecl>(dcl);
+  FunctionDecl *FD = dcl ? dcl->getAsFunction() : 0;
 
   sema::AnalysisBasedWarnings::Policy WP = AnalysisWarnings.getDefaultPolicy();
   sema::AnalysisBasedWarnings::Policy *ActivePolicy = 0;
@@ -9767,13 +9726,13 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
     FD->setBody(Body);
 
     if (getLangOpts().CPlusPlus1y && !FD->isInvalidDecl() && Body &&
-        !FD->isDependentContext() && FD->getResultType()->isUndeducedType()) {
+        !FD->isDependentContext() && FD->getReturnType()->isUndeducedType()) {
       // If the function has a deduced result type but contains no 'return'
       // statements, the result type as written must be exactly 'auto', and
       // the deduced result type is 'void'.
-      if (!FD->getResultType()->getAs<AutoType>()) {
+      if (!FD->getReturnType()->getAs<AutoType>()) {
         Diag(dcl->getLocation(), diag::err_auto_fn_no_return_but_not_auto)
-          << FD->getResultType();
+            << FD->getReturnType();
         FD->setInvalidDecl();
       } else {
         // Substitute 'void' for the 'auto' in the type.
@@ -9809,8 +9768,8 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
     if (!FD->isInvalidDecl()) {
       DiagnoseUnusedParameters(FD->param_begin(), FD->param_end());
       DiagnoseSizeOfParametersAndReturnValue(FD->param_begin(), FD->param_end(),
-                                             FD->getResultType(), FD);
-      
+                                             FD->getReturnType(), FD);
+
       // If this is a constructor, we need a vtable.
       if (CXXConstructorDecl *Constructor = dyn_cast<CXXConstructorDecl>(FD))
         MarkVTableUsed(FD->getLocation(), Constructor->getParent());
@@ -9818,7 +9777,7 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
       // Try to apply the named return value optimization. We have to check
       // if we can do this here because lambdas keep return statements around
       // to deduce an implicit return type.
-      if (getLangOpts().CPlusPlus && FD->getResultType()->isRecordType() &&
+      if (getLangOpts().CPlusPlus && FD->getReturnType()->isRecordType() &&
           !FD->isDependentContext())
         computeNRVO(Body, getCurFunction());
     }
@@ -9831,8 +9790,8 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
     if (!MD->isInvalidDecl()) {
       DiagnoseUnusedParameters(MD->param_begin(), MD->param_end());
       DiagnoseSizeOfParametersAndReturnValue(MD->param_begin(), MD->param_end(),
-                                             MD->getResultType(), MD);
-      
+                                             MD->getReturnType(), MD);
+
       if (Body)
         computeNRVO(Body, getCurFunction());
     }
@@ -10681,7 +10640,9 @@ Decl *Sema::ActOnTag(Scope *S, unsigned TagSpec, TagUseKind TUK,
   }
 
   if (!Previous.empty()) {
-    NamedDecl *PrevDecl = (*Previous.begin())->getUnderlyingDecl();
+    NamedDecl *PrevDecl = Previous.getFoundDecl();
+    NamedDecl *DirectPrevDecl =
+        getLangOpts().MSVCCompat ? *Previous.begin() : PrevDecl;
 
     // It's okay to have a tag decl in the same scope as a typedef
     // which hides a tag decl in the same scope.  Finding this
@@ -10713,7 +10674,7 @@ Decl *Sema::ActOnTag(Scope *S, unsigned TagSpec, TagUseKind TUK,
       // in the same scope (so that the definition/declaration completes or
       // rementions the tag), reuse the decl.
       if (TUK == TUK_Reference || TUK == TUK_Friend ||
-          isDeclInScope(PrevDecl, SearchDC, S,
+          isDeclInScope(DirectPrevDecl, SearchDC, S,
                         SS.isNotEmpty() || isExplicitSpecialization)) {
         // Make sure that this wasn't declared as an enum and now used as a
         // struct or something similar.

@@ -179,7 +179,7 @@ void ASTTypeWriter::VisitExtVectorType(const ExtVectorType *T) {
 }
 
 void ASTTypeWriter::VisitFunctionType(const FunctionType *T) {
-  Writer.AddTypeRef(T->getResultType(), Record);
+  Writer.AddTypeRef(T->getReturnType(), Record);
   FunctionType::ExtInfo C = T->getExtInfo();
   Record.push_back(C.getNoReturn());
   Record.push_back(C.getHasRegParm());
@@ -196,9 +196,9 @@ void ASTTypeWriter::VisitFunctionNoProtoType(const FunctionNoProtoType *T) {
 
 void ASTTypeWriter::VisitFunctionProtoType(const FunctionProtoType *T) {
   VisitFunctionType(T);
-  Record.push_back(T->getNumArgs());
-  for (unsigned I = 0, N = T->getNumArgs(); I != N; ++I)
-    Writer.AddTypeRef(T->getArgType(I), Record);
+  Record.push_back(T->getNumParams());
+  for (unsigned I = 0, N = T->getNumParams(); I != N; ++I)
+    Writer.AddTypeRef(T->getParamType(I), Record);
   Record.push_back(T->isVariadic());
   Record.push_back(T->hasTrailingReturn());
   Record.push_back(T->getTypeQuals());
@@ -512,8 +512,8 @@ void TypeLocWriter::VisitFunctionTypeLoc(FunctionTypeLoc TL) {
   Writer.AddSourceLocation(TL.getLParenLoc(), Record);
   Writer.AddSourceLocation(TL.getRParenLoc(), Record);
   Writer.AddSourceLocation(TL.getLocalRangeEnd(), Record);
-  for (unsigned i = 0, e = TL.getNumArgs(); i != e; ++i)
-    Writer.AddDeclRef(TL.getArg(i), Record);
+  for (unsigned i = 0, e = TL.getNumParams(); i != e; ++i)
+    Writer.AddDeclRef(TL.getParam(i), Record);
 }
 void TypeLocWriter::VisitFunctionProtoTypeLoc(FunctionProtoTypeLoc TL) {
   VisitFunctionTypeLoc(TL);
