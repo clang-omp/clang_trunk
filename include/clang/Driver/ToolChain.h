@@ -113,6 +113,9 @@ public:
   StringRef getPlatform() const { return Triple.getVendorName(); }
   StringRef getOS() const { return Triple.getOSName(); }
 
+  /// \brief Returns true if the toolchain is targeting a non-native architecture.
+  bool isCrossCompiling() const;
+
   /// \brief Provide the default architecture name (as expected by -arch) for
   /// this toolchain. Note t
   std::string getDefaultUniversalArchName() const;
@@ -176,10 +179,6 @@ public:
 
   /// \brief Check if the toolchain should use the integrated assembler.
   bool useIntegratedAs() const;
-
-  /// IsStrictAliasingDefault - Does this tool chain use -fstrict-aliasing by
-  /// default.
-  virtual bool IsStrictAliasingDefault() const { return true; }
 
   /// IsMathErrnoDefault - Does this tool chain use -fmath-errno by default.
   virtual bool IsMathErrnoDefault() const { return true; }

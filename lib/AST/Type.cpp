@@ -593,6 +593,9 @@ namespace {
     AutoType *VisitAttributedType(const AttributedType *T) {
       return Visit(T->getModifiedType());
     }
+    AutoType *VisitAdjustedType(const AdjustedType *T) {
+      return Visit(T->getOriginalType());
+    }
   };
 }
 
@@ -2440,4 +2443,8 @@ QualType::DestructionKind QualType::isDestructedTypeImpl(QualType type) {
     return DK_cxx_destructor;
 
   return DK_none;
+}
+
+CXXRecordDecl *MemberPointerType::getMostRecentCXXRecordDecl() const {
+  return getClass()->getAsCXXRecordDecl()->getMostRecentDecl();
 }

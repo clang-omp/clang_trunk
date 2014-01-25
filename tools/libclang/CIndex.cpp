@@ -22,7 +22,6 @@
 #include "CXTranslationUnit.h"
 #include "CXType.h"
 #include "CursorVisitor.h"
-#include "SimpleFormatContext.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Basic/Diagnostic.h"
@@ -30,6 +29,7 @@
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
+#include "clang/Index/CommentToXML.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/Lexer.h"
 #include "clang/Lex/PreprocessingRecord.h"
@@ -68,8 +68,7 @@ CXTranslationUnit cxtu::MakeCXTranslationUnit(CIndexer *CIdx, ASTUnit *AU) {
   D->StringPool = new cxstring::CXStringPool();
   D->Diagnostics = 0;
   D->OverridenCursorsPool = createOverridenCXCursorsPool();
-  D->FormatContext = 0;
-  D->FormatInMemoryUniqueId = 0;
+  D->CommentToXML = 0;
   return D;
 }
 
@@ -1543,6 +1542,10 @@ bool CursorVisitor::VisitDecayedTypeLoc(DecayedTypeLoc TL) {
   return Visit(TL.getOriginalLoc());
 }
 
+bool CursorVisitor::VisitAdjustedTypeLoc(AdjustedTypeLoc TL) {
+  return Visit(TL.getOriginalLoc());
+}
+
 bool CursorVisitor::VisitTemplateSpecializationTypeLoc(
                                              TemplateSpecializationTypeLoc TL) {
   // Visit the template name.
@@ -1836,8 +1839,6 @@ public:
   void VisitStmt(const Stmt *S);
   void VisitSwitchStmt(const SwitchStmt *S);
   void VisitWhileStmt(const WhileStmt *W);
-  void VisitUnaryTypeTraitExpr(const UnaryTypeTraitExpr *E);
-  void VisitBinaryTypeTraitExpr(const BinaryTypeTraitExpr *E);
   void VisitTypeTraitExpr(const TypeTraitExpr *E);
   void VisitArrayTypeTraitExpr(const ArrayTypeTraitExpr *E);
   void VisitExpressionTraitExpr(const ExpressionTraitExpr *E);
@@ -1850,6 +1851,8 @@ public:
   void VisitOMPExecutableDirective(const OMPExecutableDirective *D);
   void VisitOMPParallelDirective(const OMPParallelDirective *D);
   void VisitOMPForDirective(const OMPForDirective *D);
+  void VisitOMPSimdDirective(const OMPSimdDirective *D);
+  void VisitOMPForSimdDirective(const OMPForSimdDirective *D);
   void VisitOMPSectionsDirective(const OMPSectionsDirective *D);
   void VisitOMPSectionDirective(const OMPSectionDirective *D);
   void VisitOMPSingleDirective(const OMPSingleDirective *D);
@@ -2162,15 +2165,6 @@ void EnqueueVisitor::VisitWhileStmt(const WhileStmt *W) {
   AddDecl(W->getConditionVariable());
 }
 
-void EnqueueVisitor::VisitUnaryTypeTraitExpr(const UnaryTypeTraitExpr *E) {
-  AddTypeLoc(E->getQueriedTypeSourceInfo());
-}
-
-void EnqueueVisitor::VisitBinaryTypeTraitExpr(const BinaryTypeTraitExpr *E) {
-  AddTypeLoc(E->getRhsTypeSourceInfo());
-  AddTypeLoc(E->getLhsTypeSourceInfo());
-}
-
 void EnqueueVisitor::VisitTypeTraitExpr(const TypeTraitExpr *E) {
   for (unsigned I = E->getNumArgs(); I > 0; --I)
     AddTypeLoc(E->getArg(I-1));
@@ -2225,6 +2219,14 @@ void EnqueueVisitor::VisitOMPParallelDirective(const OMPParallelDirective *D) {
 }
 
 void EnqueueVisitor::VisitOMPForDirective(const OMPForDirective *D) {
+  VisitOMPExecutableDirective(D);
+}
+
+void EnqueueVisitor::VisitOMPSimdDirective(const OMPSimdDirective *D) {
+  VisitOMPExecutableDirective(D);
+}
+
+void EnqueueVisitor::VisitOMPForSimdDirective(const OMPForSimdDirective *D) {
   VisitOMPExecutableDirective(D);
 }
 
@@ -2583,7 +2585,8 @@ CXIndex clang_createIndex(int excludeDeclarationsFromPCH,
                           int displayDiagnostics) {
   // We use crash recovery to make some of our APIs more reliable, implicitly
   // enable it.
-  llvm::CrashRecoveryContext::Enable();
+  if (!getenv("LIBCLANG_DISABLE_CRASH_RECOVERY"))
+    llvm::CrashRecoveryContext::Enable();
 
   // Enable support for multithreading in LLVM.
   {
@@ -2709,7 +2712,7 @@ static void clang_parseTranslationUnit_Impl(void *UserData) {
   // FIXME: Add a flag for modules.
   TranslationUnitKind TUKind
     = (options & CXTranslationUnit_Incomplete)? TU_Prefix : TU_Complete;
-  bool CacheCodeCompetionResults
+  bool CacheCodeCompletionResults
     = options & CXTranslationUnit_CacheCompletionResults;
   bool IncludeBriefCommentsInCodeCompletion
     = options & CXTranslationUnit_IncludeBriefCommentsInCodeCompletion;
@@ -2795,7 +2798,7 @@ static void clang_parseTranslationUnit_Impl(void *UserData) {
                                  /*RemappedFilesKeepOriginalName=*/true,
                                  PrecompilePreamble,
                                  TUKind,
-                                 CacheCodeCompetionResults,
+                                 CacheCodeCompletionResults,
                                  IncludeBriefCommentsInCodeCompletion,
                                  /*AllowPCHWithCompilerErrors=*/true,
                                  SkipFunctionBodies,
@@ -2942,7 +2945,7 @@ void clang_disposeTranslationUnit(CXTranslationUnit CTUnit) {
     delete CTUnit->StringPool;
     delete static_cast<CXDiagnosticSetImpl *>(CTUnit->Diagnostics);
     disposeOverridenCXCursorsPool(CTUnit->OverridenCursorsPool);
-    delete CTUnit->FormatContext;
+    delete CTUnit->CommentToXML;
     delete CTUnit;
   }
 }
@@ -3858,35 +3861,39 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
   case CXCursor_ModuleImportDecl:
     return cxstring::createRef("ModuleImport");
   case CXCursor_OMPParallelDirective:
-      return cxstring::createRef("OMPParallelDirective");
+    return cxstring::createRef("OMPParallelDirective");
   case CXCursor_OMPForDirective:
-      return cxstring::createRef("OMPForDirective");
+    return cxstring::createRef("OMPForDirective");
+  case CXCursor_OMPSimdDirective:
+    return cxstring::createRef("OMPSimdDirective");
+  case CXCursor_OMPForSimdDirective:
+    return cxstring::createRef("OMPForSimdDirective");
   case CXCursor_OMPSectionsDirective:
-      return cxstring::createRef("OMPSectionsDirective");
+    return cxstring::createRef("OMPSectionsDirective");
   case CXCursor_OMPSectionDirective:
-      return cxstring::createRef("OMPSectionDirective");
+    return cxstring::createRef("OMPSectionDirective");
   case CXCursor_OMPSingleDirective:
-      return cxstring::createRef("OMPSingleDirective");
+    return cxstring::createRef("OMPSingleDirective");
   case CXCursor_OMPTaskDirective:
-      return cxstring::createRef("OMPTaskDirective");
+    return cxstring::createRef("OMPTaskDirective");
   case CXCursor_OMPTaskyieldDirective:
-      return cxstring::createRef("OMPTaskyieldDirective");
+    return cxstring::createRef("OMPTaskyieldDirective");
   case CXCursor_OMPMasterDirective:
-      return cxstring::createRef("OMPMasterDirective");
+    return cxstring::createRef("OMPMasterDirective");
   case CXCursor_OMPCriticalDirective:
-      return cxstring::createRef("OMPCriticalDirective");
+    return cxstring::createRef("OMPCriticalDirective");
   case CXCursor_OMPBarrierDirective:
-      return cxstring::createRef("OMPBarrierDirective");
+    return cxstring::createRef("OMPBarrierDirective");
   case CXCursor_OMPTaskwaitDirective:
-      return cxstring::createRef("OMPTaskwaitDirective");
+    return cxstring::createRef("OMPTaskwaitDirective");
   case CXCursor_OMPTaskgroupDirective:
-      return cxstring::createRef("OMPTaskgroupDirective");
+    return cxstring::createRef("OMPTaskgroupDirective");
   case CXCursor_OMPAtomicDirective:
-      return cxstring::createRef("OMPAtomicDirective");
+    return cxstring::createRef("OMPAtomicDirective");
   case CXCursor_OMPFlushDirective:
-      return cxstring::createRef("OMPFlushDirective");
+    return cxstring::createRef("OMPFlushDirective");
   case CXCursor_OMPOrderedDirective:
-      return cxstring::createRef("OMPOrderedDirective");
+    return cxstring::createRef("OMPOrderedDirective");
   }
 
   llvm_unreachable("Unhandled CXCursorKind");
@@ -4620,6 +4627,7 @@ CXCursor clang_getCursorDefinition(CXCursor C) {
   case Decl::ClassScopeFunctionSpecialization:
   case Decl::Import:
   case Decl::OMPThreadPrivate:
+  case Decl::OMPDeclareReduction:
     return C;
 
   // Declaration kinds that don't make any sense here, but are
@@ -5142,18 +5150,26 @@ class AnnotateTokensWorker {
     unsigned BeforeChildrenTokenIdx;
   };
   SmallVector<PostChildrenInfo, 8> PostChildrenInfos;
-  
+
+  CXToken &getTok(unsigned Idx) {
+    assert(Idx < NumTokens);
+    return Tokens[Idx];
+  }
+  const CXToken &getTok(unsigned Idx) const {
+    assert(Idx < NumTokens);
+    return Tokens[Idx];
+  }
   bool MoreTokens() const { return TokIdx < NumTokens; }
   unsigned NextToken() const { return TokIdx; }
   void AdvanceToken() { ++TokIdx; }
   SourceLocation GetTokenLoc(unsigned tokI) {
-    return SourceLocation::getFromRawEncoding(Tokens[tokI].int_data[1]);
+    return SourceLocation::getFromRawEncoding(getTok(tokI).int_data[1]);
   }
   bool isFunctionMacroToken(unsigned tokI) const {
-    return Tokens[tokI].int_data[3] != 0;
+    return getTok(tokI).int_data[3] != 0;
   }
   SourceLocation getFunctionMacroTokenLoc(unsigned tokI) const {
-    return SourceLocation::getFromRawEncoding(Tokens[tokI].int_data[3]);
+    return SourceLocation::getFromRawEncoding(getTok(tokI).int_data[3]);
   }
 
   void annotateAndAdvanceTokens(CXCursor, RangeComparisonResult, SourceRange);
@@ -5400,7 +5416,7 @@ AnnotateTokensWorker::Visit(CXCursor cursor, CXCursor parent) {
   // This can happen for C++ constructor expressions whose range generally
   // include the variable declaration, e.g.:
   //  MyCXXClass foo; // Make sure we don't annotate 'foo' as a CallExpr cursor.
-  if (clang_isExpression(cursorK)) {
+  if (clang_isExpression(cursorK) && MoreTokens()) {
     const Expr *E = getCursorExpr(cursor);
     if (const Decl *D = getCursorParentDecl(cursor)) {
       const unsigned I = NextToken();
@@ -5522,14 +5538,23 @@ public:
   }
 
 private:
+  CXToken &getTok(unsigned Idx) {
+    assert(Idx < NumTokens);
+    return Tokens[Idx];
+  }
+  const CXToken &getTok(unsigned Idx) const {
+    assert(Idx < NumTokens);
+    return Tokens[Idx];
+  }
+
   SourceLocation getTokenLoc(unsigned tokI) {
-    return SourceLocation::getFromRawEncoding(Tokens[tokI].int_data[1]);
+    return SourceLocation::getFromRawEncoding(getTok(tokI).int_data[1]);
   }
 
   void setFunctionMacroTokenLoc(unsigned tokI, SourceLocation loc) {
     // The third field is reserved and currently not used. Use it here
     // to mark macro arg expanded tokens with their expanded locations.
-    Tokens[tokI].int_data[3] = loc.getRawEncoding();
+    getTok(tokI).int_data[3] = loc.getRawEncoding();
   }
 };
 
@@ -6537,6 +6562,47 @@ CXTUResourceUsage clang_getCXTUResourceUsage(CXTranslationUnit TU) {
 void clang_disposeCXTUResourceUsage(CXTUResourceUsage usage) {
   if (usage.data)
     delete (MemUsageEntries*) usage.data;
+}
+
+CXSourceRangeList *clang_getSkippedRanges(CXTranslationUnit TU, CXFile file) {
+  CXSourceRangeList *skipped = new CXSourceRangeList;
+  skipped->count = 0;
+  skipped->ranges = 0;
+
+  if (!file)
+    return skipped;
+
+  ASTUnit *astUnit = cxtu::getASTUnit(TU);
+  PreprocessingRecord *ppRec = astUnit->getPreprocessor().getPreprocessingRecord();
+  if (!ppRec)
+    return skipped;
+
+  ASTContext &Ctx = astUnit->getASTContext();
+  SourceManager &sm = Ctx.getSourceManager();
+  FileEntry *fileEntry = static_cast<FileEntry *>(file);
+  FileID wantedFileID = sm.translateFile(fileEntry);
+
+  const std::vector<SourceRange> &SkippedRanges = ppRec->getSkippedRanges();
+  std::vector<SourceRange> wantedRanges;
+  for (std::vector<SourceRange>::const_iterator i = SkippedRanges.begin(), ei = SkippedRanges.end();
+       i != ei; ++i) {
+    if (sm.getFileID(i->getBegin()) == wantedFileID || sm.getFileID(i->getEnd()) == wantedFileID)
+      wantedRanges.push_back(*i);
+  }
+
+  skipped->count = wantedRanges.size();
+  skipped->ranges = new CXSourceRange[skipped->count];
+  for (unsigned i = 0, ei = skipped->count; i != ei; ++i)
+    skipped->ranges[i] = cxloc::translateSourceRange(Ctx, wantedRanges[i]);
+
+  return skipped;
+}
+
+void clang_disposeSourceRangeList(CXSourceRangeList *ranges) {
+  if (ranges) {
+    delete[] ranges->ranges;
+    delete ranges;
+  }
 }
 
 } // end extern "C"

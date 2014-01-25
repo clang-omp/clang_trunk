@@ -16,9 +16,11 @@
 
 #include "CGBuilder.h"
 #include "CGDebugInfo.h"
+#include "CGLoopInfo.h"
 #include "CGValue.h"
-#include "EHScopeStack.h"
 #include "CodeGenModule.h"
+#include "CodeGenPGO.h"
+#include "EHScopeStack.h"
 #include "clang/AST/CharUnits.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
@@ -129,6 +131,7 @@ public:
   const TargetInfo &Target;
 
   typedef std::pair<llvm::Value *, llvm::Value *> ComplexPairTy;
+  LoopInfoStack LoopStack;
   CGBuilderTy Builder;
 
   /// CurFuncDecl - Holds the Decl for the current outermost
@@ -136,6 +139,9 @@ public:
   const Decl *CurFuncDecl;
   /// CurCodeDecl - This is the inner-most code context, which includes blocks.
   const Decl *CurCodeDecl;
+  /// Root CodeGenFunction for OpenMP context in which current CodeGenFunction
+  /// was created ().
+  CodeGenFunction *OpenMPRoot;
   const CGFunctionInfo *CurFnInfo;
   QualType FnRetTy;
   llvm::Function *CurFn;
@@ -229,6 +235,136 @@ public:
   };
   CGCapturedStmtInfo *CapturedStmtInfo;
 
+  class CGSIMDForStmtInfo; // Defined below, after simd wrappers.
+
+  /// \brief Wrapper for "#pragma simd" and "#pragma omp simd".
+  class CGPragmaSimdWrapper {
+    public:
+      // \brief Helper for EmitPragmaSimd - process 'safelen' clause.
+      virtual bool emitSafelen(CodeGenFunction *CGF) const = 0;
+
+      // \brief Emit updates of local variables from clauses
+      // and loop counters in the beginning of __simd_helper.
+      virtual bool walkLocalVariablesToEmit(
+                      CodeGenFunction *CGF,
+                      CGSIMDForStmtInfo *Info) const = 0;
+
+      /// \brief Emit the SIMD loop initalization, loop stride expression
+      /// as loop invariants, and cache those values.
+      virtual void emitInit(CodeGenFunction &CGF,
+          llvm::Value *&LoopIndex, llvm::Value *&LoopCount) = 0;
+
+      /// \brief Emit the loop increment.
+      virtual void emitIncrement(CodeGenFunction &CGF,
+                                 llvm::Value *IndexVar) const = 0;
+
+      // \brief Emit final values of loop counters and linear vars.
+      virtual void emitLinearFinal(CodeGenFunction &CGF) const = 0;
+
+      /// \brief Get the beginning location of for stmt.
+      virtual SourceLocation getForLoc() const = 0;
+
+      /// \brief Get the source range.
+      virtual SourceRange getSourceRange() const = 0;
+
+      /// \brief Retrieve the initialization expression.
+      virtual const Stmt *getInit() const = 0;
+
+      /// \brief Retrieve the loop condition expression.
+      virtual const Expr *getCond() const = 0;
+
+      /// \brief Retrieve the loop body.
+      virtual const CapturedStmt *getAssociatedStmt() const = 0;
+
+      /// \brief Retrieve the loop count expression.
+      virtual const Expr *getLoopCount() const = 0;
+
+      /// \brief Extract the loop body from the collapsed loop nest.
+      /// Useful for openmp (it is noop for SIMDForStmt).
+      virtual Stmt *extractLoopBody(Stmt *S) const = 0;
+
+      /// \brief Return true if it is openmp pragma.
+      virtual bool isOmp() const = 0;
+
+      /// \brief Get the wrapped SIMDForStmt or OMPSimdDirective.
+      virtual const Stmt *getStmt() const = 0;
+
+      virtual ~CGPragmaSimdWrapper() { };
+  };
+
+
+  class CGPragmaOmpSimd : public CGPragmaSimdWrapper {
+    public:
+      CGPragmaOmpSimd(const OMPExecutableDirective *S)
+        : SimdOmp(S) {}
+
+      virtual bool emitSafelen(CodeGenFunction *CGF) const LLVM_OVERRIDE;
+      virtual bool walkLocalVariablesToEmit(
+                      CodeGenFunction *CGF,
+                      CGSIMDForStmtInfo *Info) const LLVM_OVERRIDE;
+
+      virtual void emitInit(CodeGenFunction &CGF,
+          llvm::Value *&LoopIndex, llvm::Value *&LoopCount) LLVM_OVERRIDE;
+
+      virtual void emitIncrement(CodeGenFunction &CGF,
+                                 llvm::Value *IndexVar) const LLVM_OVERRIDE { }
+
+      virtual void emitLinearFinal(CodeGenFunction &CGF) const LLVM_OVERRIDE;
+
+      virtual SourceLocation getForLoc() const LLVM_OVERRIDE;
+      virtual SourceRange getSourceRange() const LLVM_OVERRIDE;
+      virtual const Stmt *getInit() const LLVM_OVERRIDE;
+      virtual const Expr *getCond() const LLVM_OVERRIDE;
+      virtual const CapturedStmt *getAssociatedStmt() const LLVM_OVERRIDE;
+      virtual const Expr *getLoopCount() const LLVM_OVERRIDE;
+      virtual Stmt *extractLoopBody(Stmt *S) const LLVM_OVERRIDE;
+      virtual bool isOmp() const LLVM_OVERRIDE { return true; }
+      virtual const Stmt *getStmt() const LLVM_OVERRIDE { return SimdOmp; }
+      virtual ~CGPragmaOmpSimd() LLVM_OVERRIDE { }
+
+    private:
+      const OMPExecutableDirective *SimdOmp;
+  };
+
+  /// \brief API for SIMD for statement code generation.
+  /// This class is intended to provide an interface to CG to work in the
+  /// same manner with "#pragma simd" and "#pragma omp simd", using wrapper
+  /// (CGPragmaSimdWrapper) for addressing any differences between them.
+  class CGSIMDForStmtInfo : public CGCapturedStmtInfo {
+  public:
+    CGSIMDForStmtInfo(const CGPragmaSimdWrapper &Wr, llvm::MDNode *LoopID)
+      : CGCapturedStmtInfo(*(Wr.getAssociatedStmt()), CR_SIMDFor),
+        Wrapper(Wr), LoopID(LoopID) { }
+
+    virtual StringRef getHelperName() const { return "__simd_for_helper"; }
+
+    virtual void EmitBody(CodeGenFunction &CGF, Stmt *S) {
+      CGF.EmitSIMDForHelperBody(Wrapper.extractLoopBody(S));
+    }
+
+    llvm::MDNode *getLoopID() const { return LoopID; }
+
+
+    bool isOmp() const { return Wrapper.isOmp(); }
+    const Stmt *getStmt() const { return Wrapper.getStmt(); }
+
+    // \brief Emit updates of local variables from clauses
+    // and loop counters in the beginning of __simd_helper.
+    bool walkLocalVariablesToEmit(CodeGenFunction *CGF) {
+      return Wrapper.walkLocalVariablesToEmit(CGF, this);
+    }
+
+    static bool classof(const CGSIMDForStmtInfo *) { return true; }
+    static bool classof(const CGCapturedStmtInfo *I) {
+      return I->getKind() == CR_SIMDFor;
+    }
+  private:
+    /// \brief Wrapper around SIMDForStmt/OMPSimdDirective.
+    const CGPragmaSimdWrapper &Wrapper;
+    /// \brief The loop id metadata.
+    llvm::MDNode *LoopID;
+
+  };
   /// BoundsChecking - Emit run-time bounds checks. Higher values mean
   /// potentially higher performance penalties.
   unsigned char BoundsChecking;
@@ -593,11 +729,6 @@ public:
   /// on to \arg Dest.
   void EmitBranchThroughCleanup(JumpDest Dest);
   
-  /// isObviouslyBranchWithoutCleanups - Return true if a branch to the
-  /// specified destination obviously has no cleanups to run.  'false' is always
-  /// a conservatively correct answer for this method.
-  bool isObviouslyBranchWithoutCleanups(JumpDest Dest) const;
-
   /// popCatchScope - Pops the catch scope at the top of the EHScope
   /// stack, emitting any required code (other than the catch handlers
   /// themselves).
@@ -830,19 +961,36 @@ private:
   llvm::DenseMap<const LabelDecl*, JumpDest> LabelMap;
 
   // BreakContinueStack - This keeps track of where break and continue
-  // statements should jump to.
+  // statements should jump to and the associated base counter for
+  // instrumentation.
   struct BreakContinue {
-    BreakContinue(JumpDest Break, JumpDest Continue)
-      : BreakBlock(Break), ContinueBlock(Continue) {}
+    BreakContinue(JumpDest Break, JumpDest Continue, RegionCounter *LoopCnt,
+                  bool CountBreak = true)
+      : BreakBlock(Break), ContinueBlock(Continue), LoopCnt(LoopCnt),
+        CountBreak(CountBreak) {}
 
     JumpDest BreakBlock;
     JumpDest ContinueBlock;
+    RegionCounter *LoopCnt;
+    bool CountBreak;
   };
   SmallVector<BreakContinue, 8> BreakContinueStack;
+
+  CodeGenPGO PGO;
+
+public:
+  /// Get a counter for instrumentation of the region associated with the given
+  /// statement.
+  RegionCounter getPGORegionCounter(const Stmt *S) {
+    return RegionCounter(PGO, S);
+  }
+private:
 
   /// SwitchInsn - This is nearest current switch instruction. It is null if
   /// current context is not in a switch.
   llvm::SwitchInst *SwitchInsn;
+  /// The branch weights of SwitchInsn when doing instrumentation based PGO.
+  SmallVector<uint64_t, 16> *SwitchWeights;
 
   /// CaseRangeBlock - This block holds if condition check for last case
   /// statement range in current switch instruction.
@@ -875,6 +1023,22 @@ private:
   SourceLocation LastStopPoint;
 
 public:
+  /// This class is used for instantiation of local variables, but restores
+  /// LocalDeclMap state after instantiation. If Empty is true, the LocalDeclMap
+  /// is cleared completely and then restored to original state upon
+  /// destruction.
+  class LocalVarsDeclGuard {
+  private:
+    CodeGenFunction &CGF;
+    DeclMapTy LocalDeclMap;
+  public:
+    LocalVarsDeclGuard(CodeGenFunction &CGF, bool Empty = false)
+      : CGF(CGF), LocalDeclMap(CGF.LocalDeclMap) {
+        if (Empty) CGF.LocalDeclMap.clear();
+      }
+    ~LocalVarsDeclGuard() { CGF.LocalDeclMap = LocalDeclMap; }
+  };
+
   /// A scope within which we are constructing the fields of an object which
   /// might use a CXXDefaultInitExpr. This stashes away a 'this' value to use
   /// if we need to evaluate a CXXDefaultInitExpr within the evaluation.
@@ -938,6 +1102,9 @@ private:
   /// handling code.
   SourceLocation CurEHLocation;
 
+  /// ExceptionsDisabled - Whether exceptions are currently disabled.
+  bool ExceptionsDisabled;
+
   /// ByrefValueInfoMap - For each __block variable, contains a pair of the LLVM
   /// type as well as the field number that contains the actual data.
   llvm::DenseMap<const ValueDecl *, std::pair<llvm::Type *,
@@ -957,7 +1124,7 @@ private:
   ///   "work_group_size_hint", and three 32-bit integers X, Y and Z.
   /// - A node for the reqd_work_group_size(X,Y,Z) qualifier contains string 
   ///   "reqd_work_group_size", and three 32-bit integers X, Y and Z.
-  void EmitOpenCLKernelMetadata(const FunctionDecl *FD, 
+  void EmitOpenCLKernelMetadata(const FunctionDecl *FD,
                                 llvm::Function *Fn);
 
 public:
@@ -1004,6 +1171,9 @@ public:
     if (!EHStack.requiresLandingPad()) return 0;
     return getInvokeDestImpl();
   }
+
+  void disableExceptions() { ExceptionsDisabled = true; }
+  void enableExceptions() { ExceptionsDisabled = false; }
 
   const TargetInfo &getTarget() const { return Target; }
   llvm::LLVMContext &getLLVMContext() { return CGM.getLLVMContext(); }
@@ -1149,7 +1319,7 @@ public:
   void EmitConstructorBody(FunctionArgList &Args);
   void EmitDestructorBody(FunctionArgList &Args);
   void emitImplicitAssignmentOperatorBody(FunctionArgList &Args);
-  void EmitFunctionBody(FunctionArgList &Args);
+  void EmitFunctionBody(FunctionArgList &Args, const Stmt *Body);
 
   void EmitForwardingCallToLambda(const CXXMethodDecl *LambdaCallOperator,
                                   CallArgList &CallArgs);
@@ -1165,6 +1335,11 @@ public:
   /// FinishFunction - Complete IR generation of the current function. It is
   /// legal to call this function even if there is no current insertion point.
   void FinishFunction(SourceLocation EndLoc=SourceLocation());
+
+  void StartThunk(llvm::Function *Fn, GlobalDecl GD, const CGFunctionInfo &FnInfo);
+
+  void EmitCallAndReturnForThunk(GlobalDecl GD, llvm::Value *Callee,
+                                 const ThunkInfo *Thunk);
 
   /// GenerateThunk - Generate a thunk for the given method.
   void GenerateThunk(llvm::Function *Fn, const CGFunctionInfo &FnInfo,
@@ -1856,10 +2031,20 @@ public:
   void EmitSEHTryStmt(const SEHTryStmt &S);
   void EmitCXXForRangeStmt(const CXXForRangeStmt &S);
 
+  LValue InitCapturedStruct(const CapturedStmt &S);
   llvm::Function *EmitCapturedStmt(const CapturedStmt &S, CapturedRegionKind K);
   llvm::Function *GenerateCapturedStmtFunction(const CapturedDecl *CD,
                                                const RecordDecl *RD,
                                                SourceLocation Loc);
+
+  void EmitPragmaSimd(CGPragmaSimdWrapper &W);
+  llvm::Function *EmitSimdFunction(CGPragmaSimdWrapper &W);
+
+  void EmitSIMDForHelperCall(llvm::Function *BodyFunc,
+                             LValue CapStruct, llvm::Value *LoopIndex,
+                             bool IsLastIter);
+  void EmitSIMDForHelperBody(const Stmt *S);
+
   llvm::Value *GenerateCapturedStmtArgument(const CapturedStmt &S);
   void EmitCapturedStmtInlined(const CapturedStmt &S, CapturedRegionKind K,
                                llvm::Value *Arg,
@@ -1870,6 +2055,8 @@ public:
 public:
   void EmitOMPParallelDirective(const OMPParallelDirective &S);
   void EmitOMPForDirective(const OMPForDirective &S);
+  void EmitOMPSimdDirective(const OMPSimdDirective &S);
+  void EmitOMPForSimdDirective(const OMPForSimdDirective &S);
   void EmitOMPTaskDirective(const OMPTaskDirective &S);
   void EmitOMPSectionsDirective(const OMPSectionsDirective &S);
   void EmitOMPSectionDirective(const OMPSectionDirective &S);
@@ -1954,6 +2141,9 @@ public:
     ArrayRef<const Expr *>::iterator VarIter2,
     llvm::Value *Dst,
     llvm::Value *Src);
+  void EmitOMPDirectiveWithLoop(
+    OpenMPDirectiveKind DKind,
+    const OMPExecutableDirective &S);
 
   //===--------------------------------------------------------------------===//
   //                         LValue Expression Emission
@@ -2254,6 +2444,11 @@ public:
   /// is unhandled by the current target.
   llvm::Value *EmitTargetBuiltinExpr(unsigned BuiltinID, const CallExpr *E);
 
+  llvm::Value *EmitAArch64CompareBuiltinExpr(llvm::Value *Op, llvm::Type *Ty,
+                                             const llvm::CmpInst::Predicate Fp,
+                                             const llvm::CmpInst::Predicate Ip,
+                                             const llvm::Twine &Name = "");
+  llvm::Value *EmitAArch64CompareBuiltinExpr(llvm::Value *Op, llvm::Type *Ty);
   llvm::Value *EmitAArch64BuiltinExpr(unsigned BuiltinID, const CallExpr *E);
   llvm::Value *EmitARMBuiltinExpr(unsigned BuiltinID, const CallExpr *E);
   llvm::Value *EmitNeonCall(llvm::Function *F,
@@ -2510,8 +2705,10 @@ public:
   /// EmitBranchOnBoolExpr - Emit a branch on a boolean condition (e.g. for an
   /// if statement) to the specified blocks.  Based on the condition, this might
   /// try to simplify the codegen of the conditional based on the branch.
+  /// TrueCount should be the number of times we expect the condition to
+  /// evaluate to true based on PGO data.
   void EmitBranchOnBoolExpr(const Expr *Cond, llvm::BasicBlock *TrueBlock,
-                            llvm::BasicBlock *FalseBlock);
+                            llvm::BasicBlock *FalseBlock, uint64_t TrueCount);
 
   /// \brief Emit a description of a type in a format suitable for passing to
   /// a runtime sanitizer handler.
@@ -2589,69 +2786,81 @@ private:
                                   std::string &ConstraintStr,
                                   SourceLocation Loc);
 
+public:
   /// EmitCallArgs - Emit call arguments for a function.
-  /// The CallArgTypeInfo parameter is used for iterating over the known
-  /// argument types of the function being called.
-  template<typename T>
-  void EmitCallArgs(CallArgList& Args, const T* CallArgTypeInfo,
+  template <typename T>
+  void EmitCallArgs(CallArgList &Args, const T *CallArgTypeInfo,
                     CallExpr::const_arg_iterator ArgBeg,
                     CallExpr::const_arg_iterator ArgEnd,
                     bool ForceColumnInfo = false) {
-    CGDebugInfo *DI = getDebugInfo();
-    SourceLocation CallLoc;
-    if (DI) CallLoc = DI->getLocation();
-
-    CallExpr::const_arg_iterator Arg = ArgBeg;
-
-    // First, use the argument types that the type info knows about
     if (CallArgTypeInfo) {
-      for (typename T::arg_type_iterator I = CallArgTypeInfo->arg_type_begin(),
-           E = CallArgTypeInfo->arg_type_end(); I != E; ++I, ++Arg) {
-        assert(Arg != ArgEnd && "Running over edge of argument list!");
-        QualType ArgType = *I;
-#ifndef NDEBUG
-        QualType ActualArgType = Arg->getType();
-        if (ArgType->isPointerType() && ActualArgType->isPointerType()) {
-          QualType ActualBaseType =
-            ActualArgType->getAs<PointerType>()->getPointeeType();
-          QualType ArgBaseType =
-            ArgType->getAs<PointerType>()->getPointeeType();
-          if (ArgBaseType->isVariableArrayType()) {
-            if (const VariableArrayType *VAT =
-                getContext().getAsVariableArrayType(ActualBaseType)) {
-              if (!VAT->getSizeExpr())
-                ActualArgType = ArgType;
-            }
-          }
-        }
-        assert(getContext().getCanonicalType(ArgType.getNonReferenceType()).
-               getTypePtr() ==
-               getContext().getCanonicalType(ActualArgType).getTypePtr() &&
-               "type mismatch in call argument!");
-#endif
-        EmitCallArg(Args, *Arg, ArgType);
-
-        // Each argument expression could modify the debug
-        // location. Restore it.
-        if (DI) DI->EmitLocation(Builder, CallLoc, ForceColumnInfo);
-      }
-
-      // Either we've emitted all the call args, or we have a call to a
-      // variadic function.
-      assert((Arg == ArgEnd || CallArgTypeInfo->isVariadic()) &&
-             "Extra arguments in non-variadic function!");
-
-    }
-
-    // If we still have any arguments, emit them using the type of the argument.
-    for (; Arg != ArgEnd; ++Arg) {
-      EmitCallArg(Args, *Arg, Arg->getType());
-
-      // Restore the debug location.
-      if (DI) DI->EmitLocation(Builder, CallLoc, ForceColumnInfo);
+      EmitCallArgs(Args, CallArgTypeInfo->isVariadic(),
+                   CallArgTypeInfo->arg_type_begin(),
+                   CallArgTypeInfo->arg_type_end(), ArgBeg, ArgEnd,
+                   ForceColumnInfo);
+    } else {
+      // T::arg_type_iterator might not have a default ctor.
+      const QualType *NoIter = 0;
+      EmitCallArgs(Args, /*AllowExtraArguments=*/true, NoIter, NoIter, ArgBeg,
+                   ArgEnd, ForceColumnInfo);
     }
   }
 
+  template<typename ArgTypeIterator>
+  void EmitCallArgs(CallArgList& Args,
+                    bool AllowExtraArguments,
+                    ArgTypeIterator ArgTypeBeg,
+                    ArgTypeIterator ArgTypeEnd,
+                    CallExpr::const_arg_iterator ArgBeg,
+                    CallExpr::const_arg_iterator ArgEnd,
+                    bool ForceColumnInfo = false) {
+    SmallVector<QualType, 16> ArgTypes;
+    CallExpr::const_arg_iterator Arg = ArgBeg;
+
+    // First, use the argument types that the type info knows about
+    for (ArgTypeIterator I = ArgTypeBeg, E = ArgTypeEnd; I != E; ++I, ++Arg) {
+      assert(Arg != ArgEnd && "Running over edge of argument list!");
+#ifndef NDEBUG
+      QualType ArgType = *I;
+      QualType ActualArgType = Arg->getType();
+      if (ArgType->isPointerType() && ActualArgType->isPointerType()) {
+        QualType ActualBaseType =
+            ActualArgType->getAs<PointerType>()->getPointeeType();
+        QualType ArgBaseType =
+            ArgType->getAs<PointerType>()->getPointeeType();
+        if (ArgBaseType->isVariableArrayType()) {
+          if (const VariableArrayType *VAT =
+              getContext().getAsVariableArrayType(ActualBaseType)) {
+            if (!VAT->getSizeExpr())
+              ActualArgType = ArgType;
+          }
+        }
+      }
+      assert(getContext().getCanonicalType(ArgType.getNonReferenceType()).
+             getTypePtr() ==
+             getContext().getCanonicalType(ActualArgType).getTypePtr() &&
+             "type mismatch in call argument!");
+#endif
+      ArgTypes.push_back(*I);
+    }
+
+    // Either we've emitted all the call args, or we have a call to variadic
+    // function or some other call that allows extra arguments.
+    assert((Arg == ArgEnd || AllowExtraArguments) &&
+           "Extra arguments in non-variadic function!");
+
+    // If we still have any arguments, emit them using the type of the argument.
+    for (; Arg != ArgEnd; ++Arg)
+      ArgTypes.push_back(Arg->getType());
+
+    EmitCallArgs(Args, ArgTypes, ArgBeg, ArgEnd, ForceColumnInfo);
+  }
+
+  void EmitCallArgs(CallArgList &Args, ArrayRef<QualType> ArgTypes,
+                    CallExpr::const_arg_iterator ArgBeg,
+                    CallExpr::const_arg_iterator ArgEnd, bool ForceColumnInfo);
+
+private:
   const TargetCodeGenInfo &getTargetHooks() const {
     return CGM.getTargetCodeGenInfo();
   }

@@ -275,6 +275,10 @@ static inline unsigned getIDNS(Sema::LookupNameKind NameKind,
     IDNS = Decl::IDNS_ObjCProtocol;
     break;
 
+  case Sema::LookupOMPDeclareReduction:
+    IDNS = Decl::IDNS_OMPDeclareReduction;
+    break;
+
   case Sema::LookupAnyName:
     IDNS = Decl::IDNS_Ordinary | Decl::IDNS_Tag | Decl::IDNS_Member
       | Decl::IDNS_Using | Decl::IDNS_Namespace | Decl::IDNS_ObjCProtocol
@@ -315,7 +319,7 @@ void LookupResult::configure() {
   }
 }
 
-void LookupResult::sanityImpl() const {
+bool LookupResult::sanity() const {
   // Note that this function is never called by NDEBUG builds. See
   // LookupResult::sanity().
   assert(ResultKind != NotFound || Decls.size() == 0);
@@ -330,6 +334,7 @@ void LookupResult::sanityImpl() const {
   assert((Paths != NULL) == (ResultKind == Ambiguous &&
                              (Ambiguity == AmbiguousBaseSubobjectTypes ||
                               Ambiguity == AmbiguousBaseSubobjects)));
+  return true;
 }
 
 // Necessary because CXXBasePaths is not complete in Sema.h
@@ -1685,6 +1690,9 @@ bool Sema::LookupQualifiedName(LookupResult &R, DeclContext *LookupCtx,
       BaseCallback = &LookupAnyMember;
       break;
 
+    case LookupOMPDeclareReduction:
+      BaseCallback = &CXXRecordDecl::FindOMPDeclareReductionMember;
+      break;
     case LookupUsingDeclName:
       // This lookup is for redeclarations only.
 
@@ -2545,7 +2553,7 @@ Sema::SpecialMemberOverloadResult *Sema::LookupSpecialMember(CXXRecordDecl *RD,
   // Now we perform lookup on the name we computed earlier and do overload
   // resolution. Lookup is only performed directly into the class since there
   // will always be a (possibly implicit) declaration to shadow any others.
-  OverloadCandidateSet OCS((SourceLocation()));
+  OverloadCandidateSet OCS(RD->getLocation());
   DeclContext::lookup_result R = RD->lookup(Name);
   assert(!R.empty() &&
          "lookup for a constructor or assignment operator was empty");
@@ -4064,7 +4072,7 @@ TypoCorrection Sema::CorrectTypo(const DeclarationNameInfo &TypoName,
   // In Microsoft mode, don't perform typo correction in a template member
   // function dependent context because it interferes with the "lookup into
   // dependent bases of class templates" feature.
-  if (getLangOpts().MicrosoftMode && CurContext->isDependentContext() &&
+  if (getLangOpts().MSVCCompat && CurContext->isDependentContext() &&
       isa<CXXMethodDecl>(CurContext))
     return TypoCorrection();
 

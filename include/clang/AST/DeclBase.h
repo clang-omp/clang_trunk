@@ -32,6 +32,7 @@ class DeclarationName;
 class DependentDiagnostic;
 class EnumDecl;
 class FunctionDecl;
+class FunctionType;
 class LinkageComputer;
 class LinkageSpecDecl;
 class Module;
@@ -164,7 +165,10 @@ public:
     /// This declaration is a function-local extern declaration of a
     /// variable or function. This may also be IDNS_Ordinary if it
     /// has been declared outside any function.
-    IDNS_LocalExtern         = 0x0800
+    IDNS_LocalExtern         = 0x0800,
+
+    /// This declaration is an OpenMP reduction.
+    IDNS_OMPDeclareReduction = 0x1000
   };
 
   /// ObjCDeclQualifier - 'Qualifiers' written next to the return and
@@ -289,7 +293,7 @@ protected:
   unsigned Hidden : 1;
   
   /// IdentifierNamespace - This specifies what IDNS_* namespace this lives in.
-  unsigned IdentifierNamespace : 12;
+  unsigned IdentifierNamespace : 13;
 
   /// \brief If 0, we have not computed the linkage of this declaration.
   /// Otherwise, it is the linkage + 1.
@@ -302,8 +306,24 @@ protected:
 
   template<typename decl_type> friend class Redeclarable;
 
+  /// \brief Allocate memory for a deserialized declaration.
+  ///
+  /// This routine must be used to allocate memory for any declaration that is
+  /// deserialized from a module file.
+  ///
+  /// \param Size The size of the allocated object.
+  /// \param Ctx The context in which we will allocate memory.
+  /// \param ID The global ID of the deserialized declaration.
+  /// \param Extra The amount of extra space to allocate after the object.
+  void *operator new(std::size_t Size, const ASTContext &Ctx, unsigned ID,
+                     std::size_t Extra = 0);
+
+  /// \brief Allocate memory for a non-deserialized declaration.
+  void *operator new(std::size_t Size, const ASTContext &Ctx,
+                     DeclContext *Parent, std::size_t Extra = 0);
+
 private:
-  void CheckAccessDeclContext() const;
+  bool AccessDeclContextSanity() const;
 
 protected:
 
@@ -329,18 +349,6 @@ protected:
   }
 
   virtual ~Decl();
-
-  /// \brief Allocate memory for a deserialized declaration.
-  ///
-  /// This routine must be used to allocate memory for any declaration that is
-  /// deserialized from a module file.
-  ///
-  /// \param Context The context in which we will allocate memory.
-  /// \param ID The global ID of the deserialized declaration.
-  /// \param Size The size of the allocated object.
-  static void *AllocateDeserializedDecl(const ASTContext &Context,
-                                        unsigned ID,
-                                        unsigned Size);
 
   /// \brief Update a potentially out-of-date declaration.
   void updateOutOfDate(IdentifierInfo &II) const;
@@ -409,15 +417,11 @@ public:
 
   void setAccess(AccessSpecifier AS) {
     Access = AS;
-#ifndef NDEBUG
-    CheckAccessDeclContext();
-#endif
+    assert(AccessDeclContextSanity());
   }
 
   AccessSpecifier getAccess() const {
-#ifndef NDEBUG
-    CheckAccessDeclContext();
-#endif
+    assert(AccessDeclContextSanity());
     return AccessSpecifier(Access);
   }
 
@@ -938,10 +942,15 @@ public:
                          raw_ostream &Out, const PrintingPolicy &Policy,
                          unsigned Indentation = 0);
   // Debuggers don't usually respect default arguments.
-  LLVM_ATTRIBUTE_USED void dump() const;
+  void dump() const;
   // Same as dump(), but forces color printing.
-  LLVM_ATTRIBUTE_USED void dumpColor() const;
+  void dumpColor() const;
   void dump(raw_ostream &Out) const;
+
+  /// \brief Looks through the Decl's underlying type to extract a FunctionType
+  /// when possible. Will return null if the type underlying the Decl does not
+  /// have a FunctionType.
+  const FunctionType *getFunctionType(bool BlocksToo = true) const;
 
 private:
   void setAttrsImpl(const AttrVec& Attrs, ASTContext &Ctx);
@@ -1158,6 +1167,14 @@ public:
   /// Examples of transparent contexts include: enumerations (except for
   /// C++0x scoped enums), and C++ linkage specifications.
   bool isTransparentContext() const;
+
+  /// \brief Determines whether this context or some of its ancestors is a
+  /// linkage specification context that specifies C linkage.
+  bool isExternCContext() const;
+
+  /// \brief Determines whether this context or some of its ancestors is a
+  /// linkage specification context that specifies C++ linkage.
+  bool isExternCXXContext() const;
 
   /// \brief Determine whether this declaration context is equivalent
   /// to the declaration context DC.
@@ -1608,9 +1625,9 @@ public:
   static bool classof(const Decl *D);
   static bool classof(const DeclContext *D) { return true; }
 
-  LLVM_ATTRIBUTE_USED void dumpDeclContext() const;
-  LLVM_ATTRIBUTE_USED void dumpLookups() const;
-  LLVM_ATTRIBUTE_USED void dumpLookups(llvm::raw_ostream &OS) const;
+  void dumpDeclContext() const;
+  void dumpLookups() const;
+  void dumpLookups(llvm::raw_ostream &OS) const;
 
 private:
   void reconcileExternalVisibleStorage();

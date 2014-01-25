@@ -15,7 +15,7 @@ class S2 {
 public:
   S2():a(0) { }
   S2(S2 &s2):a(s2.a) { }
-  static float S2s; // expected-note {{'S2s' declared here}} expected-note {{predetermined as shared}}
+  static float S2s; // expected-note {{predetermined as shared}}
   static const float S2sc;
 };
 const float S2::S2sc = 0; // expected-note {{'S2sc' defined here}}
@@ -67,16 +67,17 @@ int main(int argc, char **argv) {
   S5 g(5);
   int i;
   int &j = i; // expected-note 2 {{'j' defined here}}
-  S3 &p = k;
+  S3 &p = k; // expected-note 2 {{'p' defined here}}
   const int &r = da[i]; // expected-note {{'r' defined here}}
   int &q = qa[i]; // expected-note {{'q' defined here}}
-  #pragma omp parallel reduction // expected-error {{expected '(' after 'reduction'}} expected-error {{expected reduction identifier}}
+  float fl; // expected-note {{'fl' defined here}}
+  #pragma omp parallel reduction // expected-error {{expected '(' after 'reduction'}} expected-error {{expected unqualified-id}} expected-error {{expected ':' in 'reduction' clause}}
   #pragma omp parallel reduction + // expected-error {{expected '(' after 'reduction'}} expected-error {{expected ':' in 'reduction' clause}} expected-error {{expected expression}}
-  #pragma omp parallel reduction ( // expected-error {{expected reduction identifier}} expected-error {{expected ')'}} expected-note {{to match this '('}}
+  #pragma omp parallel reduction ( // expected-error {{expected unqualified-id}} expected-error {{expected ':' in 'reduction' clause}} expected-error {{expected ')'}} expected-note {{to match this '('}}
   #pragma omp parallel reduction (- // expected-error {{expected ':' in 'reduction' clause}} expected-error {{expected expression}} expected-error {{expected ')'}} expected-note {{to match this '('}}
-  #pragma omp parallel reduction () // expected-error {{expected reduction identifier}}
+  #pragma omp parallel reduction () // expected-error {{expected unqualified-id}} expected-error {{expected ':' in 'reduction' clause}}
   #pragma omp parallel reduction (*) // expected-error {{expected ':' in 'reduction' clause}} expected-error {{expected expression}}
-  #pragma omp parallel reduction (\) // expected-error {{expected reduction identifier}} expected-error {{expected ':' in 'reduction' clause}}
+  #pragma omp parallel reduction (\) // expected-error {{expected unqualified-id}} expected-error {{expected ':' in 'reduction' clause}} expected-error {{expected expression}}
   #pragma omp parallel reduction (&: argc // expected-error {{expected ')'}} expected-note {{to match this '('}}
   #pragma omp parallel reduction (| :argc, // expected-error {{expected expression}} expected-error {{expected ')'}} expected-note {{to match this '('}}
   #pragma omp parallel reduction (|| :argc > 0 ? argv[1] : argv[2]) // expected-error {{expected variable name}}
@@ -88,13 +89,15 @@ int main(int argc, char **argv) {
   #pragma omp parallel reduction(+ : ba) // expected-error {{arguments of OpenMP clause 'reduction' cannot be of array type}}
   #pragma omp parallel reduction(* : ca) // expected-error {{arguments of OpenMP clause 'reduction' cannot be of array type}}
   #pragma omp parallel reduction(- : da) // expected-error {{arguments of OpenMP clause 'reduction' cannot be of array type}}
-  #pragma omp parallel reduction(^ : S2::S2s) // expected-error {{arguments of OpenMP clause 'reduction' with bitwise operators cannot be of floating type}}
+  #pragma omp parallel reduction(^ : fl) // expected-error {{arguments of OpenMP clause 'reduction' with bitwise operators cannot be of floating type}}
   #pragma omp parallel reduction(&& : S2::S2s) // expected-error {{shared variable cannot be reduction}}
   #pragma omp parallel reduction(&& : S2::S2sc) // expected-error {{const-qualified variable cannot be reduction}}
   #pragma omp parallel reduction(& : e, g) // expected-error {{reduction variable must have an accessible, unambiguous default constructor}} expected-error {{no viable overloaded '&='}}
   #pragma omp parallel reduction(+ : h, k) // expected-error {{threadprivate or thread local variable cannot be reduction}}
   #pragma omp parallel reduction(+ : o) // expected-error {{no viable overloaded '+='}}
   #pragma omp parallel private(i), reduction(+ : j), reduction(+:q) // expected-error 2 {{argument of OpenMP clause 'reduction' must reference the same object in all threads}}
+  #pragma omp parallel reduction(+ : p), reduction(+ : p) // expected-error 2 {{argument of OpenMP clause 'reduction' must reference the same object in all threads}}
+  {}
   #pragma omp parallel reduction(+ : p), reduction(+ : p) // expected-error {{variable can appear only once in OpenMP 'reduction' clause}} expected-note {{previously referenced here}}
   #pragma omp parallel reduction(+ : r) // expected-error {{const-qualified variable cannot be reduction}}
   foo();

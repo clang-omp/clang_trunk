@@ -213,7 +213,6 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::AsTypeExprClass:
   case Stmt::AtomicExprClass:
   case Stmt::BinaryConditionalOperatorClass:
-  case Stmt::BinaryTypeTraitExprClass:
   case Stmt::TypeTraitExprClass:
   case Stmt::CXXBindTemporaryExprClass:
   case Stmt::CXXDefaultArgExprClass:
@@ -236,7 +235,6 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::ShuffleVectorExprClass:
   case Stmt::ConvertVectorExprClass:
   case Stmt::UnaryExprOrTypeTraitExprClass:
-  case Stmt::UnaryTypeTraitExprClass:
   case Stmt::VAArgExprClass:
   case Stmt::ObjCArrayLiteralClass:
   case Stmt::ObjCDictionaryLiteralClass:
@@ -513,6 +511,12 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
     break;
   case Stmt::OMPForDirectiveClass:
     K = CXCursor_OMPForDirective;
+    break;
+  case Stmt::OMPSimdDirectiveClass:
+    K = CXCursor_OMPSimdDirective;
+    break;
+  case Stmt::OMPForSimdDirectiveClass:
+    K = CXCursor_OMPForSimdDirective;
     break;
   case Stmt::OMPSectionsDirectiveClass:
     K = CXCursor_OMPSectionsDirective;

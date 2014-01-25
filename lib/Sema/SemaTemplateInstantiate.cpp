@@ -76,8 +76,18 @@ Sema::getTemplateInstantiationArgs(NamedDecl *D,
       // If this variable template specialization was instantiated from a
       // specialized member that is a variable template, we're done.
       assert(Spec->getSpecializedTemplate() && "No variable template?");
-      if (Spec->getSpecializedTemplate()->isMemberSpecialization())
-        return Result;
+      llvm::PointerUnion<VarTemplateDecl*,
+                         VarTemplatePartialSpecializationDecl*> Specialized
+                             = Spec->getSpecializedTemplateOrPartial();
+      if (VarTemplatePartialSpecializationDecl *Partial =
+              Specialized.dyn_cast<VarTemplatePartialSpecializationDecl *>()) {
+        if (Partial->isMemberSpecialization())
+          return Result;
+      } else {
+        VarTemplateDecl *Tmpl = Specialized.get<VarTemplateDecl *>();
+        if (Tmpl->isMemberSpecialization())
+          return Result;
+      }
     }
 
     // If we have a template template parameter with translation unit context,
@@ -917,7 +927,8 @@ namespace {
     }
 
     ExprResult TransformLambdaScope(LambdaExpr *E,
-                                    CXXMethodDecl *NewCallOperator) {
+        CXXMethodDecl *NewCallOperator, 
+        ArrayRef<InitCaptureInfoTy> InitCaptureExprsAndTypes) {
       CXXMethodDecl *const OldCallOperator = E->getCallOperator();   
       // In the generic lambda case, we set the NewTemplate to be considered
       // an "instantiation" of the OldTemplate.
@@ -936,7 +947,8 @@ namespace {
         NewCallOperator->setInstantiationOfMemberFunction(OldCallOperator,
                                                     TSK_ImplicitInstantiation);
       
-      return inherited::TransformLambdaScope(E, NewCallOperator);
+      return inherited::TransformLambdaScope(E, NewCallOperator, 
+          InitCaptureExprsAndTypes);
     }
     TemplateParameterList *TransformTemplateParameterList(
                               TemplateParameterList *OrigTPL)  {
@@ -2352,8 +2364,7 @@ bool Sema::InstantiateClassTemplateSpecialization(
   // If we're dealing with a member template where the template parameters
   // have been instantiated, this provides the original template parameters
   // from which the member template's parameters were instantiated.
-  SmallVector<const NamedDecl *, 4> InstantiatedTemplateParameters;
-  
+
   if (Matched.size() >= 1) {
     SmallVectorImpl<MatchResult>::iterator Best = Matched.begin();
     if (Matched.size() == 1) {
@@ -2457,6 +2468,11 @@ Sema::InstantiateClassMembers(SourceLocation PointOfInstantiation,
                               CXXRecordDecl *Instantiation,
                         const MultiLevelTemplateArgumentList &TemplateArgs,
                               TemplateSpecializationKind TSK) {
+  assert(
+      (TSK == TSK_ExplicitInstantiationDefinition ||
+       TSK == TSK_ExplicitInstantiationDeclaration ||
+       (TSK == TSK_ImplicitInstantiation && Instantiation->isLocalClass())) &&
+      "Unexpected template specialization kind!");
   for (DeclContext::decl_iterator D = Instantiation->decls_begin(),
                                DEnd = Instantiation->decls_end();
        D != DEnd; ++D) {
@@ -2497,6 +2513,9 @@ Sema::InstantiateClassMembers(SourceLocation PointOfInstantiation,
           InstantiateFunctionDefinition(PointOfInstantiation, Function);
         } else {
           Function->setTemplateSpecializationKind(TSK, PointOfInstantiation);
+          if (TSK == TSK_ImplicitInstantiation)
+            PendingLocalImplicitInstantiations.push_back(
+                std::make_pair(Function, PointOfInstantiation));
         }
       }
     } else if (VarDecl *Var = dyn_cast<VarDecl>(*D)) {

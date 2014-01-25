@@ -17,8 +17,6 @@ let Flags = [CC1Option, NoDriverOption] in {
 // Target Options
 //===----------------------------------------------------------------------===//
 
-def cxx_abi : Separate<["-"], "cxx-abi">,
-  HelpText<"Target a particular C++ ABI type">;
 def target_abi : Separate<["-"], "target-abi">,
   HelpText<"Target a particular ABI type">;
 def target_cpu : Separate<["-"], "target-cpu">,
@@ -442,6 +440,8 @@ def ftype_visibility : Separate<["-"], "ftype-visibility">,
   HelpText<"Default type visibility">;
 def ftemplate_depth : Separate<["-"], "ftemplate-depth">,
   HelpText<"Maximum depth of recursive template instantiation">;
+def foperator_arrow_depth : Separate<["-"], "foperator-arrow-depth">,
+  HelpText<"Maximum number of 'operator->'s to call for a member access">;
 def fconstexpr_depth : Separate<["-"], "fconstexpr-depth">,
   HelpText<"Maximum depth of recursive constexpr function calls">;
 def fconstexpr_steps : Separate<["-"], "fconstexpr-steps">,

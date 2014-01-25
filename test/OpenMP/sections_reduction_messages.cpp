@@ -15,7 +15,7 @@ class S2 {
 public:
   S2():a(0) { }
   S2(S2 &s2):a(s2.a) { }
-  static float S2s; // expected-note {{'S2s' declared here}} expected-note {{predetermined as shared}}
+  static float S2s; // expected-note {{predetermined as shared}}
   static const float S2sc;
 };
 const float S2::S2sc = 0; // expected-note {{'S2sc' defined here}}
@@ -70,13 +70,14 @@ int main(int argc, char **argv) {
   S3 &p = k;
   const int &r = da[i]; // expected-note 2 {{'r' defined here}}
   int &q = qa[i]; // expected-note {{'q' defined here}}
+  float fl; // expected-note {{'fl' defined here}}
   #pragma omp sections reduction(+ : r) // expected-error {{const-qualified variable cannot be reduction}}
   {
     foo();
     #pragma omp section
     foo();
   }
-  #pragma omp sections reduction // expected-error {{expected '(' after 'reduction'}} expected-error {{expected reduction identifier}}
+  #pragma omp sections reduction // expected-error {{expected '(' after 'reduction'}} expected-error {{expected unqualified-id}} expected-error {{expected ':' in 'reduction' clause}}
   {
     foo();
     #pragma omp section
@@ -88,7 +89,7 @@ int main(int argc, char **argv) {
     #pragma omp section
     foo();
   }
-  #pragma omp sections reduction ( // expected-error {{expected reduction identifier}} expected-error {{expected ')'}} expected-note {{to match this '('}}
+  #pragma omp sections reduction ( // expected-error {{expected unqualified-id}} expected-error {{expected ':' in 'reduction' clause}} expected-error {{expected ')'}} expected-note {{to match this '('}}
   {
     foo();
     #pragma omp section
@@ -100,7 +101,7 @@ int main(int argc, char **argv) {
     #pragma omp section
     foo();
   }
-  #pragma omp sections reduction () // expected-error {{expected reduction identifier}}
+  #pragma omp sections reduction () // expected-error {{expected unqualified-id}} expected-error {{expected ':' in 'reduction' clause}}
   {
     foo();
     #pragma omp section
@@ -112,7 +113,7 @@ int main(int argc, char **argv) {
     #pragma omp section
     foo();
   }
-  #pragma omp sections reduction (\) // expected-error {{expected reduction identifier}} expected-error {{expected ':' in 'reduction' clause}}
+  #pragma omp sections reduction (\) // expected-error {{expected unqualified-id}} expected-error {{expected ':' in 'reduction' clause}} expected-error {{expected expression}}
   {
     foo();
     #pragma omp section
@@ -196,7 +197,7 @@ int main(int argc, char **argv) {
     foo();
   }
   #pragma omp parallel
-  #pragma omp sections reduction(^ : S2::S2s) // expected-error {{arguments of OpenMP clause 'reduction' with bitwise operators cannot be of floating type}}
+  #pragma omp sections reduction(^ : fl) // expected-error {{arguments of OpenMP clause 'reduction' with bitwise operators cannot be of floating type}}
   {
     foo();
     #pragma omp section

@@ -841,7 +841,9 @@ namespace clang {
       /// \brief An AtomicType record.
       TYPE_ATOMIC                = 40,
       /// \brief A DecayedType record.
-      TYPE_DECAYED               = 41
+      TYPE_DECAYED               = 41,
+      /// \brief An AdjustedType record.
+      TYPE_ADJUSTED              = 42
     };
 
     /// \brief The type IDs for special types constructed by semantic
@@ -1065,6 +1067,8 @@ namespace clang {
       DECL_IMPORT,
       /// \brief An OMPThreadPrivateDecl record.
       DECL_OMP_THREADPRIVATE,
+      /// \brief An OMPDeclareReductionDecl record.
+      DECL_OMP_DECLAREREDUCTION,
       /// \brief An EmptyDecl record.
       DECL_EMPTY
     };
@@ -1300,13 +1304,11 @@ namespace clang {
       EXPR_CXX_UNRESOLVED_MEMBER,        // UnresolvedMemberExpr
       EXPR_CXX_UNRESOLVED_LOOKUP,        // UnresolvedLookupExpr
 
-      EXPR_CXX_UNARY_TYPE_TRAIT,  // UnaryTypeTraitExpr
       EXPR_CXX_EXPRESSION_TRAIT,  // ExpressionTraitExpr
       EXPR_CXX_NOEXCEPT,          // CXXNoexceptExpr
 
       EXPR_OPAQUE_VALUE,          // OpaqueValueExpr
       EXPR_BINARY_CONDITIONAL_OPERATOR,  // BinaryConditionalOperator
-      EXPR_BINARY_TYPE_TRAIT,     // BinaryTypeTraitExpr
       EXPR_TYPE_TRAIT,            // TypeTraitExpr
       EXPR_ARRAY_TYPE_TRAIT,      // ArrayTypeTraitIntExpr
       
@@ -1331,9 +1333,11 @@ namespace clang {
       STMT_SEH_FINALLY,           // SEHFinallyStmt
       STMT_SEH_TRY,               // SEHTryStmt
 
-      // OpenMP drectives
+      // OpenMP directives
       STMT_OMP_PARALLEL_DIRECTIVE,
       STMT_OMP_FOR_DIRECTIVE,
+      STMT_OMP_SIMD_DIRECTIVE,
+      STMT_OMP_FOR_SIMD_DIRECTIVE,
       STMT_OMP_SECTIONS_DIRECTIVE,
       STMT_OMP_SECTION_DIRECTIVE,
       STMT_OMP_SINGLE_DIRECTIVE,

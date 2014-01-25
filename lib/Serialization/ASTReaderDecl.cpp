@@ -314,6 +314,7 @@ namespace clang {
     void VisitObjCPropertyDecl(ObjCPropertyDecl *D);
     void VisitObjCPropertyImplDecl(ObjCPropertyImplDecl *D);
     void VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D);
+    void VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D);
   };
 }
 
@@ -356,11 +357,14 @@ void ASTDeclReader::Visit(Decl *D) {
 }
 
 void ASTDeclReader::VisitDecl(Decl *D) {
-  if (D->isTemplateParameter()) {
+  if (D->isTemplateParameter() || D->isTemplateParameterPack() ||
+      isa<ParmVarDecl>(D)) {
     // We don't want to deserialize the DeclContext of a template
-    // parameter immediately, because the template parameter might be
-    // used in the formulation of its DeclContext. Use the translation
-    // unit DeclContext as a placeholder.
+    // parameter or of a parameter of a function template immediately.   These
+    // entities might be used in the formulation of its DeclContext (for
+    // example, a function parameter can be used in decltype() in trailing
+    // return type of the function).  Use the translation unit DeclContext as a
+    // placeholder.
     GlobalDeclID SemaDCIDForTemplateParmDecl = ReadDeclID(Record, Idx);
     GlobalDeclID LexicalDCIDForTemplateParmDecl = ReadDeclID(Record, Idx);
     Reader.addPendingDeclContextInfo(D,
@@ -755,6 +759,7 @@ void ASTDeclReader::VisitObjCInterfaceDecl(ObjCInterfaceDecl *ID) {
     Data.SuperClassLoc = ReadSourceLocation(Record, Idx);
 
     Data.EndLoc = ReadSourceLocation(Record, Idx);
+    Data.HasDesignatedInitializers = Record[Idx++];
     
     // Read the directly referenced protocols and their SourceLocations.
     unsigned NumProtocols = Record[Idx++];
@@ -798,8 +803,6 @@ void ASTDeclReader::VisitObjCIvarDecl(ObjCIvarDecl *IVD) {
   IVD->setNextIvar(0);
   bool synth = Record[Idx++];
   IVD->setSynthesize(synth);
-  bool backingIvarReferencedInAccessor = Record[Idx++];
-  IVD->setBackingIvarReferencedInAccessor(backingIvarReferencedInAccessor);
 }
 
 void ASTDeclReader::VisitObjCProtocolDecl(ObjCProtocolDecl *PD) {
@@ -1186,6 +1189,7 @@ void ASTDeclReader::ReadCXXDefinitionData(
   Data.HasProtectedFields = Record[Idx++];
   Data.HasPublicFields = Record[Idx++];
   Data.HasMutableFields = Record[Idx++];
+  Data.HasVariantMembers = Record[Idx++];
   Data.HasOnlyCMembers = Record[Idx++];
   Data.HasInClassInitializer = Record[Idx++];
   Data.HasUninitializedReferenceMember = Record[Idx++];
@@ -1934,6 +1938,22 @@ void ASTDeclReader::VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D) {
   D->setVars(Vars);
 }
 
+void ASTDeclReader::VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D) {
+  VisitDecl(D);
+  D->setDeclName(Reader.ReadDeclarationName(F, Record, Idx));
+  unsigned NumTypes = D->datalist_size();
+  SmallVector<OMPDeclareReductionDecl::ReductionData, 16> Data;
+  Data.reserve(NumTypes);
+  for (unsigned i = 0; i != NumTypes; ++i) {
+    QualType QTy = Reader.readType(F, Record, Idx);
+    SourceRange SR = Reader.ReadSourceRange(F, Record, Idx);
+    Expr *E1 = Reader.ReadExpr(F);
+    Expr *E2 = Reader.ReadExpr(F);
+    Data.push_back(OMPDeclareReductionDecl::ReductionData(QTy, SR, E1, E2));
+  }
+  D->setData(Data);
+}
+
 //===----------------------------------------------------------------------===//
 // Attribute Reading
 //===----------------------------------------------------------------------===//
@@ -2564,6 +2584,9 @@ Decl *ASTReader::ReadDeclRecord(DeclID ID) {
     break;
   case DECL_OMP_THREADPRIVATE:
     D = OMPThreadPrivateDecl::CreateDeserialized(Context, ID, Record[Idx++]);
+    break;
+  case DECL_OMP_DECLAREREDUCTION:
+    D = OMPDeclareReductionDecl::CreateDeserialized(Context, ID, Record[Idx++]);
     break;
   case DECL_EMPTY:
     D = EmptyDecl::CreateDeserialized(Context, ID);

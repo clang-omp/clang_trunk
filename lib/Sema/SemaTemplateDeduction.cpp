@@ -981,6 +981,17 @@ DeduceTemplateArgumentsByTypeMatch(Sema &S,
         Comparison.Qualifiers = ParamMoreQualified;
       else if (ArgQuals.isStrictSupersetOf(ParamQuals))
         Comparison.Qualifiers = ArgMoreQualified;
+      else if (ArgQuals.getObjCLifetime() != ParamQuals.getObjCLifetime() &&
+               ArgQuals.withoutObjCLifetime()
+                 == ParamQuals.withoutObjCLifetime()) {
+        // Prefer binding to non-__unsafe_autoretained parameters.
+        if (ArgQuals.getObjCLifetime() == Qualifiers::OCL_ExplicitNone &&
+            ParamQuals.getObjCLifetime())
+          Comparison.Qualifiers = ParamMoreQualified;
+        else if (ParamQuals.getObjCLifetime() == Qualifiers::OCL_ExplicitNone &&
+                 ArgQuals.getObjCLifetime())
+          Comparison.Qualifiers = ArgMoreQualified;
+      }
       RefParamComparisons->push_back(Comparison);
     }
 
@@ -2274,8 +2285,8 @@ Sema::DeduceTemplateArguments(ClassTemplatePartialSpecializationDecl *Partial,
     return Result;
 
   SmallVector<TemplateArgument, 4> DeducedArgs(Deduced.begin(), Deduced.end());
-  InstantiatingTemplate Inst(*this, Partial->getLocation(), Partial,
-                             DeducedArgs, Info);
+  InstantiatingTemplate Inst(*this, Info.getLocation(), Partial, DeducedArgs,
+                             Info);
   if (Inst.isInvalid())
     return TDK_InstantiationDepth;
 
@@ -2438,8 +2449,8 @@ Sema::DeduceTemplateArguments(VarTemplatePartialSpecializationDecl *Partial,
     return Result;
 
   SmallVector<TemplateArgument, 4> DeducedArgs(Deduced.begin(), Deduced.end());
-  InstantiatingTemplate Inst(*this, Partial->getLocation(), Partial,
-                             DeducedArgs, Info);
+  InstantiatingTemplate Inst(*this, Info.getLocation(), Partial, DeducedArgs,
+                             Info);
   if (Inst.isInvalid())
     return TDK_InstantiationDepth;
 
@@ -2524,8 +2535,8 @@ Sema::SubstituteExplicitTemplateArguments(
   // explicitly-specified template arguments against this function template,
   // and then substitute them into the function parameter types.
   SmallVector<TemplateArgument, 4> DeducedArgs(Deduced.begin(), Deduced.end());
-  InstantiatingTemplate Inst(*this, FunctionTemplate->getLocation(),
-                             FunctionTemplate, DeducedArgs,
+  InstantiatingTemplate Inst(*this, Info.getLocation(), FunctionTemplate,
+                             DeducedArgs,
            ActiveTemplateInstantiation::ExplicitTemplateArgumentSubstitution,
                              Info);
   if (Inst.isInvalid())
@@ -2687,13 +2698,16 @@ CheckOriginalCallArgDeduction(Sema &S, Sema::OriginalCallArg OriginalArg,
     Qualifiers AQuals = A.getQualifiers();
     Qualifiers DeducedAQuals = DeducedA.getQualifiers();
 
-    // Under Objective-C++ ARC, the deduced type may have implicitly been
-    // given strong lifetime. If so, update the original qualifiers to
-    // include this strong lifetime.
+    // Under Objective-C++ ARC, the deduced type may have implicitly
+    // been given strong or (when dealing with a const reference)
+    // unsafe_unretained lifetime. If so, update the original
+    // qualifiers to include this lifetime.
     if (S.getLangOpts().ObjCAutoRefCount &&
-        DeducedAQuals.getObjCLifetime() == Qualifiers::OCL_Strong &&
-        AQuals.getObjCLifetime() == Qualifiers::OCL_None) {
-      AQuals.setObjCLifetime(Qualifiers::OCL_Strong);
+        ((DeducedAQuals.getObjCLifetime() == Qualifiers::OCL_Strong &&
+          AQuals.getObjCLifetime() == Qualifiers::OCL_None) ||
+         (DeducedAQuals.hasConst() &&
+          DeducedAQuals.getObjCLifetime() == Qualifiers::OCL_ExplicitNone))) {
+      AQuals.setObjCLifetime(DeducedAQuals.getObjCLifetime());
     }
 
     if (AQuals == DeducedAQuals) {
@@ -2714,7 +2728,7 @@ CheckOriginalCallArgDeduction(Sema &S, Sema::OriginalCallArg OriginalArg,
   //
   // Also allow conversions which merely strip [[noreturn]] from function types
   // (recursively) as an extension.
-  // FIXME: Currently, this doesn't place nicely with qualfication conversions.
+  // FIXME: Currently, this doesn't play nicely with qualification conversions.
   bool ObjCLifetimeConversion = false;
   QualType ResultTy;
   if ((A->isAnyPointerType() || A->isMemberPointerType()) &&
@@ -2775,8 +2789,8 @@ Sema::FinishTemplateArgumentDeduction(FunctionTemplateDecl *FunctionTemplate,
   // Enter a new template instantiation context while we instantiate the
   // actual function declaration.
   SmallVector<TemplateArgument, 4> DeducedArgs(Deduced.begin(), Deduced.end());
-  InstantiatingTemplate Inst(*this, FunctionTemplate->getLocation(),
-                             FunctionTemplate, DeducedArgs,
+  InstantiatingTemplate Inst(*this, Info.getLocation(), FunctionTemplate,
+                             DeducedArgs,
               ActiveTemplateInstantiation::DeducedTemplateArgumentSubstitution,
                              Info);
   if (Inst.isInvalid())
@@ -3498,6 +3512,28 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
                                          Specialization, Info, &OriginalCallArgs);
 }
 
+QualType Sema::adjustCCAndNoReturn(QualType ArgFunctionType,
+                                   QualType FunctionType) {
+  if (ArgFunctionType.isNull())
+    return ArgFunctionType;
+
+  const FunctionProtoType *FunctionTypeP =
+      FunctionType->castAs<FunctionProtoType>();
+  CallingConv CC = FunctionTypeP->getCallConv();
+  bool NoReturn = FunctionTypeP->getNoReturnAttr();
+  const FunctionProtoType *ArgFunctionTypeP =
+      ArgFunctionType->getAs<FunctionProtoType>();
+  if (ArgFunctionTypeP->getCallConv() == CC &&
+      ArgFunctionTypeP->getNoReturnAttr() == NoReturn)
+    return ArgFunctionType;
+
+  FunctionType::ExtInfo EI = ArgFunctionTypeP->getExtInfo().withCallingConv(CC);
+  EI = EI.withNoReturn(NoReturn);
+  ArgFunctionTypeP =
+      cast<FunctionProtoType>(Context.adjustFunctionType(ArgFunctionTypeP, EI));
+  return QualType(ArgFunctionTypeP, 0);
+}
+
 /// \brief Deduce template arguments when taking the address of a function
 /// template (C++ [temp.deduct.funcaddr]) or matching a specialization to
 /// a template.
@@ -3535,6 +3571,8 @@ Sema::DeduceTemplateArguments(FunctionTemplateDecl *FunctionTemplate,
   TemplateParameterList *TemplateParams
     = FunctionTemplate->getTemplateParameters();
   QualType FunctionType = Function->getType();
+  if (!InOverloadResolution)
+    ArgFunctionType = adjustCCAndNoReturn(ArgFunctionType, FunctionType);
 
   // Substitute any explicit template arguments.
   LocalInstantiationScope InstScope(*this);
@@ -4586,8 +4624,7 @@ Sema::getMoreSpecializedPartialSpecialization(
                                             /*RefParamComparisons=*/0);
   if (Better1) {
     SmallVector<TemplateArgument, 4> DeducedArgs(Deduced.begin(),Deduced.end());
-    InstantiatingTemplate Inst(*this, PS2->getLocation(), PS2, DeducedArgs,
-                               Info);
+    InstantiatingTemplate Inst(*this, Loc, PS2, DeducedArgs, Info);
     Better1 = !::FinishTemplateArgumentDeduction(
         *this, PS2, PS1->getTemplateArgs(), Deduced, Info);
   }
@@ -4602,8 +4639,7 @@ Sema::getMoreSpecializedPartialSpecialization(
   if (Better2) {
     SmallVector<TemplateArgument, 4> DeducedArgs(Deduced.begin(),
                                                  Deduced.end());
-    InstantiatingTemplate Inst(*this, PS1->getLocation(), PS1, DeducedArgs,
-                               Info);
+    InstantiatingTemplate Inst(*this, Loc, PS1, DeducedArgs, Info);
     Better2 = !::FinishTemplateArgumentDeduction(
         *this, PS1, PS2->getTemplateArgs(), Deduced, Info);
   }
@@ -4626,7 +4662,7 @@ Sema::getMoreSpecializedPartialSpecialization(
   SmallVector<DeducedTemplateArgument, 4> Deduced;
   TemplateDeductionInfo Info(Loc);
 
-  assert(PS1->getSpecializedTemplate() == PS1->getSpecializedTemplate() &&
+  assert(PS1->getSpecializedTemplate() == PS2->getSpecializedTemplate() &&
          "the partial specializations being compared should specialize"
          " the same template.");
   TemplateName Name(PS1->getSpecializedTemplate());
@@ -4647,8 +4683,7 @@ Sema::getMoreSpecializedPartialSpecialization(
   if (Better1) {
     SmallVector<TemplateArgument, 4> DeducedArgs(Deduced.begin(),
                                                  Deduced.end());
-    InstantiatingTemplate Inst(*this, PS2->getLocation(), PS2,
-                               DeducedArgs, Info);
+    InstantiatingTemplate Inst(*this, Loc, PS2, DeducedArgs, Info);
     Better1 = !::FinishTemplateArgumentDeduction(*this, PS2,
                                                  PS1->getTemplateArgs(),
                                                  Deduced, Info);
@@ -4664,8 +4699,7 @@ Sema::getMoreSpecializedPartialSpecialization(
                                             /*RefParamComparisons=*/0);
   if (Better2) {
     SmallVector<TemplateArgument, 4> DeducedArgs(Deduced.begin(),Deduced.end());
-    InstantiatingTemplate Inst(*this, PS1->getLocation(), PS1,
-                               DeducedArgs, Info);
+    InstantiatingTemplate Inst(*this, Loc, PS1, DeducedArgs, Info);
     Better2 = !::FinishTemplateArgumentDeduction(*this, PS1,
                                                  PS2->getTemplateArgs(),
                                                  Deduced, Info);
