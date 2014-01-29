@@ -32,6 +32,9 @@
 /* First include the standard intrinsics. */
 #include <x86intrin.h>
 
+/* For the definition of jmp_buf. */
+#include <setjmp.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -56,6 +59,7 @@ __int64 __emul(int, int);
 unsigned __int64 __emulu(unsigned int, unsigned int);
 void __cdecl __fastfail(unsigned int);
 unsigned int __getcallerseflags(void);
+static __inline__
 void __halt(void);
 unsigned char __inbyte(unsigned short);
 void __inbytestring(unsigned short, unsigned char *, unsigned long);
@@ -92,6 +96,7 @@ static __inline__
 unsigned int __popcnt(unsigned int);
 static __inline__
 unsigned short __popcnt16(unsigned short);
+static __inline__
 unsigned __int64 __rdtsc(void);
 unsigned __int64 __rdtscp(unsigned int *);
 unsigned long __readcr0(void);
@@ -222,6 +227,7 @@ static __inline__
 long __cdecl _InterlockedExchangeAdd(long volatile *_Addend, long _Value);
 long _InterlockedExchangeAdd_HLEAcquire(long volatile *, long);
 long _InterlockedExchangeAdd_HLERelease(long volatile *, long);
+static __inline__
 short _InterlockedExchangeAdd16(short volatile *_Addend, short _Value);
 __int64 _InterlockedExchangeAdd64_HLEAcquire(__int64 volatile *, __int64);
 __int64 _InterlockedExchangeAdd64_HLERelease(__int64 volatile *, __int64);
@@ -276,10 +282,7 @@ unsigned __int64 __cdecl _rotr64(unsigned __int64 _Value, int _Shift);
 static __inline__
 unsigned char _rotr8(unsigned char _Value, unsigned char _Shift);
 int _sarx_i32(int, unsigned int);
-
-/* FIXME: Need definition for jmp_buf.
-   int __cdecl _setjmp(jmp_buf); */
-
+int __cdecl _setjmp(jmp_buf);
 unsigned int _shlx_u32(unsigned int, unsigned int);
 unsigned int _shrx_u32(unsigned int, unsigned int);
 void _Store_HLERelease(long volatile *, long);
@@ -307,6 +310,7 @@ void __addgsbyte(unsigned long, unsigned char);
 void __addgsdword(unsigned long, unsigned long);
 void __addgsqword(unsigned long, unsigned __int64);
 void __addgsword(unsigned long, unsigned short);
+static __inline__
 void __faststorefence(void);
 void __incgsbyte(unsigned long);
 void __incgsdword(unsigned long);
@@ -317,6 +321,7 @@ void __lwpval64(unsigned __int64, unsigned int, unsigned int);
 unsigned __int64 __lzcnt64(unsigned __int64);
 void __movsq(unsigned long long *, unsigned long long const *, size_t);
 __int64 __mulh(__int64, __int64);
+static __inline__
 unsigned __int64 __popcnt64(unsigned __int64);
 unsigned char __readgsbyte(unsigned long);
 unsigned long __readgsdword(unsigned long);
@@ -393,25 +398,33 @@ __int64 _InterlockedCompareExchange64_HLERelease(__int64 volatile *, __int64,
                                                  __int64);
 __int64 _InterlockedCompareExchange64_np(__int64 volatile *_Destination,
                                          __int64 _Exchange, __int64 _Comparand);
+static __inline__
 void *_InterlockedCompareExchangePointer(void *volatile *_Destination,
                                          void *_Exchange, void *_Comparand);
 void *_InterlockedCompareExchangePointer_np(void *volatile *_Destination,
                                             void *_Exchange, void *_Comparand);
+static __inline__
 __int64 _InterlockedDecrement64(__int64 volatile *_Addend);
+static __inline__
 __int64 _InterlockedExchange64(__int64 volatile *_Target, __int64 _Value);
+static __inline__
 __int64 _InterlockedExchangeAdd64(__int64 volatile *_Addend, __int64 _Value);
 void *_InterlockedExchangePointer(void *volatile *_Target, void *_Value);
+static __inline__
 __int64 _InterlockedIncrement64(__int64 volatile *_Addend);
 long _InterlockedOr_np(long volatile *_Value, long _Mask);
 short _InterlockedOr16_np(short volatile *_Value, short _Mask);
+static __inline__
 __int64 _InterlockedOr64(__int64 volatile *_Value, __int64 _Mask);
 __int64 _InterlockedOr64_np(__int64 volatile *_Value, __int64 _Mask);
 char _InterlockedOr8_np(char volatile *_Value, char _Mask);
 long _InterlockedXor_np(long volatile *_Value, long _Mask);
 short _InterlockedXor16_np(short volatile *_Value, short _Mask);
+static __inline__
 __int64 _InterlockedXor64(__int64 volatile *_Value, __int64 _Mask);
 __int64 _InterlockedXor64_np(__int64 volatile *_Value, __int64 _Mask);
 char _InterlockedXor8_np(char volatile *_Value, char _Mask);
+static __inline__
 unsigned __int64 _lzcnt_u64(unsigned __int64);
 __int64 _mul128(__int64 _Multiplier, __int64 _Multiplicand,
                 __int64 *_HighProduct);
@@ -421,7 +434,8 @@ unsigned int __cdecl _readgsbase_u32(void);
 unsigned __int64 __cdecl _readgsbase_u64(void);
 unsigned __int64 _rorx_u64(unsigned __int64, const unsigned int);
 __int64 _sarx_i64(__int64, unsigned int);
-int __cdecl _setjmpex(jmp_buf);
+/* FIXME: Need definition for jmp_buf.
+  int __cdecl _setjmpex(jmp_buf); */
 unsigned __int64 _shlx_u64(unsigned __int64, unsigned int);
 unsigned __int64 shrx_u64(unsigned __int64, unsigned int);
 unsigned __int64 _tzcnt_u64(unsigned __int64);
@@ -783,6 +797,14 @@ _InterlockedCompareExchange(long volatile *_Destination,
   return _Comparand;
 }
 #ifdef __x86_64__
+static __inline__ void *__attribute__((__always_inline__, __nodebug__))
+_InterlockedCompareExchangePointer(void *volatile *_Destination,
+                                   void *_Exchange, void *_Comparand) {
+  __atomic_compare_exchange(_Destination, &_Comparand, &_Exchange, 0, 0, 0);
+  return _Comparand;
+}
+#endif
+#ifdef __x86_64__
 static __inline__ __int64 __attribute__((__always_inline__, __nodebug__))
 _InterlockedCompareExchange64(__int64 volatile *_Destination,
                               __int64 _Exchange, __int64 _Comparand) {
@@ -808,6 +830,12 @@ __attribute__((deprecated("use other intrinsics or C++11 atomics instead")))
 _WriteBarrier(void) {
   __asm__ volatile ("" : : : "memory");
 }
+#ifdef __x86_64__
+static __inline__ void __attribute__((__always_inline__, __nodebug__))
+__faststorefence(void) {
+  __asm__ volatile("lock orq $0, (%%rsp)" : : : "memory");
+}
+#endif
 /*----------------------------------------------------------------------------*\
 |* readfs 
 |* (Pointers in address space #257 are relative to the FS segment register.)
@@ -862,6 +890,16 @@ _xgetbv(unsigned int __xcr_no) {
   unsigned int __eax, __edx;
   __asm__ ("xgetbv" : "=a" (__eax), "=d" (__edx) : "c" (__xcr_no));
   return ((unsigned __int64)__edx << 32) | __eax;
+}
+static __inline__ unsigned __int64 __attribute__((__always_inline__, __nodebug__))
+__rdtsc(void) {
+  unsigned int __eax, __edx;
+  __asm__ ("rdtsc" : "=a" (__eax), "=d" (__edx));
+  return ((unsigned __int64)__edx << 32) | __eax;
+}
+static __inline__ void __attribute__((__always_inline__, __nodebug__))
+__halt(void) {
+  __asm__ volatile ("hlt");
 }
 
 #ifdef __cplusplus

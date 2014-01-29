@@ -5129,7 +5129,7 @@ Sema::ActOnVariableDeclarator(Scope *S, Declarator &D, DeclContext *DC,
           << SourceRange(TemplateId->LAngleLoc, TemplateId->RAngleLoc)
           << FixItHint::CreateInsertion(D.getDeclSpec().getLocStart(),
                                         "template<> ");
-      IsVariableTemplateSpecialization = true;
+      IsExplicitSpecialization = true;
       TemplateParams = TemplateParameterList::Create(Context, SourceLocation(),
                                                      SourceLocation(), 0, 0,
                                                      SourceLocation());
@@ -5206,18 +5206,13 @@ Sema::ActOnVariableDeclarator(Scope *S, Declarator &D, DeclContext *DC,
 
     SetNestedNameSpecifier(NewVD, D);
 
-    // FIXME: Do we need D.getCXXScopeSpec().isSet()?
-    if (TemplateParams && TemplateParamLists.size() > 1 &&
-        (!IsVariableTemplateSpecialization || D.getCXXScopeSpec().isSet())) {
+    // If we have any template parameter lists that don't directly belong to
+    // the variable (matching the scope specifier), store them.
+    unsigned VDTemplateParamLists = TemplateParams ? 1 : 0;
+    if (TemplateParamLists.size() > VDTemplateParamLists)
       NewVD->setTemplateParameterListsInfo(
-          Context, TemplateParamLists.size() - 1, TemplateParamLists.data());
-    } else if (IsVariableTemplateSpecialization ||
-               (!TemplateParams && TemplateParamLists.size() > 0 &&
-                (D.getCXXScopeSpec().isSet()))) {
-      NewVD->setTemplateParameterListsInfo(Context,
-                                           TemplateParamLists.size(),
-                                           TemplateParamLists.data());
-    }
+          Context, TemplateParamLists.size() - VDTemplateParamLists,
+          TemplateParamLists.data());
 
     if (D.getDeclSpec().isConstexprSpecified())
       NewVD->setConstexpr(true);
@@ -7657,7 +7652,7 @@ static SourceRange getResultSourceRange(const FunctionDecl *FD) {
   if (!FunctionTL)
     return SourceRange();
 
-  TypeLoc ResultTL = FunctionTL.getResultLoc();
+  TypeLoc ResultTL = FunctionTL.getReturnLoc();
   if (ResultTL.getUnqualifiedLoc().getAs<BuiltinTypeLoc>())
     return ResultTL.getSourceRange();
 
@@ -8778,7 +8773,13 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
     }
   }
 
+  // Warn about externally-visible variables being defined without a
+  // prior declaration.  We only want to do this for global
+  // declarations, but we also specifically need to avoid doing it for
+  // class members because the linkage of an anonymous class can
+  // change if it's later given a typedef name.
   if (var->isThisDeclarationADefinition() &&
+      var->getDeclContext()->getRedeclContext()->isFileContext() &&
       var->isExternallyVisible() && var->hasLinkage() &&
       getDiagnostics().getDiagnosticLevel(
                        diag::warn_missing_variable_declarations,
@@ -8915,7 +8916,7 @@ Sema::FinalizeDeclaration(Decl *ThisDecl) {
   const DeclContext *DC = VD->getDeclContext();
   // If there's a #pragma GCC visibility in scope, and this isn't a class
   // member, set the visibility of this variable.
-  if (!DC->isRecord() && VD->isExternallyVisible())
+  if (DC->getRedeclContext()->isFileContext() && VD->isExternallyVisible())
     AddPushedVisibilityAttribute(VD);
 
   if (VD->isFileVarDecl())
@@ -9737,7 +9738,7 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
       } else {
         // Substitute 'void' for the 'auto' in the type.
         TypeLoc ResultType = FD->getTypeSourceInfo()->getTypeLoc().
-            IgnoreParens().castAs<FunctionProtoTypeLoc>().getResultLoc();
+            IgnoreParens().castAs<FunctionProtoTypeLoc>().getReturnLoc();
         Context.adjustDeducedFunctionResultType(
             FD, SubstAutoType(ResultType.getType(), Context.VoidTy));
       }
