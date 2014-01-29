@@ -598,7 +598,7 @@ public:
   template <unsigned N>
   unsigned getCustomDiagID(Level L, const char (&FormatString)[N]) {
     return Diags->getCustomDiagID((DiagnosticIDs::Level)L,
-                                  StringRef(FormatString, N));
+                                  StringRef(FormatString, N - 1));
   }
 
   /// \brief Converts a diagnostic argument (as an intptr_t) into the string

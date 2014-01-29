@@ -4185,20 +4185,21 @@ static Expr *EvalAddr(Expr *E, SmallVectorImpl<DeclRefExpr *> &refVars,
     ConditionalOperator *C = cast<ConditionalOperator>(E);
 
     // Handle the GNU extension for missing LHS.
-    if (Expr *lhsExpr = C->getLHS()) {
-    // In C++, we can have a throw-expression, which has 'void' type.
-      if (!lhsExpr->getType()->isVoidType())
-        if (Expr* LHS = EvalAddr(lhsExpr, refVars, ParentDecl))
+    // FIXME: That isn't a ConditionalOperator, so doesn't get here.
+    if (Expr *LHSExpr = C->getLHS()) {
+      // In C++, we can have a throw-expression, which has 'void' type.
+      if (!LHSExpr->getType()->isVoidType())
+        if (Expr *LHS = EvalAddr(LHSExpr, refVars, ParentDecl))
           return LHS;
     }
 
     // In C++, we can have a throw-expression, which has 'void' type.
     if (C->getRHS()->getType()->isVoidType())
-      return NULL;
+      return 0;
 
     return EvalAddr(C->getRHS(), refVars, ParentDecl);
   }
-  
+
   case Stmt::BlockExprClass:
     if (cast<BlockExpr>(E)->getBlockDecl()->hasCaptures())
       return E; // local block.
@@ -4338,9 +4339,16 @@ do {
     ConditionalOperator *C = cast<ConditionalOperator>(E);
 
     // Handle the GNU extension for missing LHS.
-    if (Expr *lhsExpr = C->getLHS())
-      if (Expr *LHS = EvalVal(lhsExpr, refVars, ParentDecl))
-        return LHS;
+    if (Expr *LHSExpr = C->getLHS()) {
+      // In C++, we can have a throw-expression, which has 'void' type.
+      if (!LHSExpr->getType()->isVoidType())
+        if (Expr *LHS = EvalVal(LHSExpr, refVars, ParentDecl))
+          return LHS;
+    }
+
+    // In C++, we can have a throw-expression, which has 'void' type.
+    if (C->getRHS()->getType()->isVoidType())
+      return 0;
 
     return EvalVal(C->getRHS(), refVars, ParentDecl);
   }
@@ -5350,6 +5358,13 @@ void CheckImplicitConversion(Sema &S, Expr *E, QualType T,
       // prevented by a check in AnalyzeImplicitConversions().
       return DiagnoseImpCast(S, E, T, CC,
                              diag::warn_impcast_string_literal_to_bool);
+    if (isa<ObjCStringLiteral>(E) || isa<ObjCArrayLiteral>(E) ||
+        isa<ObjCDictionaryLiteral>(E) || isa<ObjCBoxedExpr>(E)) {
+      // This covers the literal expressions that evaluate to Objective-C
+      // objects.
+      return DiagnoseImpCast(S, E, T, CC,
+                             diag::warn_impcast_objective_c_literal_to_bool);
+    }
     if (Source->isFunctionType()) {
       // Warn on function to bool. Checks free functions and static member
       // functions. Weakly imported functions are excluded from the check,
