@@ -2940,9 +2940,10 @@ void CodeGenFunction::EmitInitOMPReductionClause(
     Args.push_back(&Arg1);
     Args.push_back(&Arg2);
     const CGFunctionInfo &FI =
-        CGF.getTypes().arrangeFunctionDeclaration(getContext().VoidTy, Args,
-                                                  FunctionType::ExtInfo(),
-                                                  false);
+        CGF.getTypes().arrangeFreeFunctionDeclaration(getContext().VoidTy,
+                                                      Args,
+                                                      FunctionType::ExtInfo(),
+                                                      false);
     llvm::FunctionType *FTy = CGF.getTypes().GetFunctionType(FI);
     llvm::Function *Fn =
          llvm::Function::Create(FTy, llvm::GlobalValue::InternalLinkage,
@@ -3876,9 +3877,10 @@ void CodeGenFunction::EmitOMPSingleDirective(const OMPSingleDirective &S) {
         Args.push_back(&Arg1);
         Args.push_back(&Arg2);
         const CGFunctionInfo &FI =
-          CGF.getTypes().arrangeFunctionDeclaration(getContext().VoidTy, Args,
-                                                    FunctionType::ExtInfo(),
-                                                    false);
+          CGF.getTypes().arrangeFreeFunctionDeclaration(getContext().VoidTy,
+                                                        Args,
+                                                        FunctionType::ExtInfo(),
+                                                        false);
         llvm::FunctionType *FTy = CGF.getTypes().GetFunctionType(FI);
         llvm::Function *Fn =
           llvm::Function::Create(FTy, llvm::GlobalValue::InternalLinkage,

@@ -200,6 +200,7 @@ OpenMPClauseKind DSAStackTy::getDSA(StackTy::reverse_iterator Iter,
 
     return OMPC_unknown;
   }
+
   // OpenMP [2.9.1.1, Data-sharing Attribute Rules for Variables Referenced
   // in a Construct, C/C++, predetermined, p.1]
   // Variables with automatic storage duration that are declared in a scope
@@ -209,6 +210,7 @@ OpenMPClauseKind DSAStackTy::getDSA(StackTy::reverse_iterator Iter,
       (D->getStorageClass() == SC_Auto ||
        D->getStorageClass() == SC_None))
     return OMPC_private;
+
   // Explicitly specified attributes and local variables with predetermined
   // attributes.
   if (Iter->SharingMap.count(D)) {
@@ -742,10 +744,13 @@ OMPThreadPrivateDecl *Sema::CheckOMPThreadPrivateDecl(
 
     Vars.push_back(*I);
   }
-  return Vars.empty() ?
-              0 : OMPThreadPrivateDecl::Create(Context,
-                                               getCurLexicalContext(),
-                                               Loc, Vars);
+  OMPThreadPrivateDecl *D = 0;
+  if (!Vars.empty()) {
+    D = OMPThreadPrivateDecl::Create(Context, getCurLexicalContext(), Loc,
+                                     Vars);
+    D->setAccess(AS_public);
+  }
+  return D;
 }
 
 OMPDeclareReductionDecl *

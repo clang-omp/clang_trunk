@@ -276,6 +276,14 @@ void CodeGenFunction::FinishFunction(SourceLocation EndLoc) {
 
   if (CGM.getCodeGenOpts().EmitDeclMetadata)
     EmitDeclMetadata();
+
+  for (SmallVectorImpl<std::pair<llvm::Instruction *, llvm::Value *> >::iterator
+           I = DeferredReplacements.begin(),
+           E = DeferredReplacements.end();
+       I != E; ++I) {
+    I->first->replaceAllUsesWith(I->second);
+    I->first->eraseFromParent();
+  }
 }
 
 /// ShouldInstrumentFunction - Return true if the current function should be
@@ -583,6 +591,14 @@ void CodeGenFunction::StartFunction(GlobalDecl GD,
     EmitMCountInstrumentation();
 
   PGO.assignRegionCounters(GD);
+  if (CGM.getPGOData() && D) {
+    // Turn on InlineHint attribute for hot functions.
+    if (CGM.getPGOData()->isHotFunction(CGM.getMangledName(GD)))
+      Fn->addFnAttr(llvm::Attribute::InlineHint);
+    // Turn on Cold attribute for cold functions.
+    else if (CGM.getPGOData()->isColdFunction(CGM.getMangledName(GD)))
+      Fn->addFnAttr(llvm::Attribute::Cold);
+  }
 
   if (RetTy->isVoidType()) {
     // Void type; nothing to return.
@@ -592,6 +608,14 @@ void CodeGenFunction::StartFunction(GlobalDecl GD,
     // Indirect aggregate return; emit returned value directly into sret slot.
     // This reduces code size, and affects correctness in C++.
     ReturnValue = CurFn->arg_begin();
+  } else if (CurFnInfo->getReturnInfo().getKind() == ABIArgInfo::InAlloca &&
+             !hasScalarEvaluationKind(CurFnInfo->getReturnType())) {
+    // Load the sret pointer from the argument struct and return into that.
+    unsigned Idx = CurFnInfo->getReturnInfo().getInAllocaFieldIndex();
+    llvm::Function::arg_iterator EI = CurFn->arg_end();
+    --EI;
+    llvm::Value *Addr = Builder.CreateStructGEP(EI, Idx);
+    ReturnValue = Builder.CreateLoad(Addr, "agg.result");
   } else {
     ReturnValue = CreateIRTemp(RetTy, "retval");
 

@@ -321,6 +321,8 @@ CompilerInstance::createPCHExternalASTSource(StringRef Path,
                              Sysroot.empty() ? "" : Sysroot.c_str(),
                              DisablePCHValidation,
                              AllowPCHWithCompilerErrors,
+                             /*AllowConfigurationMismatch*/false,
+                             /*ValidateSystemInputs*/false,
                              UseGlobalModuleIndex));
 
   Reader->setDeserializationListener(
@@ -1158,6 +1160,8 @@ CompilerInstance::loadModule(SourceLocation ImportLoc,
                                     Sysroot.empty() ? "" : Sysroot.c_str(),
                                     PPOpts.DisablePCHValidation,
                                     /*AllowASTWithCompilerErrors=*/false,
+                                    /*AllowConfigurationMismatch=*/false,
+                                    /*ValidateSystemInputs=*/false,
                                     getFrontendOpts().UseGlobalModuleIndex);
       if (hasASTConsumer()) {
         ModuleManager->setDeserializationListener(
