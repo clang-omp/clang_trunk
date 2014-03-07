@@ -105,6 +105,9 @@ class CompilerInstance : public ModuleLoader {
   /// \brief The ASTReader, if one exists.
   IntrusiveRefCntPtr<ASTReader> ModuleManager;
 
+  /// \brief The dependency file generator.
+  OwningPtr<DependencyFileGenerator> TheDependencyFileGenerator;
+
   /// \brief The set of top-level modules that has already been loaded,
   /// along with the module map
   llvm::DenseMap<const IdentifierInfo *, Module *> KnownModules;
@@ -558,7 +561,7 @@ public:
 
   /// Create the preprocessor, using the invocation, file, and source managers,
   /// and replace any existing one with it.
-  void createPreprocessor();
+  void createPreprocessor(TranslationUnitKind TUKind);
 
   /// Create the AST context.
   void createASTContext();
