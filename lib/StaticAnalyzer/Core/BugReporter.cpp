@@ -265,7 +265,7 @@ static void removeEdgesToDefaultInitializers(PathPieces &Pieces) {
         I = Pieces.erase(I);
         continue;
       } else if (End && isa<CXXDefaultInitExpr>(End)) {
-        PathPieces::iterator Next = llvm::next(I);
+        PathPieces::iterator Next = std::next(I);
         if (Next != E) {
           if (PathDiagnosticControlFlowPiece *NextCF =
                 dyn_cast<PathDiagnosticControlFlowPiece>(*Next)) {
@@ -2802,9 +2802,7 @@ void BugReporter::FlushReports() {
   // EmitBasicReport.
   // FIXME: There are leaks from checkers that assume that the BugTypes they
   // create will be destroyed by the BugReporter.
-  for (llvm::StringMap<BugType*>::iterator
-         I = StrBugTypes.begin(), E = StrBugTypes.end(); I != E; ++I)
-    delete I->second;
+  llvm::DeleteContainerSeconds(StrBugTypes);
 
   // Remove all references to the BugType objects.
   BugTypes = F.getEmptySet();
@@ -2906,7 +2904,7 @@ TrimmedGraph::TrimmedGraph(const ExplodedGraph *OriginalGraph,
 
     PriorityMapTy::iterator PriorityEntry;
     bool IsNew;
-    llvm::tie(PriorityEntry, IsNew) =
+    std::tie(PriorityEntry, IsNew) =
       PriorityMap.insert(std::make_pair(Node, Priority));
     ++Priority;
 
@@ -2935,7 +2933,7 @@ bool TrimmedGraph::popNextReportGraph(ReportGraph &GraphWrapper) {
     return false;
 
   const ExplodedNode *OrigN;
-  llvm::tie(OrigN, GraphWrapper.Index) = ReportNodes.pop_back_val();
+  std::tie(OrigN, GraphWrapper.Index) = ReportNodes.pop_back_val();
   assert(PriorityMap.find(OrigN) != PriorityMap.end() &&
          "error node not accessible from root");
 
@@ -3420,7 +3418,8 @@ void BugReporter::FlushReport(BugReport *exampleReport,
   BugType& BT = exampleReport->getBugType();
 
   OwningPtr<PathDiagnostic>
-    D(new PathDiagnostic(exampleReport->getDeclWithIssue(),
+    D(new PathDiagnostic(exampleReport->getBugType().getCheckName(),
+                         exampleReport->getDeclWithIssue(),
                          exampleReport->getBugType().getName(),
                          exampleReport->getDescription(),
                          exampleReport->getShortDescription(/*Fallback=*/false),
@@ -3455,7 +3454,7 @@ void BugReporter::FlushReport(BugReport *exampleReport,
     PathDiagnosticPiece *piece =
       new PathDiagnosticEventPiece(L, exampleReport->getDescription());
     BugReport::ranges_iterator Beg, End;
-    llvm::tie(Beg, End) = exampleReport->getRanges();
+    std::tie(Beg, End) = exampleReport->getRanges();
     for ( ; Beg != End; ++Beg)
       piece->addRange(*Beg);
     D->setEndOfPath(piece);
@@ -3472,13 +3471,21 @@ void BugReporter::FlushReport(BugReport *exampleReport,
 }
 
 void BugReporter::EmitBasicReport(const Decl *DeclWithIssue,
-                                  StringRef name,
-                                  StringRef category,
+                                  const CheckerBase *Checker,
+                                  StringRef Name, StringRef Category,
+                                  StringRef Str, PathDiagnosticLocation Loc,
+                                  ArrayRef<SourceRange> Ranges) {
+  EmitBasicReport(DeclWithIssue, Checker->getCheckName(), Name, Category, Str,
+                  Loc, Ranges);
+}
+void BugReporter::EmitBasicReport(const Decl *DeclWithIssue,
+                                  CheckName CheckName,
+                                  StringRef name, StringRef category,
                                   StringRef str, PathDiagnosticLocation Loc,
                                   ArrayRef<SourceRange> Ranges) {
 
   // 'BT' is owned by BugReporter.
-  BugType *BT = getBugTypeForName(name, category);
+  BugType *BT = getBugTypeForName(CheckName, name, category);
   BugReport *R = new BugReport(*BT, str, Loc);
   R->setDeclWithIssue(DeclWithIssue);
   for (ArrayRef<SourceRange>::iterator I = Ranges.begin(), E = Ranges.end();
@@ -3487,15 +3494,16 @@ void BugReporter::EmitBasicReport(const Decl *DeclWithIssue,
   emitReport(R);
 }
 
-BugType *BugReporter::getBugTypeForName(StringRef name,
+BugType *BugReporter::getBugTypeForName(CheckName CheckName, StringRef name,
                                         StringRef category) {
   SmallString<136> fullDesc;
-  llvm::raw_svector_ostream(fullDesc) << name << ":" << category;
+  llvm::raw_svector_ostream(fullDesc) << CheckName.getName() << ":" << name
+                                      << ":" << category;
   llvm::StringMapEntry<BugType *> &
       entry = StrBugTypes.GetOrCreateValue(fullDesc);
   BugType *BT = entry.getValue();
   if (!BT) {
-    BT = new BugType(name, category);
+    BT = new BugType(CheckName, name, category);
     entry.setValue(BT);
   }
   return BT;

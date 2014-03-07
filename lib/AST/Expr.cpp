@@ -781,6 +781,9 @@ StringLiteral *StringLiteral::Create(const ASTContext &C, StringRef Str,
                                      StringKind Kind, bool Pascal, QualType Ty,
                                      const SourceLocation *Loc,
                                      unsigned NumStrs) {
+  assert(C.getAsConstantArrayType(Ty) &&
+         "StringLiteral must be of constant array type!");
+
   // Allocate enough space for the StringLiteral plus an array of locations for
   // any concatenated string tokens.
   void *Mem = C.Allocate(sizeof(StringLiteral)+
@@ -1602,7 +1605,7 @@ const char *CastExpr::getCastKindName() const {
   case CK_ARCReclaimReturnedObject:
     return "ARCReclaimReturnedObject";
   case CK_ARCExtendBlockObject:
-    return "ARCCExtendBlockObject";
+    return "ARCExtendBlockObject";
   case CK_AtomicToNonAtomic:
     return "AtomicToNonAtomic";
   case CK_NonAtomicToAtomic:
@@ -3786,30 +3789,21 @@ SourceLocation DesignatedInitExpr::getLocEnd() const {
 
 Expr *DesignatedInitExpr::getArrayIndex(const Designator& D) const {
   assert(D.Kind == Designator::ArrayDesignator && "Requires array designator");
-  char *Ptr = static_cast<char *>(
-                  const_cast<void *>(static_cast<const void *>(this)));
-  Ptr += sizeof(DesignatedInitExpr);
-  Stmt **SubExprs = reinterpret_cast<Stmt**>(reinterpret_cast<void**>(Ptr));
+  Stmt *const *SubExprs = reinterpret_cast<Stmt *const *>(this + 1);
   return cast<Expr>(*(SubExprs + D.ArrayOrRange.Index + 1));
 }
 
 Expr *DesignatedInitExpr::getArrayRangeStart(const Designator &D) const {
   assert(D.Kind == Designator::ArrayRangeDesignator &&
          "Requires array range designator");
-  char *Ptr = static_cast<char *>(
-                  const_cast<void *>(static_cast<const void *>(this)));
-  Ptr += sizeof(DesignatedInitExpr);
-  Stmt **SubExprs = reinterpret_cast<Stmt**>(reinterpret_cast<void**>(Ptr));
+  Stmt *const *SubExprs = reinterpret_cast<Stmt *const *>(this + 1);
   return cast<Expr>(*(SubExprs + D.ArrayOrRange.Index + 1));
 }
 
 Expr *DesignatedInitExpr::getArrayRangeEnd(const Designator &D) const {
   assert(D.Kind == Designator::ArrayRangeDesignator &&
          "Requires array range designator");
-  char *Ptr = static_cast<char *>(
-                  const_cast<void *>(static_cast<const void *>(this)));
-  Ptr += sizeof(DesignatedInitExpr);
-  Stmt **SubExprs = reinterpret_cast<Stmt**>(reinterpret_cast<void**>(Ptr));
+  Stmt *const *SubExprs = reinterpret_cast<Stmt *const *>(this + 1);
   return cast<Expr>(*(SubExprs + D.ArrayOrRange.Index + 2));
 }
 

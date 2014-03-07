@@ -200,6 +200,7 @@ OpenMPClauseKind DSAStackTy::getDSA(StackTy::reverse_iterator Iter,
 
     return OMPC_unknown;
   }
+
   // OpenMP [2.9.1.1, Data-sharing Attribute Rules for Variables Referenced
   // in a Construct, C/C++, predetermined, p.1]
   // Variables with automatic storage duration that are declared in a scope
@@ -209,6 +210,7 @@ OpenMPClauseKind DSAStackTy::getDSA(StackTy::reverse_iterator Iter,
       (D->getStorageClass() == SC_Auto ||
        D->getStorageClass() == SC_None))
     return OMPC_private;
+
   // Explicitly specified attributes and local variables with predetermined
   // attributes.
   if (Iter->SharingMap.count(D)) {
@@ -240,8 +242,8 @@ OpenMPClauseKind DSAStackTy::getDSA(StackTy::reverse_iterator Iter,
     //  bound to the current team is shared.
     if (Kind == OMPD_task) {
       OpenMPClauseKind CKind = OMPC_unknown;
-      for (StackTy::reverse_iterator I = Iter + 1,
-                                     EE = Stack.rend() - 1;
+      for (StackTy::reverse_iterator I = std::next(Iter),
+                                     EE = std::prev(Stack.rend());
            I != EE; ++I) {
         // OpenMP [2.9.1.1, Data-sharing Attribute Rules for Variables Referenced
         // in a Construct, implicitly determined, p.6]
@@ -265,7 +267,7 @@ OpenMPClauseKind DSAStackTy::getDSA(StackTy::reverse_iterator Iter,
   //  For constructs other than task, if no default clause is present, these
   //  variables inherit their data-sharing attributes from the enclosing
   //  context.
-  return getDSA(Iter + 1, D, Kind, E);
+  return getDSA(std::next(Iter), D, Kind, E);
 }
 
 bool DSAStackTy::addUniqueAligned(VarDecl *D, DeclRefExpr *&E) {
@@ -339,7 +341,7 @@ OpenMPClauseKind DSAStackTy::getTopDSA(VarDecl *D, DeclRefExpr *&E) {
   // inside the construct are private.
   OpenMPDirectiveKind Kind = getCurrentDirective();
   if (Kind != OMPD_parallel && Kind != OMPD_task) {
-    if (isOpenMPLocal(D, Stack.rbegin() + 1) && D->isLocalVarDecl() &&
+    if (isOpenMPLocal(D, std::next(Stack.rbegin())) && D->isLocalVarDecl() &&
         (D->getStorageClass() == SC_Auto ||
          D->getStorageClass() == SC_None))
       return OMPC_private;
@@ -399,13 +401,13 @@ OpenMPClauseKind DSAStackTy::getTopDSA(VarDecl *D, DeclRefExpr *&E) {
 OpenMPClauseKind DSAStackTy::getImplicitDSA(VarDecl *D,
                                             OpenMPDirectiveKind &Kind,
                                             DeclRefExpr *&E) {
-  return getDSA(Stack.rbegin() + 1, D, Kind, E);
+  return getDSA(std::next(Stack.rbegin()), D, Kind, E);
 }
 
 bool DSAStackTy::hasDSA(VarDecl *D, OpenMPClauseKind CKind,
                         OpenMPDirectiveKind DKind, DeclRefExpr *&E) {
-  for (StackTy::reverse_iterator I = Stack.rbegin() + 1,
-                                 EE = Stack.rend() - 1;
+  for (StackTy::reverse_iterator I = std::next(Stack.rbegin()),
+                                 EE = std::prev(Stack.rend());
        I != EE; ++I) {
     if (DKind != OMPD_unknown && DKind != I->Directive) continue;
     OpenMPDirectiveKind K;
@@ -742,10 +744,13 @@ OMPThreadPrivateDecl *Sema::CheckOMPThreadPrivateDecl(
 
     Vars.push_back(*I);
   }
-  return Vars.empty() ?
-              0 : OMPThreadPrivateDecl::Create(Context,
-                                               getCurLexicalContext(),
-                                               Loc, Vars);
+  OMPThreadPrivateDecl *D = 0;
+  if (!Vars.empty()) {
+    D = OMPThreadPrivateDecl::Create(Context, getCurLexicalContext(), Loc,
+                                     Vars);
+    D->setAccess(AS_public);
+  }
+  return D;
 }
 
 OMPDeclareReductionDecl *
@@ -1474,6 +1479,7 @@ StmtResult Sema::ActOnOpenMPExecutableDirective(OpenMPDirectiveKind Kind,
         if (OMPClause *Implicit =
              ActOnOpenMPFirstPrivateClause(DSAChecker.getImplicitFirstprivate(),
                                            SourceLocation(),
+                                           SourceLocation(),
                                            SourceLocation())) {
           ClausesWithImplicit.push_back(Implicit);
           if (Implicit &&
@@ -1509,6 +1515,8 @@ StmtResult Sema::ActOnOpenMPExecutableDirective(OpenMPDirectiveKind Kind,
   case OMPD_single:
     Res = ActOnOpenMPSingleDirective(ClausesWithImplicit, AStmt, StartLoc, EndLoc);
     break;
+  case OMPD_threadprivate:
+    llvm_unreachable("OpenMP Directive is not allowed");
   case OMPD_task:
     Res = ActOnOpenMPTaskDirective(ClausesWithImplicit, AStmt, StartLoc, EndLoc);
     break;
@@ -1652,6 +1660,7 @@ bool Sema::CollapseOpenMPLoop(OpenMPDirectiveKind Kind,
       break;
     }
   }
+
   Stmt *CStmt = AStmt;
   while (CapturedStmt *CS = dyn_cast_or_null<CapturedStmt>(CStmt))
     CStmt = CS->getCapturedStmt();
@@ -2697,32 +2706,33 @@ StmtResult Sema::ActOnOpenMPOrderedDirective(Stmt *AStmt,
 OMPClause *Sema::ActOnOpenMPSingleExprClause(OpenMPClauseKind Kind,
                                              Expr *Expr,
                                              SourceLocation StartLoc,
+                                             SourceLocation LParenLoc,
                                              SourceLocation EndLoc) {
   OMPClause *Res = 0;
   switch (Kind) {
   case OMPC_if:
-    Res = ActOnOpenMPIfClause(Expr, StartLoc, EndLoc);
+    Res = ActOnOpenMPIfClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_num_threads:
-    Res = ActOnOpenMPNumThreadsClause(Expr, StartLoc, EndLoc);
+    Res = ActOnOpenMPNumThreadsClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_collapse:
-    Res = ActOnOpenMPCollapseClause(Expr, StartLoc, EndLoc);
+    Res = ActOnOpenMPCollapseClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_final:
-    Res = ActOnOpenMPFinalClause(Expr, StartLoc, EndLoc);
+    Res = ActOnOpenMPFinalClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_safelen:
-    Res = ActOnOpenMPSafelenClause(Expr, StartLoc, EndLoc);
+    Res = ActOnOpenMPSafelenClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_simdlen:
-    Res = ActOnOpenMPSimdlenClause(Expr, StartLoc, EndLoc);
+    Res = ActOnOpenMPSimdlenClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_num_teams:
-    Res = ActOnOpenMPNumTeamsClause(Expr, StartLoc, EndLoc);
+    Res = ActOnOpenMPNumTeamsClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_thread_limit:
-    Res = ActOnOpenMPThreadLimitClause(Expr, StartLoc, EndLoc);
+    Res = ActOnOpenMPThreadLimitClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
   default:
     break;
@@ -2732,11 +2742,14 @@ OMPClause *Sema::ActOnOpenMPSingleExprClause(OpenMPClauseKind Kind,
 
 OMPClause *Sema::ActOnOpenMPIfClause(Expr *Condition,
                                      SourceLocation StartLoc,
+                                     SourceLocation LParenLoc,
                                      SourceLocation EndLoc) {
-  QualType Type = Condition->getType();
   Expr *ValExpr = Condition;
-  if (!Type->isDependentType() && !Type->isInstantiationDependentType()) {
-    ExprResult Val = ActOnBooleanCondition(DSAStack->getCurScope(), Condition->getExprLoc(),
+  if (!Condition->isValueDependent() && !Condition->isTypeDependent() &&
+      !Condition->isInstantiationDependent() &&
+      !Condition->containsUnexpandedParameterPack()) {
+    ExprResult Val = ActOnBooleanCondition(DSAStack->getCurScope(),
+                                           Condition->getExprLoc(),
                                            Condition);
     if (Val.isInvalid())
       return 0;
@@ -2772,11 +2785,12 @@ OMPClause *Sema::ActOnOpenMPIfClause(Expr *Condition,
     }
   }
 
-  return new (Context) OMPIfClause(ValExpr, StartLoc, EndLoc);
+  return new (Context) OMPIfClause(ValExpr, StartLoc, LParenLoc, EndLoc);
 }
 
 OMPClause *Sema::ActOnOpenMPFinalClause(Expr *Condition,
                                         SourceLocation StartLoc,
+                                        SourceLocation LParenLoc,
                                         SourceLocation EndLoc) {
   QualType Type = Condition->getType();
   Expr *ValExpr = Condition;
@@ -2817,11 +2831,12 @@ OMPClause *Sema::ActOnOpenMPFinalClause(Expr *Condition,
     }
   }
 
-  return new (Context) OMPFinalClause(ValExpr, StartLoc, EndLoc);
+  return new (Context) OMPFinalClause(ValExpr, StartLoc, LParenLoc, EndLoc);
 }
 
 OMPClause *Sema::ActOnOpenMPNumThreadsClause(Expr *NumThreads,
                                              SourceLocation StartLoc,
+                                             SourceLocation LParenLoc,
                                              SourceLocation EndLoc) {
   class CConvertDiagnoser : public ICEConvertDiagnoser {
   public:
@@ -2900,7 +2915,8 @@ OMPClause *Sema::ActOnOpenMPNumThreadsClause(Expr *NumThreads,
     ValExpr = Value.take();
   }
 
-  return new (Context) OMPNumThreadsClause(ValExpr, StartLoc, EndLoc);
+  return new (Context) OMPNumThreadsClause(ValExpr, StartLoc, LParenLoc,
+                                           EndLoc);
 }
 
 Expr *Sema::ActOnConstantPositiveSubExpressionInClause(Expr *E) {
@@ -2921,6 +2937,7 @@ Expr *Sema::ActOnConstantPositiveSubExpressionInClause(Expr *E) {
 
 OMPClause *Sema::ActOnOpenMPCollapseClause(Expr *NumLoops,
                                            SourceLocation StartLoc,
+                                           SourceLocation LParenLoc,
                                            SourceLocation EndLoc) {
   // OpenMP [2.7.1, Loop construct, Description]
   // The parameter of the collapse clause must be a constant
@@ -2928,11 +2945,12 @@ OMPClause *Sema::ActOnOpenMPCollapseClause(Expr *NumLoops,
   Expr *Val = ActOnConstantPositiveSubExpressionInClause(NumLoops);
   if (!Val) return 0;
 
-  return new (Context) OMPCollapseClause(Val, StartLoc, EndLoc);
+  return new (Context) OMPCollapseClause(Val, StartLoc, LParenLoc, EndLoc);
 }
 
 OMPClause *Sema::ActOnOpenMPSafelenClause(Expr *Len,
                                           SourceLocation StartLoc,
+                                          SourceLocation LParenLoc,
                                           SourceLocation EndLoc) {
   // OpenMP [2.8.1, simd construct, Description]
   // The parameter of the safelen clause must be a constant
@@ -2940,11 +2958,12 @@ OMPClause *Sema::ActOnOpenMPSafelenClause(Expr *Len,
   Expr *Val = ActOnConstantPositiveSubExpressionInClause(Len);
   if (!Val) return 0;
 
-  return new (Context) OMPSafelenClause(Val, StartLoc, EndLoc);
+  return new (Context) OMPSafelenClause(Val, StartLoc, LParenLoc, EndLoc);
 }
 
 OMPClause *Sema::ActOnOpenMPSimdlenClause(Expr *Len,
                                           SourceLocation StartLoc,
+                                          SourceLocation LParenLoc,
                                           SourceLocation EndLoc) {
   // OpenMP [2.8.2, declare simd construct, Description]
   // The parameter of the simdlen clause must be a constant
@@ -2952,37 +2971,40 @@ OMPClause *Sema::ActOnOpenMPSimdlenClause(Expr *Len,
   Expr *Val = ActOnConstantPositiveSubExpressionInClause(Len);
   if (!Val) return 0;
 
-  return new (Context) OMPSimdlenClause(Val, StartLoc, EndLoc);
+  return new (Context) OMPSimdlenClause(Val, StartLoc, LParenLoc, EndLoc);
 }
 
 OMPClause *Sema::ActOnOpenMPNumTeamsClause(Expr *E,
                                            SourceLocation StartLoc,
+                                           SourceLocation LParenLoc,
                                            SourceLocation EndLoc) {
-  return new (Context) OMPNumTeamsClause(E, StartLoc, EndLoc);
+  return new (Context) OMPNumTeamsClause(E, StartLoc, LParenLoc, EndLoc);
 }
 
 OMPClause *Sema::ActOnOpenMPThreadLimitClause(Expr *E,
                                               SourceLocation StartLoc,
+                                              SourceLocation LParenLoc,
                                               SourceLocation EndLoc) {
-  return new (Context) OMPThreadLimitClause(E, StartLoc, EndLoc);
+  return new (Context) OMPThreadLimitClause(E, StartLoc, LParenLoc, EndLoc);
 }
 
 OMPClause *Sema::ActOnOpenMPSimpleClause(OpenMPClauseKind Kind,
                                          unsigned Argument,
                                          SourceLocation ArgumentLoc,
                                          SourceLocation StartLoc,
+                                         SourceLocation LParenLoc,
                                          SourceLocation EndLoc) {
   OMPClause *Res = 0;
   switch (Kind) {
   case OMPC_default:
     Res = ActOnOpenMPDefaultClause(
                              static_cast<OpenMPDefaultClauseKind>(Argument),
-                             ArgumentLoc, StartLoc, EndLoc);
+                             ArgumentLoc, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_proc_bind:
     Res = ActOnOpenMPProcBindClause(
                              static_cast<OpenMPProcBindClauseKind>(Argument),
-                             ArgumentLoc, StartLoc, EndLoc);
+                             ArgumentLoc, StartLoc, LParenLoc, EndLoc);
     break;
   default:
     break;
@@ -2993,6 +3015,7 @@ OMPClause *Sema::ActOnOpenMPSimpleClause(OpenMPClauseKind Kind,
 OMPClause *Sema::ActOnOpenMPDefaultClause(OpenMPDefaultClauseKind Kind,
                                           SourceLocation KindLoc,
                                           SourceLocation StartLoc,
+                                          SourceLocation LParenLoc,
                                           SourceLocation EndLoc) {
   if (Kind == OMPC_DEFAULT_unknown) {
     std::string Values;
@@ -3027,12 +3050,14 @@ OMPClause *Sema::ActOnOpenMPDefaultClause(OpenMPDefaultClauseKind Kind,
   default:
     break;
   }
-  return new (Context) OMPDefaultClause(Kind, KindLoc, StartLoc, EndLoc);
+  return new (Context) OMPDefaultClause(Kind, KindLoc, StartLoc, LParenLoc,
+                                        EndLoc);
 }
 
 OMPClause *Sema::ActOnOpenMPProcBindClause(OpenMPProcBindClauseKind Kind,
                                            SourceLocation KindLoc,
                                            SourceLocation StartLoc,
+                                           SourceLocation LParenLoc,
                                            SourceLocation EndLoc) {
   if (Kind == OMPC_PROC_BIND_unknown) {
     std::string Values;
@@ -3057,7 +3082,8 @@ OMPClause *Sema::ActOnOpenMPProcBindClause(OpenMPProcBindClauseKind Kind,
       << Values << getOpenMPClauseName(OMPC_proc_bind);
     return 0;
   }
-  return new (Context) OMPProcBindClause(Kind, KindLoc, StartLoc, EndLoc);
+  return new (Context) OMPProcBindClause(Kind, KindLoc, StartLoc, LParenLoc,
+                                         EndLoc);
 }
 
 OMPClause *Sema::ActOnOpenMPClause(OpenMPClauseKind Kind,
@@ -3121,7 +3147,7 @@ OMPClause *Sema::ActOnOpenMPUntiedClause(SourceLocation StartLoc,
 }
 
 OMPClause *Sema::ActOnOpenMPMergeableClause(SourceLocation StartLoc,
-                                         SourceLocation EndLoc) {
+                                            SourceLocation EndLoc) {
   return new (Context) OMPMergeableClause(StartLoc, EndLoc);
 }
 
@@ -3130,12 +3156,13 @@ OMPClause *Sema::ActOnOpenMPSingleExprWithTypeClause(OpenMPClauseKind Kind,
                                                      SourceLocation ArgumentLoc,
                                                      Expr *Expr,
                                                      SourceLocation StartLoc,
+                                                     SourceLocation LParenLoc,
                                                      SourceLocation EndLoc) {
   OMPClause *Res = 0;
   switch (Kind) {
   case OMPC_schedule:
     Res = ActOnOpenMPScheduleClause(static_cast<OpenMPScheduleClauseKind>(Argument),
-                                    ArgumentLoc, Expr, StartLoc, EndLoc);
+                                    ArgumentLoc, Expr, StartLoc, LParenLoc, EndLoc);
     break;
   default:
     break;
@@ -3147,6 +3174,7 @@ OMPClause *Sema::ActOnOpenMPScheduleClause(OpenMPScheduleClauseKind Kind,
                                            SourceLocation KindLoc,
                                            Expr *ChunkSize,
                                            SourceLocation StartLoc,
+                                           SourceLocation LParenLoc,
                                            SourceLocation EndLoc) {
   class CConvertDiagnoser : public ICEConvertDiagnoser {
   public:
@@ -3278,13 +3306,14 @@ OMPClause *Sema::ActOnOpenMPScheduleClause(OpenMPScheduleClauseKind Kind,
   }
 
   return new (Context) OMPScheduleClause(Kind, KindLoc, ValExpr,
-                                         StartLoc, EndLoc);
+                                         StartLoc, LParenLoc, EndLoc);
 }
 
 OMPClause *Sema::ActOnOpenMPDistScheduleClause(OpenMPScheduleClauseKind Kind,
                                                SourceLocation KindLoc,
                                                Expr *ChunkSize,
                                                SourceLocation StartLoc,
+                                               SourceLocation LParenLoc,
                                                SourceLocation EndLoc) {
   class CConvertDiagnoser : public ICEConvertDiagnoser {
   public:
@@ -3391,12 +3420,13 @@ OMPClause *Sema::ActOnOpenMPDistScheduleClause(OpenMPScheduleClauseKind Kind,
   }
 
   return new (Context) OMPDistScheduleClause(Kind, KindLoc, ValExpr,
-                                             StartLoc, EndLoc);
+                                             StartLoc, LParenLoc, EndLoc);
 }
 
 OMPClause *Sema::ActOnOpenMPVarListClause(OpenMPClauseKind Kind,
                                           ArrayRef<Expr *> VarList,
                                           SourceLocation StartLoc,
+                                          SourceLocation LParenLoc,
                                           SourceLocation EndLoc,
                                           unsigned Op,
                                           Expr *TailExpr,
@@ -3406,40 +3436,42 @@ OMPClause *Sema::ActOnOpenMPVarListClause(OpenMPClauseKind Kind,
   OMPClause *Res = 0;
   switch (Kind) {
   case OMPC_private:
-    Res = ActOnOpenMPPrivateClause(VarList, StartLoc, EndLoc);
+    Res = ActOnOpenMPPrivateClause(VarList, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_lastprivate:
-    Res = ActOnOpenMPLastPrivateClause(VarList, StartLoc, EndLoc);
+    Res = ActOnOpenMPLastPrivateClause(VarList, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_firstprivate:
-    Res = ActOnOpenMPFirstPrivateClause(VarList, StartLoc, EndLoc);
+    Res = ActOnOpenMPFirstPrivateClause(VarList, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_shared:
-    Res = ActOnOpenMPSharedClause(VarList, StartLoc, EndLoc);
+    Res = ActOnOpenMPSharedClause(VarList, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_copyin:
-    Res = ActOnOpenMPCopyinClause(VarList, StartLoc, EndLoc);
+    Res = ActOnOpenMPCopyinClause(VarList, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_copyprivate:
-    Res = ActOnOpenMPCopyPrivateClause(VarList, StartLoc, EndLoc);
+    Res = ActOnOpenMPCopyPrivateClause(VarList, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_reduction:
     Res = ActOnOpenMPReductionClause(
-                            VarList, StartLoc, EndLoc,
+                            VarList, StartLoc, LParenLoc, EndLoc,
                             static_cast<OpenMPReductionClauseOperator>(Op),
                             SS, GetNameFromUnqualifiedId(OpName));
     break;
   case OMPC_flush:
-    Res = ActOnOpenMPFlushClause(VarList, StartLoc, EndLoc);
+    Res = ActOnOpenMPFlushClause(VarList, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_uniform:
-    Res = ActOnOpenMPUniformClause(VarList, StartLoc, EndLoc);
+    Res = ActOnOpenMPUniformClause(VarList, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_linear:
-    Res = ActOnOpenMPLinearClause(VarList, StartLoc, EndLoc, TailExpr, OpLoc);
+    Res = ActOnOpenMPLinearClause(VarList, StartLoc, LParenLoc, EndLoc,
+                                  TailExpr, OpLoc);
     break;
   case OMPC_aligned:
-    Res = ActOnOpenMPAlignedClause(VarList, StartLoc, EndLoc, TailExpr, OpLoc);
+    Res = ActOnOpenMPAlignedClause(VarList, StartLoc, LParenLoc, EndLoc,
+                                   TailExpr, OpLoc);
     break;
   default:
     break;
@@ -3449,6 +3481,7 @@ OMPClause *Sema::ActOnOpenMPVarListClause(OpenMPClauseKind Kind,
 
 OMPClause *Sema::ActOnOpenMPPrivateClause(ArrayRef<Expr *> VarList,
                                           SourceLocation StartLoc,
+                                          SourceLocation LParenLoc,
                                           SourceLocation EndLoc) {
   SmallVector<Expr *, 8> Vars;
   SmallVector<Expr *, 8> DefaultInits;
@@ -3597,11 +3630,13 @@ OMPClause *Sema::ActOnOpenMPPrivateClause(ArrayRef<Expr *> VarList,
 
   if (Vars.empty()) return 0;
 
-  return OMPPrivateClause::Create(Context, StartLoc, EndLoc, Vars, DefaultInits);
+  return OMPPrivateClause::Create(Context, StartLoc, LParenLoc, EndLoc,
+                                  Vars, DefaultInits);
 }
 
 OMPClause *Sema::ActOnOpenMPFirstPrivateClause(ArrayRef<Expr *> VarList,
                                                SourceLocation StartLoc,
+                                               SourceLocation LParenLoc,
                                                SourceLocation EndLoc) {
   SmallVector<Expr *, 8> Vars;
   SmallVector<DeclRefExpr *, 8> PseudoVars;
@@ -3849,11 +3884,13 @@ OMPClause *Sema::ActOnOpenMPFirstPrivateClause(ArrayRef<Expr *> VarList,
 
   if (Vars.empty()) return 0;
 
-  return OMPFirstPrivateClause::Create(Context, StartLoc, EndLoc, Vars, PseudoVars, Inits);
+  return OMPFirstPrivateClause::Create(Context, StartLoc, LParenLoc, EndLoc,
+                                       Vars, PseudoVars, Inits);
 }
 
 OMPClause *Sema::ActOnOpenMPLastPrivateClause(ArrayRef<Expr *> VarList,
                                               SourceLocation StartLoc,
+                                              SourceLocation LParenLoc,
                                               SourceLocation EndLoc) {
   SmallVector<Expr *, 8> Vars;
   SmallVector<DeclRefExpr *, 8> PseudoVars1;
@@ -4072,11 +4109,13 @@ OMPClause *Sema::ActOnOpenMPLastPrivateClause(ArrayRef<Expr *> VarList,
 
   if (Vars.empty()) return 0;
 
-  return OMPLastPrivateClause::Create(Context, StartLoc, EndLoc, Vars, PseudoVars1, PseudoVars2, Assignments);
+  return OMPLastPrivateClause::Create(Context, StartLoc, LParenLoc, EndLoc,
+                                      Vars, PseudoVars1, PseudoVars2, Assignments);
 }
 
 OMPClause *Sema::ActOnOpenMPSharedClause(ArrayRef<Expr *> VarList,
                                          SourceLocation StartLoc,
+                                         SourceLocation LParenLoc,
                                          SourceLocation EndLoc) {
   SmallVector<Expr *, 8> Vars;
   for (ArrayRef<Expr *>::iterator I = VarList.begin(), E = VarList.end();
@@ -4134,11 +4173,12 @@ OMPClause *Sema::ActOnOpenMPSharedClause(ArrayRef<Expr *> VarList,
 
   if (Vars.empty()) return 0;
 
-  return OMPSharedClause::Create(Context, StartLoc, EndLoc, Vars);
+  return OMPSharedClause::Create(Context, StartLoc, LParenLoc, EndLoc, Vars);
 }
 
 OMPClause *Sema::ActOnOpenMPCopyinClause(ArrayRef<Expr *> VarList,
                                          SourceLocation StartLoc,
+                                         SourceLocation LParenLoc,
                                          SourceLocation EndLoc) {
   SmallVector<Expr *, 8> Vars;
   SmallVector<DeclRefExpr *, 8> PseudoVars1;
@@ -4266,11 +4306,13 @@ OMPClause *Sema::ActOnOpenMPCopyinClause(ArrayRef<Expr *> VarList,
 
   if (Vars.empty()) return 0;
 
-  return OMPCopyinClause::Create(Context, StartLoc, EndLoc, Vars, PseudoVars1, PseudoVars2, Assignments);
+  return OMPCopyinClause::Create(Context, StartLoc, LParenLoc, EndLoc,
+                                 Vars, PseudoVars1, PseudoVars2, Assignments);
 }
 
 OMPClause *Sema::ActOnOpenMPCopyPrivateClause(ArrayRef<Expr *> VarList,
                                               SourceLocation StartLoc,
+                                              SourceLocation LParenLoc,
                                               SourceLocation EndLoc) {
   SmallVector<Expr *, 8> Vars;
   SmallVector<DeclRefExpr *, 8> PseudoVars1;
@@ -4415,7 +4457,8 @@ OMPClause *Sema::ActOnOpenMPCopyPrivateClause(ArrayRef<Expr *> VarList,
 
   if (Vars.empty()) return 0;
 
-  return OMPCopyPrivateClause::Create(Context, StartLoc, EndLoc, Vars, PseudoVars1, PseudoVars2, Assignments);
+  return OMPCopyPrivateClause::Create(Context, StartLoc, LParenLoc, EndLoc,
+                                      Vars, PseudoVars1, PseudoVars2, Assignments);
 }
 
 namespace {
@@ -4480,6 +4523,7 @@ public:
     }
     return false;
   }
+
   OMPDeclareReductionDecl::ReductionData *getFoundData() { return FoundData; }
 };
 }
@@ -4550,6 +4594,7 @@ TryToFindDeclareReductionDecl(Sema &SemaRef,
 
 OMPClause *Sema::ActOnOpenMPReductionClause(ArrayRef<Expr *> VarList,
                                             SourceLocation StartLoc,
+                                            SourceLocation LParenLoc,
                                             SourceLocation EndLoc,
                                             OpenMPReductionClauseOperator Op,
                                             CXXScopeSpec &SS,
@@ -4938,7 +4983,7 @@ OMPClause *Sema::ActOnOpenMPReductionClause(ArrayRef<Expr *> VarList,
 
   if (Vars.empty()) return 0;
 
-  return OMPReductionClause::Create(Context, StartLoc, EndLoc, Vars,
+  return OMPReductionClause::Create(Context, StartLoc, LParenLoc, EndLoc, Vars,
                                     OpExprs, HelperParams1, HelperParams2, DefaultInits,
                                     Op, SS.getWithLocInContext(Context),
                                     OpName);
@@ -4946,6 +4991,7 @@ OMPClause *Sema::ActOnOpenMPReductionClause(ArrayRef<Expr *> VarList,
 
 OMPClause *Sema::ActOnOpenMPLinearClause(ArrayRef<Expr *> VarList,
                                          SourceLocation StartLoc,
+                                         SourceLocation LParenLoc,
                                          SourceLocation EndLoc,
                                          Expr *Step,
                                          SourceLocation StepLoc) {
@@ -5019,11 +5065,12 @@ OMPClause *Sema::ActOnOpenMPLinearClause(ArrayRef<Expr *> VarList,
   if (Vars.empty()) return 0;
 
   return OMPLinearClause::Create(
-            Context, StartLoc, EndLoc, Vars, Step, StepLoc);
+            Context, StartLoc, LParenLoc, EndLoc, Vars, Step, StepLoc);
 }
 
 OMPClause *Sema::ActOnOpenMPAlignedClause(ArrayRef<Expr *> VarList,
                                           SourceLocation StartLoc,
+                                          SourceLocation LParenLoc,
                                           SourceLocation EndLoc,
                                           Expr *Alignment,
                                           SourceLocation AlignmentLoc) {
@@ -5086,7 +5133,7 @@ OMPClause *Sema::ActOnOpenMPAlignedClause(ArrayRef<Expr *> VarList,
   }
 
   return OMPAlignedClause::Create(
-            Context, StartLoc, EndLoc, Vars, Alignment, AlignmentLoc);
+            Context, StartLoc, LParenLoc, EndLoc, Vars, Alignment, AlignmentLoc);
 }
 
 OMPClause *Sema::ActOnOpenMPReadClause(SourceLocation StartLoc,
@@ -5126,6 +5173,7 @@ OMPClause *Sema::ActOnOpenMPNotInBranchClause(SourceLocation StartLoc,
 
 OMPClause *Sema::ActOnOpenMPFlushClause(ArrayRef<Expr *> VarList,
                                         SourceLocation StartLoc,
+                                        SourceLocation LParenLoc,
                                         SourceLocation EndLoc) {
   SmallVector<Expr *, 8> Vars;
   for (ArrayRef<Expr *>::iterator I = VarList.begin(), E = VarList.end();
@@ -5143,11 +5191,12 @@ OMPClause *Sema::ActOnOpenMPFlushClause(ArrayRef<Expr *> VarList,
 
   if (Vars.empty()) return 0;
 
-  return OMPFlushClause::Create(Context, StartLoc, EndLoc, Vars);
+  return OMPFlushClause::Create(Context, StartLoc, LParenLoc, EndLoc, Vars);
 }
 
 OMPClause *Sema::ActOnOpenMPUniformClause(ArrayRef<Expr *> VarList,
                                           SourceLocation StartLoc,
+                                          SourceLocation LParenLoc,
                                           SourceLocation EndLoc) {
   SmallVector<Expr *, 8> Vars;
   for (ArrayRef<Expr *>::iterator I = VarList.begin(), E = VarList.end();
@@ -5165,7 +5214,7 @@ OMPClause *Sema::ActOnOpenMPUniformClause(ArrayRef<Expr *> VarList,
 
   if (Vars.empty()) return 0;
 
-  return OMPUniformClause::Create(Context, StartLoc, EndLoc, Vars);
+  return OMPUniformClause::Create(Context, StartLoc, LParenLoc, EndLoc, Vars);
 }
 
 namespace {

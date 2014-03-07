@@ -53,6 +53,7 @@ void __addfsword(unsigned long, unsigned short);
 void __code_seg(const char *);
 static __inline__
 void __cpuid(int[4], int);
+static __inline__
 void __cpuidex(int[4], int, int);
 void __debugbreak(void);
 __int64 __emul(int, int);
@@ -622,10 +623,6 @@ static __inline__ short __attribute__((__always_inline__, __nodebug__))
 _InterlockedExchangeAdd16(short volatile *_Addend, short _Value) {
   return __atomic_add_fetch(_Addend, _Value, 0) - _Value;
 }
-static __inline__ long __attribute__((__always_inline__, __nodebug__))
-_InterlockedExchangeAdd(long volatile *_Addend, long _Value) {
-  return __atomic_add_fetch(_Addend, _Value, 0) - _Value;
-}
 #ifdef __x86_64__
 static __inline__ __int64 __attribute__((__always_inline__, __nodebug__))
 _InterlockedExchangeAdd64(__int64 volatile *_Addend, __int64 _Value) {
@@ -660,10 +657,6 @@ static __inline__ short __attribute__((__always_inline__, __nodebug__))
 _InterlockedIncrement16(short volatile *_Value) {
   return __atomic_add_fetch(_Value, 1, 0);
 }
-static __inline__ long __attribute__((__always_inline__, __nodebug__))
-_InterlockedIncrement(long volatile *_Value) {
-  return __atomic_add_fetch(_Value, 1, 0);
-}
 #ifdef __x86_64__
 static __inline__ __int64 __attribute__((__always_inline__, __nodebug__))
 _InterlockedIncrement64(__int64 volatile *_Value) {
@@ -675,10 +668,6 @@ _InterlockedIncrement64(__int64 volatile *_Value) {
 \*----------------------------------------------------------------------------*/
 static __inline__ short __attribute__((__always_inline__, __nodebug__))
 _InterlockedDecrement16(short volatile *_Value) {
-  return __atomic_sub_fetch(_Value, 1, 0);
-}
-static __inline__ long __attribute__((__always_inline__, __nodebug__))
-_InterlockedDecrement(long volatile *_Value) {
   return __atomic_sub_fetch(_Value, 1, 0);
 }
 #ifdef __x86_64__
@@ -790,12 +779,6 @@ _InterlockedCompareExchange16(short volatile *_Destination,
   __atomic_compare_exchange(_Destination, &_Comparand, &_Exchange, 0, 0, 0);
   return _Comparand;
 }
-static __inline__ long __attribute__((__always_inline__, __nodebug__))
-_InterlockedCompareExchange(long volatile *_Destination,
-                            long _Exchange, long _Comparand) {
-  __atomic_compare_exchange(_Destination, &_Comparand, &_Exchange, 0, 0, 0);
-  return _Comparand;
-}
 #ifdef __x86_64__
 static __inline__ void *__attribute__((__always_inline__, __nodebug__))
 _InterlockedCompareExchangePointer(void *volatile *_Destination,
@@ -876,14 +859,13 @@ _ReturnAddress(void) {
 }
 static __inline__ void __attribute__((__always_inline__, __nodebug__))
 __cpuid(int __info[4], int __level) {
-#if __i386__
-  __asm__ ("cpuid"
-         : "=a"(__info[0]), "=b" (__info[1]), "=c"(__info[2]), "=d"(__info[3])
-         : "0"(__level));
-#else
   __asm__ ("cpuid" : "=a"(__info[0]), "=b" (__info[1]), "=c"(__info[2]), "=d"(__info[3])
-                   : "0"(__level));
-#endif
+                   : "a"(__level));
+}
+static __inline__ void __attribute__((__always_inline__, __nodebug__))
+__cpuidex(int __info[4], int __level, int __ecx) {
+  __asm__ ("cpuid" : "=a"(__info[0]), "=b" (__info[1]), "=c"(__info[2]), "=d"(__info[3])
+                   : "a"(__level), "c"(__ecx));
 }
 static __inline__ unsigned __int64 __cdecl __attribute__((__always_inline__, __nodebug__))
 _xgetbv(unsigned int __xcr_no) {

@@ -502,11 +502,9 @@ llvm::Function *CodeGenFunction::generateDestroyHelper(
   FunctionArgList args;
   ImplicitParamDecl dst(0, SourceLocation(), 0, getContext().VoidPtrTy);
   args.push_back(&dst);
-  
-  const CGFunctionInfo &FI = 
-    CGM.getTypes().arrangeFunctionDeclaration(getContext().VoidTy, args,
-                                              FunctionType::ExtInfo(),
-                                              /*variadic*/ false);
+
+  const CGFunctionInfo &FI = CGM.getTypes().arrangeFreeFunctionDeclaration(
+      getContext().VoidTy, args, FunctionType::ExtInfo(), /*variadic=*/false);
   llvm::FunctionType *FTy = CGM.getTypes().GetFunctionType(FI);
   llvm::Function *fn = 
     CreateGlobalInitOrDestructFunction(CGM, FTy, "__cxx_global_array_dtor");
@@ -554,8 +552,10 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
     Args.push_back(&Dst);
 
     const CGFunctionInfo &FI =
-          getTypes().arrangeFunctionDeclaration(getContext().VoidPtrTy, Args,
-                                                FunctionType::ExtInfo(), false);
+          getTypes().arrangeFreeFunctionDeclaration(getContext().VoidPtrTy,
+                                                    Args,
+                                                    FunctionType::ExtInfo(),
+                                                    false);
     llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
     llvm::Function *Fn =
            CreateGlobalInitOrDestructFunction(*this, FTy,
@@ -609,8 +609,10 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
     Args.push_back(&Dst2);
 
     const CGFunctionInfo &FI =
-          getTypes().arrangeFunctionDeclaration(getContext().VoidPtrTy, Args,
-                                                FunctionType::ExtInfo(), false);
+          getTypes().arrangeFreeFunctionDeclaration(getContext().VoidPtrTy,
+                                                    Args,
+                                                    FunctionType::ExtInfo(),
+                                                    false);
     llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
     llvm::Function *Fn =
             CreateGlobalInitOrDestructFunction(*this, FTy,
@@ -634,8 +636,10 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
     Args.push_back(&Dst);
 
     const CGFunctionInfo &FI =
-          getTypes().arrangeFunctionDeclaration(getContext().VoidPtrTy, Args,
-                                                FunctionType::ExtInfo(), false);
+          getTypes().arrangeFreeFunctionDeclaration(getContext().VoidPtrTy,
+                                                    Args,
+                                                    FunctionType::ExtInfo(),
+                                                    false);
     llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
     llvm::Function *Fn =
            CreateGlobalInitOrDestructFunction(*this, FTy,
@@ -660,8 +664,10 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
       Args.push_back(&Dst);
 
       const CGFunctionInfo &FI =
-            getTypes().arrangeFunctionDeclaration(getContext().VoidPtrTy, Args,
-                                                FunctionType::ExtInfo(), false);
+            getTypes().arrangeFreeFunctionDeclaration(getContext().VoidPtrTy,
+                                                      Args,
+                                                      FunctionType::ExtInfo(),
+                                                      false);
       llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
       Ctor = llvm::Constant::getNullValue(FTy->getPointerTo());
     }
@@ -674,8 +680,10 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
       Args.push_back(&Dst1);
       Args.push_back(&Dst2);
       const CGFunctionInfo &FI =
-            getTypes().arrangeFunctionDeclaration(getContext().VoidPtrTy, Args,
-                                                  FunctionType::ExtInfo(), false);
+            getTypes().arrangeFreeFunctionDeclaration(getContext().VoidPtrTy,
+                                                      Args,
+                                                      FunctionType::ExtInfo(),
+                                                      false);
       llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
       CCtor = llvm::Constant::getNullValue(FTy->getPointerTo());
     }
@@ -685,8 +693,10 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
       Args.push_back(&Dst);
 
       const CGFunctionInfo &FI =
-            getTypes().arrangeFunctionDeclaration(getContext().VoidPtrTy, Args,
-                                                  FunctionType::ExtInfo(), false);
+            getTypes().arrangeFreeFunctionDeclaration(getContext().VoidPtrTy,
+                                                      Args,
+                                                      FunctionType::ExtInfo(),
+                                                      false);
       llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
       Dtor = llvm::Constant::getNullValue(FTy->getPointerTo());
     }
@@ -732,8 +742,10 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
     Args.push_back(&Dst);
 
     const CGFunctionInfo &FI =
-          getTypes().arrangeFunctionDeclaration(getContext().VoidPtrTy, Args,
-                                                FunctionType::ExtInfo(), false);
+          getTypes().arrangeFreeFunctionDeclaration(getContext().VoidPtrTy,
+                                                    Args,
+                                                    FunctionType::ExtInfo(),
+                                                    false);
     llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
     llvm::Function *Fn =
            CreateGlobalInitOrDestructFunction(*this, FTy,
@@ -787,8 +799,10 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
     Args.push_back(&Dst2);
 
     const CGFunctionInfo &FI =
-          getTypes().arrangeFunctionDeclaration(getContext().VoidPtrTy, Args,
-                                                FunctionType::ExtInfo(), false);
+          getTypes().arrangeFreeFunctionDeclaration(getContext().VoidPtrTy,
+                                                    Args,
+                                                    FunctionType::ExtInfo(),
+                                                    false);
     llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
     llvm::Function *Fn =
             CreateGlobalInitOrDestructFunction(*this, FTy,
@@ -809,8 +823,10 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
     Args.push_back(&Dst);
 
     const CGFunctionInfo &FI =
-          getTypes().arrangeFunctionDeclaration(getContext().VoidPtrTy, Args,
-                                                FunctionType::ExtInfo(), false);
+          getTypes().arrangeFreeFunctionDeclaration(getContext().VoidPtrTy,
+                                                    Args,
+                                                    FunctionType::ExtInfo(),
+                                                    false);
     llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
     llvm::Function *Fn =
            CreateGlobalInitOrDestructFunction(*this, FTy,
@@ -837,8 +853,10 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
       Args.push_back(&Dst);
 
       const CGFunctionInfo &FI =
-            getTypes().arrangeFunctionDeclaration(getContext().VoidPtrTy, Args,
-                                                FunctionType::ExtInfo(), false);
+            getTypes().arrangeFreeFunctionDeclaration(getContext().VoidPtrTy,
+                                                      Args,
+                                                      FunctionType::ExtInfo(),
+                                                      false);
       llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
       Ctor = llvm::Constant::getNullValue(FTy->getPointerTo());
     }
@@ -851,8 +869,10 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
       Args.push_back(&Dst1);
       Args.push_back(&Dst2);
       const CGFunctionInfo &FI =
-            getTypes().arrangeFunctionDeclaration(getContext().VoidPtrTy, Args,
-                                                  FunctionType::ExtInfo(), false);
+            getTypes().arrangeFreeFunctionDeclaration(getContext().VoidPtrTy,
+                                                      Args,
+                                                      FunctionType::ExtInfo(),
+                                                      false);
       llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
       CCtor = llvm::Constant::getNullValue(FTy->getPointerTo());
     }
@@ -862,8 +882,10 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
       Args.push_back(&Dst);
 
       const CGFunctionInfo &FI =
-            getTypes().arrangeFunctionDeclaration(getContext().VoidPtrTy, Args,
-                                                  FunctionType::ExtInfo(), false);
+            getTypes().arrangeFreeFunctionDeclaration(getContext().VoidPtrTy,
+                                                      Args,
+                                                      FunctionType::ExtInfo(),
+                                                      false);
       llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
       Dtor = llvm::Constant::getNullValue(FTy->getPointerTo());
     }

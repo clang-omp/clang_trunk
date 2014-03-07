@@ -1035,9 +1035,36 @@ OMPClause *Parser::ParseOpenMPClause(OpenMPDirectiveKind DKind,
 ///    thread_limit-clause:
 ///      'thread_limit' '(' expression ')'
 ///
+#if 0
+OMPClause *Parser::ParseOpenMPSingleExprClause(OpenMPClauseKind Kind) {
+  SourceLocation Loc = ConsumeToken();
+
+  BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_openmp_end);
+  if (T.expectAndConsume(diag::err_expected_lparen_after,
+                         getOpenMPClauseName(Kind)))
+    return 0;
+
+  ExprResult LHS(ParseCastExpression(false, false, NotTypeCast));
+  ExprResult Val(ParseRHSOfBinaryExpression(LHS, prec::Conditional));
+
+  if (Tok.isNot(tok::r_paren) && Tok.isNot(tok::comma) &&
+      Tok.isNot(tok::annot_pragma_openmp_end))
+    ConsumeAnyToken();
+
+  // Parse ')'.
+  T.consumeClose();
+
+  if (Val.isInvalid())
+    return 0;
+
+  return Actions.ActOnOpenMPSingleExprClause(Kind, Val.take(), Loc,
+                                             T.getOpenLocation(),
+                                             T.getCloseLocation());
+}
+#endif
 OMPClause *Parser::ParseOpenMPSingleExprClause(OpenMPClauseKind Kind) {
   SourceLocation Loc = Tok.getLocation();
-  SourceLocation LOpen = ConsumeToken();
+  SourceLocation LOpen = ConsumeAnyToken();
   bool LParen = true;
   if (Tok.isNot(tok::l_paren)) {
     Diag(Tok, diag::err_expected_lparen_after) << getOpenMPClauseName(Kind);
@@ -1061,7 +1088,7 @@ OMPClause *Parser::ParseOpenMPSingleExprClause(OpenMPClauseKind Kind) {
   if (Val.isInvalid())
     return 0;
 
-  return Actions.ActOnOpenMPSingleExprClause(Kind, Val.take(), Loc,
+  return Actions.ActOnOpenMPSingleExprClause(Kind, Val.take(), Loc, LOpen,
                                              Tok.getLocation());
 }
 
@@ -1087,7 +1114,7 @@ OMPClause *Parser::ParseOpenMPSingleExprWithTypeClause(OpenMPClauseKind Kind) {
     ConsumeAnyToken();
 
   unsigned Type = Tok.isAnnotation() ?
-                     OMPC_SCHEDULE_unknown :
+                     (unsigned)OMPC_SCHEDULE_unknown :
                      getOpenMPSimpleClauseType(Kind, PP.getSpelling(Tok));
   SourceLocation TypeLoc = Tok.getLocation();
   ExprResult Val = ExprError();
@@ -1109,7 +1136,7 @@ OMPClause *Parser::ParseOpenMPSingleExprWithTypeClause(OpenMPClauseKind Kind) {
     ConsumeAnyToken();
 
   return Actions.ActOnOpenMPSingleExprWithTypeClause(Kind, Type, TypeLoc,
-                                                     Val.take(), Loc,
+                                                     Val.take(), Loc, LOpen,
                                                      Tok.getLocation());
 }
 
@@ -1134,8 +1161,8 @@ OMPClause *Parser::ParseOpenMPSimpleClause(OpenMPClauseKind Kind) {
     ConsumeAnyToken();
 
   unsigned Type = Tok.isAnnotation() ?
-                     ((Kind == OMPC_default) ? OMPC_DEFAULT_unknown :
-                                               OMPC_PROC_BIND_unknown) :
+                     ((Kind == OMPC_default) ? (unsigned)OMPC_DEFAULT_unknown :
+                                               (unsigned)OMPC_PROC_BIND_unknown) :
                      getOpenMPSimpleClauseType(Kind, PP.getSpelling(Tok));
   SourceLocation TypeLoc = Tok.getLocation();
   if (Tok.isNot(tok::r_paren) && Tok.isNot(tok::comma) &&
@@ -1151,7 +1178,7 @@ OMPClause *Parser::ParseOpenMPSimpleClause(OpenMPClauseKind Kind) {
   if (Tok.is(tok::r_paren))
     ConsumeAnyToken();
 
-  return Actions.ActOnOpenMPSimpleClause(Kind, Type, TypeLoc, Loc,
+  return Actions.ActOnOpenMPSimpleClause(Kind, Type, TypeLoc, Loc, LOpen,
                                          Tok.getLocation());
 }
 
@@ -1225,7 +1252,7 @@ OMPClause *Parser::ParseOpenMPVarListClause(OpenMPClauseKind Kind) {
   // Parsing "reduction-identifier ':'" for reduction clause.
   if (Kind == OMPC_reduction) {
     Op = Tok.isAnnotation() ?
-               OMPC_REDUCTION_unknown :
+               (unsigned)OMPC_REDUCTION_unknown :
                getOpenMPSimpleClauseType(Kind, PP.getSpelling(Tok));
     switch (Op) {
     case OMPC_REDUCTION_add:
@@ -1270,6 +1297,7 @@ OMPClause *Parser::ParseOpenMPVarListClause(OpenMPClauseKind Kind) {
 
   SmallVector<Expr *, 5> Vars;
   bool IsComma = Kind != OMPC_reduction || Op != OMPC_REDUCTION_unknown;
+  bool MayHaveTail = (Kind == OMPC_linear) || (Kind == OMPC_aligned);
   while (IsComma || (Tok.isNot(tok::r_paren) &&
                      Tok.isNot(tok::annot_pragma_openmp_end) &&
                      Tok.isNot(tok::colon))) {
@@ -1285,10 +1313,14 @@ OMPClause *Parser::ParseOpenMPVarListClause(OpenMPClauseKind Kind) {
     IsComma = Tok.is(tok::comma);
     if (IsComma) {
       ConsumeToken();
+    } else if (Tok.isNot(tok::r_paren) &&
+               Tok.isNot(tok::annot_pragma_openmp_end) &&
+               (!MayHaveTail || Tok.isNot(tok::colon))) {
+      Diag(Tok, diag::err_omp_expected_punc)
+        << getOpenMPClauseName(Kind);
     }
   }
 
-  bool MayHaveTail = (Kind == OMPC_linear) || (Kind == OMPC_aligned);
   bool MustHaveTail = false;
   Expr *TailExpr = 0;
   SourceLocation TailLoc;
@@ -1328,7 +1360,7 @@ OMPClause *Parser::ParseOpenMPVarListClause(OpenMPClauseKind Kind) {
   }
 
   return Actions.ActOnOpenMPVarListClause(Kind, Vars,
-                    Loc, Tok.getLocation(), Op, TailExpr, SS, OpName,
+                    Loc, LOpen, Tok.getLocation(), Op, TailExpr, SS, OpName,
                     (TailExpr ? TailLoc : SourceLocation()));
 }
 

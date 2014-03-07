@@ -154,7 +154,7 @@ namespace {
       SmallVector<DeclContext*,4> queue;
       while (true) {
         DeclContext::udir_iterator I, End;
-        for (llvm::tie(I, End) = DC->getUsingDirectives(); I != End; ++I) {
+        for (std::tie(I, End) = DC->getUsingDirectives(); I != End; ++I) {
           UsingDirectiveDecl *UD = *I;
           DeclContext *NS = UD->getNominatedNamespace();
           if (visited.insert(NS)) {
@@ -292,29 +292,27 @@ void LookupResult::configure() {
   IDNS = getIDNS(LookupKind, SemaRef.getLangOpts().CPlusPlus,
                  isForRedeclaration());
 
-  if (!isForRedeclaration()) {
-    // If we're looking for one of the allocation or deallocation
-    // operators, make sure that the implicitly-declared new and delete
-    // operators can be found.
-    switch (NameInfo.getName().getCXXOverloadedOperator()) {
-    case OO_New:
-    case OO_Delete:
-    case OO_Array_New:
-    case OO_Array_Delete:
-      SemaRef.DeclareGlobalNewDelete();
-      break;
+  // If we're looking for one of the allocation or deallocation
+  // operators, make sure that the implicitly-declared new and delete
+  // operators can be found.
+  switch (NameInfo.getName().getCXXOverloadedOperator()) {
+  case OO_New:
+  case OO_Delete:
+  case OO_Array_New:
+  case OO_Array_Delete:
+    SemaRef.DeclareGlobalNewDelete();
+    break;
 
-    default:
-      break;
-    }
+  default:
+    break;
+  }
 
-    // Compiler builtins are always visible, regardless of where they end
-    // up being declared.
-    if (IdentifierInfo *Id = NameInfo.getName().getAsIdentifierInfo()) {
-      if (unsigned BuiltinID = Id->getBuiltinID()) {
-        if (!SemaRef.Context.BuiltinInfo.isPredefinedLibFunction(BuiltinID))
-          AllowHidden = true;
-      }
+  // Compiler builtins are always visible, regardless of where they end
+  // up being declared.
+  if (IdentifierInfo *Id = NameInfo.getName().getAsIdentifierInfo()) {
+    if (unsigned BuiltinID = Id->getBuiltinID()) {
+      if (!SemaRef.Context.BuiltinInfo.isPredefinedLibFunction(BuiltinID))
+        AllowHidden = true;
     }
   }
 }
@@ -774,7 +772,7 @@ CppNamespaceLookup(Sema &S, LookupResult &R, ASTContext &Context,
   // Perform direct name lookup into the namespaces nominated by the
   // using directives whose common ancestor is this namespace.
   UnqualUsingDirectiveSet::const_iterator UI, UEnd;
-  llvm::tie(UI, UEnd) = UDirs.getNamespacesFor(NS);
+  std::tie(UI, UEnd) = UDirs.getNamespacesFor(NS);
 
   for (; UI != UEnd; ++UI)
     if (LookupDirect(S, R, UI->getNominatedNamespace()))
@@ -986,7 +984,7 @@ bool Sema::CppLookupName(LookupResult &R, Scope *S) {
     if (Ctx) {
       DeclContext *OuterCtx;
       bool SearchAfterTemplateScope;
-      llvm::tie(OuterCtx, SearchAfterTemplateScope) = findOuterContext(S);
+      std::tie(OuterCtx, SearchAfterTemplateScope) = findOuterContext(S);
       if (SearchAfterTemplateScope)
         OutsideOfTemplateParamDC = OuterCtx;
 
@@ -1129,7 +1127,7 @@ bool Sema::CppLookupName(LookupResult &R, Scope *S) {
     if (Ctx) {
       DeclContext *OuterCtx;
       bool SearchAfterTemplateScope;
-      llvm::tie(OuterCtx, SearchAfterTemplateScope) = findOuterContext(S);
+      std::tie(OuterCtx, SearchAfterTemplateScope) = findOuterContext(S);
       if (SearchAfterTemplateScope)
         OutsideOfTemplateParamDC = OuterCtx;
 
@@ -1522,7 +1520,7 @@ static bool LookupQualifiedNameInUsingDirectives(Sema &S, LookupResult &R,
       continue;
     }
 
-    for (llvm::tie(I,E) = ND->getUsingDirectives(); I != E; ++I) {
+    for (std::tie(I, E) = ND->getUsingDirectives(); I != E; ++I) {
       NamespaceDecl *Nom = (*I)->getNominatedNamespace();
       if (Visited.insert(Nom))
         Queue.push_back(Nom);
@@ -3096,7 +3094,7 @@ static void LookupVisibleDecls(DeclContext *Ctx, LookupResult &Result,
   if (QualifiedNameLookup) {
     ShadowContextRAII Shadow(Visited);
     DeclContext::udir_iterator I, E;
-    for (llvm::tie(I, E) = Ctx->getUsingDirectives(); I != E; ++I) {
+    for (std::tie(I, E) = Ctx->getUsingDirectives(); I != E; ++I) {
       LookupVisibleDecls((*I)->getNominatedNamespace(), Result,
                          QualifiedNameLookup, InBaseClass, Consumer, Visited);
     }
@@ -3282,7 +3280,7 @@ static void LookupVisibleDecls(Scope *S, LookupResult &Result,
     // Lookup visible declarations in any namespaces found by using
     // directives.
     UnqualUsingDirectiveSet::const_iterator UI, UEnd;
-    llvm::tie(UI, UEnd) = UDirs.getNamespacesFor(Entity);
+    std::tie(UI, UEnd) = UDirs.getNamespacesFor(Entity);
     for (; UI != UEnd; ++UI)
       LookupVisibleDecls(const_cast<DeclContext *>(UI->getNominatedNamespace()),
                          Result, /*QualifiedNameLookup=*/false,
@@ -3513,7 +3511,7 @@ void TypoCorrectionConsumer::addCorrection(TypoCorrection Correction) {
     CList.push_back(Correction);
 
   while (CorrectionResults.size() > MaxTypoDistanceResultSets)
-    erase(llvm::prior(CorrectionResults.end()));
+    erase(std::prev(CorrectionResults.end()));
 }
 
 // Fill the supplied vector with the IdentifierInfo pointers for each piece of
@@ -4219,13 +4217,20 @@ TypoCorrection Sema::CorrectTypo(const DeclarationNameInfo &TypoName,
          KNI != KNIEnd; ++KNI)
       Namespaces.AddNameSpecifier(KNI->first);
 
+    bool SSIsTemplate = false;
+    if (NestedNameSpecifier *NNS =
+            (SS && SS->isValid()) ? SS->getScopeRep() : 0) {
+      if (const Type *T = NNS->getAsType())
+        SSIsTemplate = T->getTypeClass() == Type::TemplateSpecialization;
+    }
     for (ASTContext::type_iterator TI = Context.types_begin(),
                                    TIEnd = Context.types_end();
          TI != TIEnd; ++TI) {
       if (CXXRecordDecl *CD = (*TI)->getAsCXXRecordDecl()) {
         CD = CD->getCanonicalDecl();
         if (!CD->isDependentType() && !CD->isAnonymousStructOrUnion() &&
-            !CD->isUnion() &&
+            !CD->isUnion() && CD->getIdentifier() &&
+            (SSIsTemplate || !isa<ClassTemplateSpecializationDecl>(CD)) &&
             (CD->isBeingDefined() || CD->isCompleteDefinition()))
           Namespaces.AddNameSpecifier(CD);
       }
@@ -4548,8 +4553,11 @@ bool CorrectionCandidateCallback::ValidateCandidate(const TypoCorrection &candid
 }
 
 FunctionCallFilterCCC::FunctionCallFilterCCC(Sema &SemaRef, unsigned NumArgs,
-                                             bool HasExplicitTemplateArgs)
-    : NumArgs(NumArgs), HasExplicitTemplateArgs(HasExplicitTemplateArgs) {
+                                             bool HasExplicitTemplateArgs,
+                                             bool AllowNonStaticMethods)
+    : NumArgs(NumArgs), HasExplicitTemplateArgs(HasExplicitTemplateArgs),
+      AllowNonStaticMethods(AllowNonStaticMethods),
+      CurContext(SemaRef.CurContext) {
   WantTypeSpecifiers = SemaRef.getLangOpts().CPlusPlus;
   WantRemainingKeywords = false;
 }
@@ -4578,9 +4586,28 @@ bool FunctionCallFilterCCC::ValidateCandidate(const TypoCorrection &candidate) {
             return true;
       }
     }
-    if (FD && FD->getNumParams() >= NumArgs &&
-        FD->getMinRequiredArguments() <= NumArgs)
-      return true;
+
+    // Skip the current candidate if it is not a FunctionDecl or does not accept
+    // the current number of arguments.
+    if (!FD || !(FD->getNumParams() >= NumArgs &&
+                 FD->getMinRequiredArguments() <= NumArgs))
+      continue;
+
+    // If the current candidate is a non-static C++ method and non-static
+    // methods are being excluded, then skip the candidate unless the current
+    // DeclContext is a method in the same class or a descendent class of the
+    // candidate's parent class.
+    if (CXXMethodDecl *MD = dyn_cast<CXXMethodDecl>(FD)) {
+      if (!AllowNonStaticMethods && !MD->isStatic()) {
+        CXXMethodDecl *CurMD = dyn_cast_or_null<CXXMethodDecl>(CurContext);
+        CXXRecordDecl *CurRD =
+            CurMD ? CurMD->getParent()->getCanonicalDecl() : 0;
+        CXXRecordDecl *RD = MD->getParent()->getCanonicalDecl();
+        if (!CurRD || (CurRD != RD && !CurRD->isDerivedFrom(RD)))
+          continue;
+      }
+    }
+    return true;
   }
   return false;
 }

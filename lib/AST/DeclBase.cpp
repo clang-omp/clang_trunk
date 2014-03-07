@@ -1012,8 +1012,8 @@ DeclContext::LoadLexicalDeclsFromExternalStorage() const {
   // Splice the newly-read declarations into the beginning of the list
   // of declarations.
   Decl *ExternalFirst, *ExternalLast;
-  llvm::tie(ExternalFirst, ExternalLast) = BuildDeclChain(Decls,
-                                                          FieldsAlreadyLoaded);
+  std::tie(ExternalFirst, ExternalLast) =
+      BuildDeclChain(Decls, FieldsAlreadyLoaded);
   ExternalLast->NextInContextAndBits.setPointer(FirstDecl);
   FirstDecl = ExternalFirst;
   if (!LastDecl)
@@ -1297,7 +1297,7 @@ DeclContext::lookup(DeclarationName Name) {
       return R.first->second.getLookupResult();
 
     ExternalASTSource *Source = getParentASTContext().getExternalSource();
-    if (Source->FindExternalVisibleDeclsByName(this, Name) || R.second) {
+    if (Source->FindExternalVisibleDeclsByName(this, Name) || !R.second) {
       if (StoredDeclsMap *Map = LookupPtr.getPointer()) {
         StoredDeclsMap::iterator I = Map->find(Name);
         if (I != Map->end())

@@ -427,6 +427,14 @@ private:
   bool TraverseFunctionHelper(FunctionDecl *D);
   bool TraverseVarHelper(VarDecl *D);
 
+  bool TraverseOMPClause(OMPClause *C);
+#define OPENMP_CLAUSE(Name, Class)                                      \
+  bool Visit##Class(Class *C);
+#include "clang/Basic/OpenMPKinds.def"
+  /// \brief Process clauses with list of variables.
+  template <typename T>
+  void VisitOMPClauseList(T *Node);
+
   typedef SmallVector<Stmt *, 16> StmtsTy;
   typedef SmallVector<StmtsTy *, 4> QueuesTy;
   

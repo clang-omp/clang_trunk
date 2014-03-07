@@ -280,7 +280,8 @@ private:
         if (CurrentToken->isOneOf(tok::r_paren, tok::r_square))
           return false;
         updateParameterCount(Left, CurrentToken);
-        if (CurrentToken->is(tok::colon))
+        if (CurrentToken->is(tok::colon) &&
+            Style.Language != FormatStyle::LK_Proto)
           Left->Type = TT_DictLiteral;
         if (!consumeToken())
           return false;
@@ -985,6 +986,8 @@ private:
       else if (Current->is(tok::semi) || Current->Type == TT_InlineASMColon ||
                Current->Type == TT_ObjCSelectorName)
         return 0;
+      else if (Current->Type == TT_RangeBasedForLoopColon)
+        return prec::Comma;
       else if (Current->Type == TT_BinaryOperator || Current->is(tok::comma))
         return Current->getPrecedence();
       else if (Current->isOneOf(tok::period, tok::arrow))
@@ -1209,10 +1212,16 @@ unsigned TokenAnnotator::splitPenalty(const AnnotatedLine &Line,
 
   if (Right.Type == TT_TrailingAnnotation && Right.Next &&
       Right.Next->isNot(tok::l_paren)) {
-    // Breaking before a trailing annotation is bad unless it is function-like.
+    // Generally, breaking before a trailing annotation is bad unless it is
+    // function-like. It seems to be especially preferable to keep standard
+    // annotations (i.e. "const", "final" and "override") on the same line.
     // Use a slightly higher penalty after ")" so that annotations like
     // "const override" are kept together.
-    return Left.is(tok::r_paren) ? 100 : 120;
+    bool is_standard_annotation = Right.is(tok::kw_const) ||
+                                  Right.TokenText == "override" ||
+                                  Right.TokenText == "final";
+    return (Left.is(tok::r_paren) ? 100 : 120) +
+           (is_standard_annotation ? 50 : 0);
   }
 
   // In for-loops, prefer breaking at ',' and ';'.
@@ -1469,7 +1478,7 @@ bool TokenAnnotator::mustBreakBefore(const AnnotatedLine &Line,
     // deliberate choice and might have aligned the contents of the string
     // literal accordingly. Thus, we try keep existing line breaks.
     return Right.NewlinesBefore > 0;
-  } else if (Right.Previous->is(tok::l_brace) &&
+  } else if (Right.Previous->is(tok::l_brace) && Right.NestingLevel == 1 &&
              Style.Language == FormatStyle::LK_Proto) {
     // Don't enums onto single lines in protocol buffers.
     return true;
@@ -1500,6 +1509,8 @@ bool TokenAnnotator::canBreakBefore(const AnnotatedLine &Line,
   if (Right.is(tok::colon) &&
       (Right.Type == TT_DictLiteral || Right.Type == TT_ObjCMethodExpr))
     return false;
+  if (Right.Type == TT_InheritanceColon)
+    return true;
   if (Left.is(tok::colon) &&
       (Left.Type == TT_DictLiteral || Left.Type == TT_ObjCMethodExpr))
     return true;

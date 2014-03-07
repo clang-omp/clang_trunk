@@ -788,6 +788,7 @@ public:
         case 'f':// VSX vector register to hold vector float data
         case 's':// VSX vector register to hold scalar float data
         case 'a':// Any VSX register
+        case 'c':// An individual CR bit
           break;
         default:
           return false;
@@ -862,6 +863,20 @@ public:
     // End FIXME.
     }
     return true;
+  }
+  virtual std::string convertConstraint(const char *&Constraint) const {
+    std::string R;
+    switch (*Constraint) {
+    case 'e':
+    case 'w':
+      // Two-character constraint; add "^" hint for later parsing.
+      R = std::string("^") + std::string(Constraint, 2);
+      Constraint++;
+      break;
+    default:
+      return TargetInfo::convertConstraint(Constraint);
+    }
+    return R;
   }
   virtual const char *getClobbers() const {
     return "";
@@ -3353,6 +3368,7 @@ public:
 
 namespace {
 class AArch64TargetInfo : public TargetInfo {
+  virtual void setDescriptionString() = 0;
   static const char * const GCCRegNames[];
   static const TargetInfo::GCCRegAlias GCCRegAliases[];
 
@@ -3367,14 +3383,19 @@ class AArch64TargetInfo : public TargetInfo {
 
 public:
   AArch64TargetInfo(const llvm::Triple &Triple) : TargetInfo(Triple) {
-    BigEndian = false;
+    IntMaxType = SignedLong;
+    UIntMaxType = UnsignedLong;
+    Int64Type = SignedLong;
     LongWidth = LongAlign = 64;
     LongDoubleWidth = LongDoubleAlign = 128;
     PointerWidth = PointerAlign = 64;
     SuitableAlign = 128;
-    DescriptionString = "e-m:e-i64:64-i128:128-n32:64-S128";
 
     WCharType = UnsignedInt;
+    if (getTriple().getOS() == llvm::Triple::NetBSD)
+      WCharType = SignedInt;
+    else
+      WCharType = UnsignedInt;
     LongDoubleFormat = &llvm::APFloat::IEEEquad;
 
     // AArch64 backend supports 64-bit operations at the moment. In principle
@@ -3387,7 +3408,6 @@ public:
                                 MacroBuilder &Builder) const {
     // GCC defines theses currently
     Builder.defineMacro("__aarch64__");
-    Builder.defineMacro("__AARCH64EL__");
 
     // ACLE predefines. Many can only have one possible value on v8 AArch64.
     Builder.defineMacro("__ARM_ACLE",         "200");
@@ -3427,6 +3447,13 @@ public:
     if (BigEndian)
       Builder.defineMacro("__AARCH_BIG_ENDIAN");
 
+    if (getTriple().getOS() == llvm::Triple::NetBSD) {
+      if (BigEndian)
+        Builder.defineMacro("__BIG_ENDIAN__");
+      else
+        Builder.defineMacro("__LITTLE_ENDIAN__");
+    }
+
     if (FPU == NeonMode) {
       Builder.defineMacro("__ARM_NEON");
       // 64-bit NEON supports half, single and double precision operations.
@@ -3463,6 +3490,9 @@ public:
       if (Features[i] == "+crypto")
         Crypto = 1;
     }
+
+    setDescriptionString();
+
     return true;
   }
 
@@ -3575,7 +3605,46 @@ const Builtin::Info AArch64TargetInfo::BuiltinInfo[] = {
 #define BUILTIN(ID, TYPE, ATTRS) { #ID, TYPE, ATTRS, 0, ALL_LANGUAGES },
 #define LIBBUILTIN(ID, TYPE, ATTRS, HEADER) { #ID, TYPE, ATTRS, HEADER,\
                                               ALL_LANGUAGES },
+#define GET_NEON_BUILTINS
+#include "clang/Basic/arm_neon.inc"
+#undef GET_NEON_BUILTINS
+
+#define BUILTIN(ID, TYPE, ATTRS) { #ID, TYPE, ATTRS, 0, ALL_LANGUAGES },
+#define LIBBUILTIN(ID, TYPE, ATTRS, HEADER) { #ID, TYPE, ATTRS, HEADER,\
+                                              ALL_LANGUAGES },
 #include "clang/Basic/BuiltinsAArch64.def"
+};
+
+class AArch64leTargetInfo : public AArch64TargetInfo {
+  virtual void setDescriptionString() {
+    DescriptionString = "e-m:e-i64:64-i128:128-n32:64-S128";
+  }
+
+public:
+  AArch64leTargetInfo(const llvm::Triple &Triple)
+    : AArch64TargetInfo(Triple) {
+    BigEndian = false;
+    }
+  virtual void getTargetDefines(const LangOptions &Opts,
+                                MacroBuilder &Builder) const {
+    Builder.defineMacro("__AARCH64EL__");
+    AArch64TargetInfo::getTargetDefines(Opts, Builder);
+  }
+};
+
+class AArch64beTargetInfo : public AArch64TargetInfo {
+  virtual void setDescriptionString() {
+    DescriptionString = "E-m:e-i64:64-i128:128-n32:64-S128";
+  }
+
+public:
+  AArch64beTargetInfo(const llvm::Triple &Triple)
+    : AArch64TargetInfo(Triple) { }
+  virtual void getTargetDefines(const LangOptions &Opts,
+                                MacroBuilder &Builder) const {
+    Builder.defineMacro("__AARCH64EB__");
+    AArch64TargetInfo::getTargetDefines(Opts, Builder);
+  }
 };
 
 } // end anonymous namespace
@@ -3623,6 +3692,7 @@ class ARMTargetInfo : public TargetInfo {
   unsigned SoftFloatABI : 1;
 
   unsigned CRC : 1;
+  unsigned Crypto : 1;
 
   static const Builtin::Info BuiltinInfo[];
 
@@ -3832,6 +3902,7 @@ public:
       Features["hwdiv"] = true;
       Features["hwdiv-arm"] = true;
       Features["crc"] = true;
+      Features["crypto"] = true;
     } else if (CPU == "cortex-r5" ||
                // Enable the hwdiv extension for all v8a AArch32 cores by
                // default.
@@ -3848,6 +3919,7 @@ public:
                                     DiagnosticsEngine &Diags) {
     FPU = 0;
     CRC = 0;
+    Crypto = 0;
     SoftFloat = SoftFloatABI = false;
     HWDiv = 0;
     for (unsigned i = 0, e = Features.size(); i != e; ++i) {
@@ -3871,6 +3943,8 @@ public:
         HWDiv |= HWDivARM;
       else if (Features[i] == "+crc")
         CRC = 1;
+      else if (Features[i] == "+crypto")
+        Crypto = 1;
     }
 
     if (!(FPU & NeonFPU) && FPMath == FP_Neon) {
@@ -4035,6 +4109,9 @@ public:
 
     if (CRC)
       Builder.defineMacro("__ARM_FEATURE_CRC32");
+
+    if (Crypto)
+      Builder.defineMacro("__ARM_FEATURE_CRYPTO");
 
     if (CPUArchVer >= 6 && CPUArch != "6M") {
       Builder.defineMacro("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1");
@@ -4213,6 +4290,13 @@ void ARMTargetInfo::getGCCRegAliases(const GCCRegAlias *&Aliases,
 }
 
 const Builtin::Info ARMTargetInfo::BuiltinInfo[] = {
+#define BUILTIN(ID, TYPE, ATTRS) { #ID, TYPE, ATTRS, 0, ALL_LANGUAGES },
+#define LIBBUILTIN(ID, TYPE, ATTRS, HEADER) { #ID, TYPE, ATTRS, HEADER,\
+                                              ALL_LANGUAGES },
+#define GET_NEON_BUILTINS
+#include "clang/Basic/arm_neon.inc"
+#undef GET_NEON_BUILTINS
+
 #define BUILTIN(ID, TYPE, ATTRS) { #ID, TYPE, ATTRS, 0, ALL_LANGUAGES },
 #define LIBBUILTIN(ID, TYPE, ATTRS, HEADER) { #ID, TYPE, ATTRS, HEADER,\
                                               ALL_LANGUAGES },
@@ -4543,6 +4627,7 @@ public:
     LongDoubleWidth = 128;
     LongDoubleAlign = 128;
     LongDoubleFormat = &llvm::APFloat::IEEEquad;
+    MaxAtomicPromoteWidth = MaxAtomicInlineWidth = 64;
   }
 
   virtual void getTargetDefines(const LangOptions &Opts,
@@ -4558,6 +4643,22 @@ public:
       Builder.defineMacro("__sparc_v9__");
       Builder.defineMacro("__sparcv9__");
     }
+  }
+
+  virtual bool setCPU(const std::string &Name) {
+    bool CPUKnown = llvm::StringSwitch<bool>(Name)
+      .Case("v9", true)
+      .Case("ultrasparc", true)
+      .Case("ultrasparc3", true)
+      .Case("niagara", true)
+      .Case("niagara2", true)
+      .Case("niagara3", true)
+      .Case("niagara4", true)
+      .Default(false);
+
+    // No need to store the CPU yet.  There aren't any CPU-specific
+    // macros to define.
+    return CPUKnown;
   }
 };
 
@@ -4871,6 +4972,13 @@ public:
     return true;
   }
   void getDefaultFeatures(llvm::StringMap<bool> &Features) const {
+    // The backend enables certain ABI's by default according to the
+    // architecture.
+    // Disable both possible defaults so that we don't end up with multiple
+    // ABI's selected and trigger an assertion.
+    Features["o32"] = false;
+    Features["n64"] = false;
+
     Features[ABI] = true;
     Features[CPU] = true;
   }
@@ -5550,11 +5658,21 @@ static TargetInfo *AllocateTarget(const llvm::Triple &Triple) {
   case llvm::Triple::aarch64:
     switch (os) {
     case llvm::Triple::Linux:
-      return new LinuxTargetInfo<AArch64TargetInfo>(Triple);
+      return new LinuxTargetInfo<AArch64leTargetInfo>(Triple);
     case llvm::Triple::NetBSD:
-      return new NetBSDTargetInfo<AArch64TargetInfo>(Triple);
+      return new NetBSDTargetInfo<AArch64leTargetInfo>(Triple);
     default:
-      return new AArch64TargetInfo(Triple);
+      return new AArch64leTargetInfo(Triple);
+    }
+
+  case llvm::Triple::aarch64_be:
+    switch (os) {
+    case llvm::Triple::Linux:
+      return new LinuxTargetInfo<AArch64beTargetInfo>(Triple);
+    case llvm::Triple::NetBSD:
+      return new NetBSDTargetInfo<AArch64beTargetInfo>(Triple);
+    default:
+      return new AArch64beTargetInfo(Triple);
     }
 
   case llvm::Triple::arm:

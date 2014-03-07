@@ -14,6 +14,7 @@
 #include "clang/Frontend/CodeGenOptions.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Frontend/Utils.h"
+#include "llvm/ADT/OwningPtr.h"
 #include "llvm/Bitcode/BitcodeWriterPass.h"
 #include "llvm/CodeGen/RegAllocRegistry.h"
 #include "llvm/CodeGen/SchedulerRegistry.h"
@@ -59,7 +60,7 @@ private:
   PassManager *getCodeGenPasses() const {
     if (!CodeGenPasses) {
       CodeGenPasses = new PassManager();
-      CodeGenPasses->add(new DataLayout(TheModule));
+      CodeGenPasses->add(new DataLayoutPass(TheModule));
       if (TM)
         TM->addAnalysisPasses(*CodeGenPasses);
     }
@@ -69,7 +70,7 @@ private:
   PassManager *getPerModulePasses() const {
     if (!PerModulePasses) {
       PerModulePasses = new PassManager();
-      PerModulePasses->add(new DataLayout(TheModule));
+      PerModulePasses->add(new DataLayoutPass(TheModule));
       if (TM)
         TM->addAnalysisPasses(*PerModulePasses);
     }
@@ -79,7 +80,7 @@ private:
   FunctionPassManager *getPerFunctionPasses() const {
     if (!PerFunctionPasses) {
       PerFunctionPasses = new FunctionPassManager(TheModule);
-      PerFunctionPasses->add(new DataLayout(TheModule));
+      PerFunctionPasses->add(new DataLayoutPass(TheModule));
       if (TM)
         TM->addAnalysisPasses(*PerFunctionPasses);
     }
@@ -165,6 +166,11 @@ static void addSampleProfileLoaderPass(const PassManagerBuilder &Builder,
   PM.add(createSampleProfileLoaderPass(CGOpts.SampleProfileFile));
 }
 
+static void addAddDiscriminatorsPass(const PassManagerBuilder &Builder,
+                                     PassManagerBase &PM) {
+  PM.add(createAddDiscriminatorsPass());
+}
+
 static void addBoundsCheckingPass(const PassManagerBuilder &Builder,
                                     PassManagerBase &PM) {
   PM.add(createBoundsCheckingPass());
@@ -244,6 +250,9 @@ void EmitAssemblyHelper::CreatePasses() {
   PMBuilder.DisableUnitAtATime = !CodeGenOpts.UnitAtATime;
   PMBuilder.DisableUnrollLoops = !CodeGenOpts.UnrollLoops;
   PMBuilder.RerollLoops = CodeGenOpts.RerollLoops;
+
+  PMBuilder.addExtension(PassManagerBuilder::EP_EarlyAsPossible,
+                         addAddDiscriminatorsPass);
 
   if (!CodeGenOpts.SampleProfileFile.empty())
     PMBuilder.addExtension(PassManagerBuilder::EP_EarlyAsPossible,
@@ -437,6 +446,9 @@ TargetMachine *EmitAssemblyHelper::CreateTargetMachine(bool MustCreateTM) {
   }
 
   llvm::TargetOptions Options;
+
+  if (CodeGenOpts.DisableIntegratedAS)
+    Options.DisableIntegratedAS = true;
 
   // Set frame pointer elimination mode.
   if (!CodeGenOpts.DisableFPElim) {

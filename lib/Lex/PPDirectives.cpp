@@ -60,8 +60,8 @@ MacroInfo *Preprocessor::AllocateMacroInfo(SourceLocation L) {
 
 MacroInfo *Preprocessor::AllocateDeserializedMacroInfo(SourceLocation L,
                                                        unsigned SubModuleID) {
-  LLVM_STATIC_ASSERT(llvm::AlignOf<MacroInfo>::Alignment >= sizeof(SubModuleID),
-                     "alignment for MacroInfo is less than the ID");
+  static_assert(llvm::AlignOf<MacroInfo>::Alignment >= sizeof(SubModuleID),
+                "alignment for MacroInfo is less than the ID");
   DeserializedMacroInfoChain *MIChain =
       BP.Allocate<DeserializedMacroInfoChain>();
   MIChain->Next = DeserialMIChainHead;
@@ -1660,14 +1660,18 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
   }
 
   // If all is good, enter the new file!
-  EnterSourceFile(FID, CurDir, FilenameTok.getLocation(),
-                  static_cast<bool>(BuildingModule));
+  if (EnterSourceFile(FID, CurDir, FilenameTok.getLocation()))
+    return;
 
   // If we're walking into another part of the same module, let the parser
   // know that any future declarations are within that other submodule.
-  if (BuildingModule)
+  if (BuildingModule) {
+    assert(!CurSubmodule && "should not have marked this as a module yet");
+    CurSubmodule = BuildingModule.getModule();
+
     EnterAnnotationToken(*this, HashLoc, End, tok::annot_module_begin,
-                         BuildingModule.getModule());
+                         CurSubmodule);
+  }
 }
 
 /// HandleIncludeNextDirective - Implements \#include_next.

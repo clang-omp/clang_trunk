@@ -1681,6 +1681,7 @@ void OMPClauseWriter::writeClause(OMPClause *C) {
 
 void OMPClauseWriter::VisitOMPIfClause(OMPIfClause *C) {
   Writer->Writer.AddStmt(C->getCondition());
+  Writer->Writer.AddSourceLocation(C->getLParenLoc(), Record);
 }
 
 void OMPClauseWriter::VisitOMPFinalClause(OMPFinalClause *C) {
@@ -1697,7 +1698,7 @@ void OMPClauseWriter::VisitOMPCollapseClause(OMPCollapseClause *C) {
 
 void OMPClauseWriter::VisitOMPDefaultClause(OMPDefaultClause *C) {
   Record.push_back(C->getDefaultKind());
-  Writer->Writer.AddSourceLocation(C->getDefaultKindLoc(), Record);
+  Writer->Writer.AddSourceLocation(C->getDefaultKindKwLoc(), Record);
 }
 
 void OMPClauseWriter::VisitOMPProcBindClause(OMPProcBindClause *C) {

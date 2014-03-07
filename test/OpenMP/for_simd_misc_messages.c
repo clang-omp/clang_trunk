@@ -44,7 +44,7 @@ void test_non_identifiers()
 void test_safelen()
 {
   int i;
-  /* expected-error@+1 {{expected '('}}  expected-error@+1 {{expected expression}}*/
+  /* expected-error@+1 {{expected '('}} expected-error@+1 {{expected expression}} */
   #pragma omp for simd safelen
   for (i = 0; i < 16; ++i) ;
   /* expected-error@+1 {{expected expression}} expected-error@+1 {{expected ')'}} expected-note@+1 {{to match this '('}} */

@@ -22,9 +22,9 @@
 #include "clang/Basic/Diagnostic.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/InlineAsm.h"
-#include "llvm/Support/CallSite.h"
 using namespace clang;
 using namespace CodeGen;
 
@@ -619,8 +619,8 @@ PropertyImplStrategy::PropertyImplStrategy(CodeGenModule &CGM,
   // Evaluate the ivar's size and alignment.
   ObjCIvarDecl *ivar = propImpl->getPropertyIvarDecl();
   QualType ivarType = ivar->getType();
-  llvm::tie(IvarSize, IvarAlignment)
-    = CGM.getContext().getTypeInfoInChars(ivarType);
+  std::tie(IvarSize, IvarAlignment) =
+      CGM.getContext().getTypeInfoInChars(ivarType);
 
   // If we have a copy property, we always have to use getProperty/setProperty.
   // TODO: we could actually use setProperty and an expression for non-atomics.
@@ -892,10 +892,14 @@ CodeGenFunction::generateObjCGetterBody(const ObjCImplementationDecl *classImpl,
 
     // FIXME: We shouldn't need to get the function info here, the
     // runtime already should have computed it to build the function.
+    llvm::Instruction *CallInstruction;
     RValue RV = EmitCall(getTypes().arrangeFreeFunctionCall(propType, args,
                                                        FunctionType::ExtInfo(),
                                                             RequiredArgs::All),
-                         getPropertyFn, ReturnValueSlot(), args);
+                         getPropertyFn, ReturnValueSlot(), args, 0,
+                         &CallInstruction);
+    if (llvm::CallInst *call = dyn_cast<llvm::CallInst>(CallInstruction))
+      call->setTailCall();
 
     // We need to fix the type here. Ivars with copy & retain are
     // always objects so we don't need to worry about complex or
@@ -1521,13 +1525,10 @@ void CodeGenFunction::EmitObjCForCollectionStmt(const ObjCForCollectionStmt &S){
   llvm::Value *initialMutations =
     Builder.CreateLoad(StateMutationsPtr, "forcoll.initial-mutations");
 
-  RegionCounter Cnt = getPGORegionCounter(&S);
-
   // Start looping.  This is the point we return to whenever we have a
   // fresh, non-empty batch of objects.
   llvm::BasicBlock *LoopBodyBB = createBasicBlock("forcoll.loopbody");
   EmitBlock(LoopBodyBB);
-  Cnt.beginRegion(Builder);
 
   // The current index into the buffer.
   llvm::PHINode *index = Builder.CreatePHI(UnsignedLongLTy, 3, "forcoll.index");
@@ -1536,6 +1537,9 @@ void CodeGenFunction::EmitObjCForCollectionStmt(const ObjCForCollectionStmt &S){
   // The current buffer size.
   llvm::PHINode *count = Builder.CreatePHI(UnsignedLongLTy, 3, "forcoll.count");
   count->addIncoming(initialBufferLimit, LoopInitBB);
+
+  RegionCounter Cnt = getPGORegionCounter(&S);
+  Cnt.beginRegion(Builder);
 
   // Check whether the mutations value has changed from where it was
   // at start.  StateMutationsPtr should actually be invariant between
@@ -1624,7 +1628,7 @@ void CodeGenFunction::EmitObjCForCollectionStmt(const ObjCForCollectionStmt &S){
     EmitAutoVarCleanups(variable);
 
   // Perform the loop body, setting up break and continue labels.
-  BreakContinueStack.push_back(BreakContinue(LoopEnd, AfterBody, &Cnt));
+  BreakContinueStack.push_back(BreakContinue(LoopEnd, AfterBody));
   {
     RunCleanupsScope Scope(*this);
     EmitStmt(S.getBody());
@@ -2896,12 +2900,10 @@ CodeGenFunction::GenerateObjCAtomicSetterCopyHelperFunction(
   args.push_back(&dstDecl);
   ImplicitParamDecl srcDecl(FD, SourceLocation(), 0, SrcTy);
   args.push_back(&srcDecl);
-  
-  const CGFunctionInfo &FI =
-    CGM.getTypes().arrangeFunctionDeclaration(C.VoidTy, args,
-                                              FunctionType::ExtInfo(),
-                                              RequiredArgs::All);
-  
+
+  const CGFunctionInfo &FI = CGM.getTypes().arrangeFreeFunctionDeclaration(
+      C.VoidTy, args, FunctionType::ExtInfo(), RequiredArgs::All);
+
   llvm::FunctionType *LTy = CGM.getTypes().GetFunctionType(FI);
   
   llvm::Function *Fn =
@@ -2977,12 +2979,10 @@ CodeGenFunction::GenerateObjCAtomicGetterCopyHelperFunction(
   args.push_back(&dstDecl);
   ImplicitParamDecl srcDecl(FD, SourceLocation(), 0, SrcTy);
   args.push_back(&srcDecl);
-  
-  const CGFunctionInfo &FI =
-  CGM.getTypes().arrangeFunctionDeclaration(C.VoidTy, args,
-                                            FunctionType::ExtInfo(),
-                                            RequiredArgs::All);
-  
+
+  const CGFunctionInfo &FI = CGM.getTypes().arrangeFreeFunctionDeclaration(
+      C.VoidTy, args, FunctionType::ExtInfo(), RequiredArgs::All);
+
   llvm::FunctionType *LTy = CGM.getTypes().GetFunctionType(FI);
   
   llvm::Function *Fn =

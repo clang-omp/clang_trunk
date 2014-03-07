@@ -1372,7 +1372,7 @@ bool Sema::IsNoReturnConversion(QualType FromType, QualType ToType,
 ///
 /// \param ICK Will be set to the vector conversion kind, if this is a vector
 /// conversion.
-static bool IsVectorConversion(ASTContext &Context, QualType FromType,
+static bool IsVectorConversion(Sema &S, QualType FromType,
                                QualType ToType, ImplicitConversionKind &ICK) {
   // We need at least one of these types to be a vector type to have a vector
   // conversion.
@@ -1380,7 +1380,7 @@ static bool IsVectorConversion(ASTContext &Context, QualType FromType,
     return false;
 
   // Identical types require no conversions.
-  if (Context.hasSameUnqualifiedType(FromType, ToType))
+  if (S.Context.hasSameUnqualifiedType(FromType, ToType))
     return false;
 
   // There are no conversions between extended vector types, only identity.
@@ -1402,9 +1402,8 @@ static bool IsVectorConversion(ASTContext &Context, QualType FromType,
   // 2)lax vector conversions are permitted and the vector types are of the
   //   same size
   if (ToType->isVectorType() && FromType->isVectorType()) {
-    if (Context.areCompatibleVectorTypes(FromType, ToType) ||
-        (Context.getLangOpts().LaxVectorConversions &&
-         (Context.getTypeSize(FromType) == Context.getTypeSize(ToType)))) {
+    if (S.Context.areCompatibleVectorTypes(FromType, ToType) ||
+        S.isLaxVectorConversion(FromType, ToType)) {
       ICK = ICK_Vector_Conversion;
       return true;
     }
@@ -1633,7 +1632,7 @@ static bool IsStandardConversion(Sema &S, Expr* From, QualType ToType,
                                          InOverloadResolution, FromType)) {
     // Pointer to member conversions (4.11).
     SCS.Second = ICK_Pointer_Member;
-  } else if (IsVectorConversion(S.Context, FromType, ToType, SecondICK)) {
+  } else if (IsVectorConversion(S, FromType, ToType, SecondICK)) {
     SCS.Second = SecondICK;
     FromType = ToType.getUnqualifiedType();
   } else if (!S.getLangOpts().CPlusPlus &&
@@ -5667,7 +5666,8 @@ EnableIfAttr *Sema::CheckEnableIf(FunctionDecl *Function, ArrayRef<Expr *> Args,
   bool InitializationFailed = false;
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
     if (i == 0 && !MissingImplicitThis && isa<CXXMethodDecl>(Function) &&
-        !cast<CXXMethodDecl>(Function)->isStatic()) {
+        !cast<CXXMethodDecl>(Function)->isStatic() &&
+        !isa<CXXConstructorDecl>(Function)) {
       CXXMethodDecl *Method = cast<CXXMethodDecl>(Function);
       ExprResult R =
         PerformObjectArgumentInitialization(Args[0], /*Qualifier=*/0,
@@ -10405,7 +10405,7 @@ BuildRecoveryCallExpr(Sema &SemaRef, Scope *S, Expr *Fn,
   LookupResult R(SemaRef, ULE->getName(), ULE->getNameLoc(),
                  Sema::LookupOrdinaryName);
   FunctionCallFilterCCC Validator(SemaRef, Args.size(),
-                                  ExplicitTemplateArgs != 0);
+                                  ExplicitTemplateArgs != 0, false);
   NoTypoCorrectionCCC RejectAll;
   CorrectionCandidateCallback *CCC = AllowTypoCorrection ?
       (CorrectionCandidateCallback*)&Validator :

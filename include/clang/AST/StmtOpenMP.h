@@ -1,4 +1,4 @@
-//===- StmtOpenMP.h - Classes for OpenMP directives and clauses --*- C++ -*-===//
+//===- StmtOpenMP.h - Classes for OpenMP directives  ------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -19,6 +19,7 @@
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/Expr.h"
+#include "clang/AST/OpenMPClause.h"
 #include "clang/AST/Stmt.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/SourceLocation.h"
@@ -1225,7 +1226,7 @@ class OMPFlushDirective : public OMPExecutableDirective {
 
   /// \brief Build an empty directive.
   ///
-  /// \param N Number of clauses.
+  /// \param NumClauses Number of clauses.
   ///
   explicit OMPFlushDirective(unsigned N)
     : OMPExecutableDirective(OMPFlushDirectiveClass, OMPD_flush,
@@ -1247,7 +1248,7 @@ public:
   /// \brief Creates an empty directive with the place for \a N clauses.
   ///
   /// \param C AST context.
-  /// \param N The number of clauses.
+  /// \param NumClauses Number of clauses.
   ///
   static OMPFlushDirective *CreateEmpty(ASTContext &C, unsigned N,
                                         EmptyShell);
@@ -1306,6 +1307,6 @@ public:
   }
 };
 
-}  // end namespace clang
+} // end namespace clang
 
 #endif

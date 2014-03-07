@@ -13,8 +13,8 @@
 
 #include "clang/Parse/Parser.h"
 #include "RAIIObjectsForParser.h"
-#include "clang/AST/DeclTemplate.h"
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/DeclTemplate.h"
 #include "clang/Basic/AddressSpaces.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Parse/ParseDiagnostic.h"
@@ -69,9 +69,11 @@ TypeResult Parser::ParseTypeName(SourceRange *Range,
 /// isAttributeLateParsed - Return true if the attribute has arguments that
 /// require late parsing.
 static bool isAttributeLateParsed(const IdentifierInfo &II) {
+#define CLANG_ATTR_LATE_PARSED_LIST
     return llvm::StringSwitch<bool>(II.getName())
-#include "clang/Parse/AttrLateParsed.inc"
+#include "clang/Parse/AttrParserStringSwitches.inc"
         .Default(false);
+#undef CLANG_ATTR_LATE_PARSED_LIST
 }
 
 /// ParseGNUAttributes - Parse a non-empty attributes list.
@@ -196,24 +198,30 @@ static StringRef normalizeAttrName(StringRef Name) {
 
 /// \brief Determine whether the given attribute has an identifier argument.
 static bool attributeHasIdentifierArg(const IdentifierInfo &II) {
+#define CLANG_ATTR_IDENTIFIER_ARG_LIST
   return llvm::StringSwitch<bool>(normalizeAttrName(II.getName()))
-#include "clang/Parse/AttrIdentifierArg.inc"
+#include "clang/Parse/AttrParserStringSwitches.inc"
            .Default(false);
+#undef CLANG_ATTR_IDENTIFIER_ARG_LIST
 }
 
 /// \brief Determine whether the given attribute parses a type argument.
 static bool attributeIsTypeArgAttr(const IdentifierInfo &II) {
+#define CLANG_ATTR_TYPE_ARG_LIST
   return llvm::StringSwitch<bool>(normalizeAttrName(II.getName()))
-#include "clang/Parse/AttrTypeArg.inc"
+#include "clang/Parse/AttrParserStringSwitches.inc"
            .Default(false);
+#undef CLANG_ATTR_TYPE_ARG_LIST
 }
 
 /// \brief Determine whether the given attribute requires parsing its arguments
 /// in an unevaluated context or not.
 static bool attributeParsedArgsUnevaluated(const IdentifierInfo &II) {
+#define CLANG_ATTR_ARG_CONTEXT_LIST
   return llvm::StringSwitch<bool>(normalizeAttrName(II.getName()))
-#include "clang/Parse/AttrArgContext.inc"
+#include "clang/Parse/AttrParserStringSwitches.inc"
            .Default(false);
+#undef CLANG_ATTR_ARG_CONTEXT_LIST
 }
 
 IdentifierLoc *Parser::ParseIdentifierLoc() {
@@ -300,8 +308,8 @@ void Parser::ParseGNUAttributeArgs(IdentifierInfo *AttrName,
     PrototypeScope.reset(new ParseScope(this, Scope::FunctionPrototypeScope |
                                         Scope::FunctionDeclarationScope |
                                         Scope::DeclScope));
-    for (unsigned i = 0; i != FTI.NumArgs; ++i) {
-      ParmVarDecl *Param = cast<ParmVarDecl>(FTI.ArgInfo[i].Param);
+    for (unsigned i = 0; i != FTI.NumParams; ++i) {
+      ParmVarDecl *Param = cast<ParmVarDecl>(FTI.Params[i].Param);
       Actions.ActOnReenterCXXMethodParameter(getCurScope(), Param);
     }
   }
@@ -2184,7 +2192,9 @@ bool Parser::ParseImplicitInt(DeclSpec &DS, CXXScopeSpec *SS,
   // diagnostic and attempt to recover.
   ParsedType T;
   IdentifierInfo *II = Tok.getIdentifierInfo();
-  if (Actions.DiagnoseUnknownTypeName(II, Loc, getCurScope(), SS, T)) {
+  if (Actions.DiagnoseUnknownTypeName(II, Loc, getCurScope(), SS, T,
+                                      getLangOpts().CPlusPlus &&
+                                          NextToken().is(tok::less))) {
     // The action emitted a diagnostic, so we don't have to.
     if (T) {
       // The action has suggested that the type T could be used. Set that as
@@ -2582,7 +2592,7 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
         if ((DSContext == DSC_top_level || DSContext == DSC_class) &&
             TemplateId->Name &&
             Actions.isCurrentClassName(*TemplateId->Name, getCurScope(), &SS)) {
-          if (isConstructorDeclarator()) {
+          if (isConstructorDeclarator(/*Unqualified*/false)) {
             // The user meant this to be an out-of-line constructor
             // definition, but template arguments are not allowed
             // there.  Just allow this as a constructor; we'll
@@ -2632,7 +2642,7 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       if ((DSContext == DSC_top_level || DSContext == DSC_class) &&
           Actions.isCurrentClassName(*Next.getIdentifierInfo(), getCurScope(),
                                      &SS)) {
-        if (isConstructorDeclarator())
+        if (isConstructorDeclarator(/*Unqualified*/false))
           goto DoneWithDeclSpec;
 
         // As noted in C++ [class.qual]p2 (cited above), when the name
@@ -2779,7 +2789,7 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       // check whether this is a constructor declaration.
       if (getLangOpts().CPlusPlus && DSContext == DSC_class &&
           Actions.isCurrentClassName(*Tok.getIdentifierInfo(), getCurScope()) &&
-          isConstructorDeclarator())
+          isConstructorDeclarator(/*Unqualified*/true))
         goto DoneWithDeclSpec;
 
       isInvalid = DS.SetTypeSpecType(DeclSpec::TST_typename, Loc, PrevSpec,
@@ -2815,7 +2825,7 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       // constructor declaration.
       if (getLangOpts().CPlusPlus && DSContext == DSC_class &&
           Actions.isCurrentClassName(*TemplateId->Name, getCurScope()) &&
-          isConstructorDeclarator())
+          isConstructorDeclarator(TemplateId->SS.isEmpty()))
         goto DoneWithDeclSpec;
 
       // Turn the template-id annotation token into a type annotation
@@ -4240,7 +4250,7 @@ bool Parser::isDeclarationSpecifier(bool DisambiguatingWithExpression) {
   }
 }
 
-bool Parser::isConstructorDeclarator() {
+bool Parser::isConstructorDeclarator(bool IsUnqualified) {
   TentativeParsingAction TPA(*this);
 
   // Parse the C++ scope specifier.
@@ -4322,10 +4332,33 @@ bool Parser::isConstructorDeclarator() {
     case tok::coloncolon:
       // C(X   ::   Y);
       // C(X   ::   *p);
-    case tok::r_paren:
-      // C(X   )
       // Assume this isn't a constructor, rather than assuming it's a
       // constructor with an unnamed parameter of an ill-formed type.
+      break;
+
+    case tok::r_paren:
+      // C(X   )
+      if (NextToken().is(tok::colon) || NextToken().is(tok::kw_try)) {
+        // Assume these were meant to be constructors:
+        //   C(X)   :    (the name of a bit-field cannot be parenthesized).
+        //   C(X)   try  (this is otherwise ill-formed).
+        IsConstructor = true;
+      }
+      if (NextToken().is(tok::semi) || NextToken().is(tok::l_brace)) {
+        // If we have a constructor name within the class definition,
+        // assume these were meant to be constructors:
+        //   C(X)   {
+        //   C(X)   ;
+        // ... because otherwise we would be declaring a non-static data
+        // member that is ill-formed because it's of the same type as its
+        // surrounding class.
+        //
+        // FIXME: We can actually do this whether or not the name is qualified,
+        // because if it is qualified in this context it must be being used as
+        // a constructor name. However, we do not implement that rule correctly
+        // currently, so we're somewhat conservative here.
+        IsConstructor = IsUnqualified;
+      }
       break;
 
     default:
@@ -5059,7 +5092,6 @@ void Parser::ParseFunctionDeclarator(Declarator &D,
   ParsedAttributes FnAttrs(AttrFactory);
   TypeResult TrailingReturnType;
 
-  Actions.ActOnStartFunctionDeclarator();
   /* LocalEndLoc is the end location for the local FunctionTypeLoc.
      EndLoc is the end location for the function declarator.
      They differ for trailing return types. */
@@ -5188,8 +5220,6 @@ void Parser::ParseFunctionDeclarator(Declarator &D,
                                              StartLoc, LocalEndLoc, D,
                                              TrailingReturnType),
                 FnAttrs, EndLoc);
-
-  Actions.ActOnEndFunctionDeclarator();
 }
 
 /// isFunctionDeclaratorIdentifierList - This parameter list may have an

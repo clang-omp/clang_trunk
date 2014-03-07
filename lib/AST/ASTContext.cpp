@@ -29,6 +29,7 @@
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/TypeLoc.h"
+#include "clang/AST/VTableBuilder.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
@@ -782,11 +783,7 @@ ASTContext::~ASTContext() {
        A != AEnd; ++A)
     A->second->~AttrVec();
 
-  for (llvm::DenseMap<const DeclContext *, MangleNumberingContext *>::iterator
-           I = MangleNumberingContexts.begin(),
-           E = MangleNumberingContexts.end();
-       I != E; ++I)
-    delete I->second;
+  llvm::DeleteContainerSeconds(MangleNumberingContexts);
 }
 
 void ASTContext::AddDeallocation(void (*Callback)(void*), void *Data) {
@@ -794,8 +791,8 @@ void ASTContext::AddDeallocation(void (*Callback)(void*), void *Data) {
 }
 
 void
-ASTContext::setExternalSource(OwningPtr<ExternalASTSource> &Source) {
-  ExternalSource.reset(Source.take());
+ASTContext::setExternalSource(IntrusiveRefCntPtr<ExternalASTSource> Source) {
+  ExternalSource = Source;
 }
 
 void ASTContext::PrintStats() const {
@@ -849,7 +846,7 @@ void ASTContext::PrintStats() const {
                << NumImplicitDestructors
                << " implicit destructors created\n";
 
-  if (ExternalSource.get()) {
+  if (ExternalSource) {
     llvm::errs() << "\n";
     ExternalSource->PrintStats();
   }
@@ -1620,7 +1617,7 @@ ASTContext::getTypeInfoImpl(const Type *T) const {
   }
   case Type::MemberPointer: {
     const MemberPointerType *MPT = cast<MemberPointerType>(T);
-    llvm::tie(Width, Align) = ABI->getMemberPointerWidthAndAlign(MPT);
+    std::tie(Width, Align) = ABI->getMemberPointerWidthAndAlign(MPT);
     break;
   }
   case Type::Complex: {
@@ -1764,13 +1761,18 @@ unsigned ASTContext::getPreferredTypeAlign(const Type *T) const {
   if (Target->getTriple().getArch() == llvm::Triple::xcore)
     return ABIAlign;  // Never overalign on XCore.
 
+  const TypedefType *TT = T->getAs<TypedefType>();
+
   // Double and long long should be naturally aligned if possible.
-  if (const ComplexType* CT = T->getAs<ComplexType>())
+  if (const ComplexType *CT = T->getAs<ComplexType>())
     T = CT->getElementType().getTypePtr();
   if (T->isSpecificBuiltinType(BuiltinType::Double) ||
       T->isSpecificBuiltinType(BuiltinType::LongLong) ||
       T->isSpecificBuiltinType(BuiltinType::ULongLong))
-    return std::max(ABIAlign, (unsigned)getTypeSize(T));
+    // Don't increase the alignment if an alignment attribute was specified on a
+    // typedef declaration.
+    if (!TT || !TT->getDecl()->getMaxAlignment())
+      return std::max(ABIAlign, (unsigned)getTypeSize(T));
 
   return ABIAlign;
 }
@@ -7529,6 +7531,19 @@ static QualType DecodeTypeFromStr(const char *&Str, const ASTContext &Context,
       assert(HowLong <= 2 && "Can't have LLLL modifier");
       ++HowLong;
       break;
+    case 'W':
+      // This modifier represents int64 type.
+      assert(HowLong == 0 && "Can't use both 'L' and 'W' modifiers!");
+      switch (Context.getTargetInfo().getInt64Type()) {
+      default:
+        llvm_unreachable("Unexpected integer type");
+      case TargetInfo::SignedLong:
+        HowLong = 1;
+        break;
+      case TargetInfo::SignedLongLong:
+        HowLong = 2;
+        break;
+      }
     }
   }
 
@@ -7950,6 +7965,16 @@ CallingConv ASTContext::getDefaultCallingConvention(bool IsVariadic,
 bool ASTContext::isNearlyEmpty(const CXXRecordDecl *RD) const {
   // Pass through to the C++ ABI object
   return ABI->isNearlyEmpty(RD);
+}
+
+VTableContextBase *ASTContext::getVTableContext() {
+  if (!VTContext.get()) {
+    if (Target->getCXXABI().isMicrosoft())
+      VTContext.reset(new MicrosoftVTableContext(*this));
+    else
+      VTContext.reset(new ItaniumVTableContext(*this));
+  }
+  return VTContext.get();
 }
 
 MangleContext *ASTContext::createMangleContext() {

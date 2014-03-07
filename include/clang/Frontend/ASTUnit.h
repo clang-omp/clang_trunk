@@ -64,6 +64,24 @@ class ASTDeserializationListener;
 /// \brief Utility class for loading a ASTContext from an AST file.
 ///
 class ASTUnit : public ModuleLoader {
+public:
+  struct StandaloneFixIt {
+    std::pair<unsigned, unsigned> RemoveRange;
+    std::pair<unsigned, unsigned> InsertFromRange;
+    std::string CodeToInsert;
+    bool BeforePreviousInsertions;
+  };
+
+  struct StandaloneDiagnostic {
+    unsigned ID;
+    DiagnosticsEngine::Level Level;
+    std::string Message;
+    std::string Filename;
+    unsigned LocOffset;
+    std::vector<std::pair<unsigned, unsigned> > Ranges;
+    std::vector<StandaloneFixIt> FixIts;
+  };
+
 private:
   IntrusiveRefCntPtr<LangOptions>         LangOpts;
   IntrusiveRefCntPtr<DiagnosticsEngine>   Diagnostics;
@@ -75,7 +93,7 @@ private:
   IntrusiveRefCntPtr<ASTContext>          Ctx;
   IntrusiveRefCntPtr<TargetOptions>       TargetOpts;
   IntrusiveRefCntPtr<HeaderSearchOptions> HSOpts;
-  ASTReader *Reader;
+  IntrusiveRefCntPtr<ASTReader> Reader;
   bool HadModuleLoaderFatalFailure;
 
   struct ASTWriterData;
@@ -136,7 +154,7 @@ private:
   std::string OriginalSourceFile;
 
   /// \brief The set of diagnostics produced when creating the preamble.
-  SmallVector<StoredDiagnostic, 4> PreambleDiagnostics;
+  SmallVector<StandaloneDiagnostic, 4> PreambleDiagnostics;
 
   /// \brief The set of diagnostics produced when creating this
   /// translation unit.
@@ -295,9 +313,9 @@ private:
                              const char **ArgBegin, const char **ArgEnd,
                              ASTUnit &AST, bool CaptureDiagnostics);
 
-  void TranslateStoredDiagnostics(ASTReader *MMan, StringRef ModName,
+  void TranslateStoredDiagnostics(FileManager &FileMgr,
                                   SourceManager &SrcMan,
-                      const SmallVectorImpl<StoredDiagnostic> &Diags,
+                      const SmallVectorImpl<StandaloneDiagnostic> &Diags,
                             SmallVectorImpl<StoredDiagnostic> &Out);
 
   void clearFileLevelDecls();
@@ -671,11 +689,9 @@ public:
   /// \brief Determine what kind of translation unit this AST represents.
   TranslationUnitKind getTranslationUnitKind() const { return TUKind; }
 
-  typedef llvm::PointerUnion<const char *, const llvm::MemoryBuffer *>
-      FilenameOrMemBuf;
   /// \brief A mapping from a file name to the memory buffer that stores the
   /// remapped contents of that file.
-  typedef std::pair<std::string, FilenameOrMemBuf> RemappedFile;
+  typedef std::pair<std::string, const llvm::MemoryBuffer *> RemappedFile;
 
   /// \brief Create a ASTUnit. Gets ownership of the passed CompilerInvocation. 
   static ASTUnit *create(CompilerInvocation *CI,
@@ -695,8 +711,7 @@ public:
                               IntrusiveRefCntPtr<DiagnosticsEngine> Diags,
                                   const FileSystemOptions &FileSystemOpts,
                                   bool OnlyLocalDecls = false,
-                                  RemappedFile *RemappedFiles = 0,
-                                  unsigned NumRemappedFiles = 0,
+                                  ArrayRef<RemappedFile> RemappedFiles = None,
                                   bool CaptureDiagnostics = false,
                                   bool AllowPCHWithCompilerErrors = false,
                                   bool UserFilesAreVolatile = false);
@@ -798,8 +813,7 @@ public:
                                       StringRef ResourceFilesPath,
                                       bool OnlyLocalDecls = false,
                                       bool CaptureDiagnostics = false,
-                                      RemappedFile *RemappedFiles = 0,
-                                      unsigned NumRemappedFiles = 0,
+                                      ArrayRef<RemappedFile> RemappedFiles = None,
                                       bool RemappedFilesKeepOriginalName = true,
                                       bool PrecompilePreamble = false,
                                       TranslationUnitKind TUKind = TU_Complete,
@@ -816,8 +830,7 @@ public:
   ///
   /// \returns True if a failure occurred that causes the ASTUnit not to
   /// contain any translation-unit information, false otherwise.  
-  bool Reparse(RemappedFile *RemappedFiles = 0,
-               unsigned NumRemappedFiles = 0);
+  bool Reparse(ArrayRef<RemappedFile> RemappedFiles = None);
 
   /// \brief Perform code completion at the given file, line, and
   /// column within this translation unit.
@@ -840,7 +853,7 @@ public:
   /// FIXME: The Diag, LangOpts, SourceMgr, FileMgr, StoredDiagnostics, and
   /// OwnedBuffers parameters are all disgusting hacks. They will go away.
   void CodeComplete(StringRef File, unsigned Line, unsigned Column,
-                    RemappedFile *RemappedFiles, unsigned NumRemappedFiles,
+                    ArrayRef<RemappedFile> RemappedFiles,
                     bool IncludeMacros, bool IncludeCodePatterns,
                     bool IncludeBriefComments,
                     CodeCompleteConsumer &Consumer,

@@ -32,7 +32,7 @@ static cl::opt<bool> Help("h", cl::desc("Alias for -help"), cl::Hidden);
 
 // Mark all our options with this category, everything else (except for -version
 // and -help) will be hidden.
-cl::OptionCategory ClangFormatCategory("Clang-format options");
+static cl::OptionCategory ClangFormatCategory("Clang-format options");
 
 static cl::list<unsigned>
     Offsets("offset",
@@ -65,9 +65,10 @@ static cl::opt<std::string>
           cl::init("file"), cl::cat(ClangFormatCategory));
 static cl::opt<std::string>
 FallbackStyle("fallback-style",
-              cl::desc("The name of the predefined style used as a fallback in "
-                       "case clang-format is invoked with -style=file, but can "
-                       "not find the .clang-format file to use."),
+              cl::desc("The name of the predefined style used as a\n"
+                       "fallback in case clang-format is invoked with\n"
+                       "-style=file, but can not find the .clang-format\n"
+                       "file to use."),
               cl::init("LLVM"), cl::cat(ClangFormatCategory));
 
 static cl::opt<std::string>
