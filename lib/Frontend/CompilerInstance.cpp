@@ -223,7 +223,7 @@ void CompilerInstance::createSourceManager(FileManager &FileMgr) {
 
 // Preprocessor
 
-void CompilerInstance::createPreprocessor() {
+void CompilerInstance::createPreprocessor(TranslationUnitKind TUKind) {
   const PreprocessorOptions &PPOpts = getPreprocessorOpts();
 
   // Create a PTH manager if we are using some form of a token cache.
@@ -240,7 +240,10 @@ void CompilerInstance::createPreprocessor() {
   PP = new Preprocessor(&getPreprocessorOpts(),
                         getDiagnostics(), getLangOpts(), &getTarget(),
                         getSourceManager(), *HeaderInfo, *this, PTHMgr,
-                        /*OwnsHeaderSearch=*/true);
+                        /*OwnsHeaderSearch=*/true,
+                        /*DelayInitialization=*/false,
+                        /*IncrProcessing=*/false,
+                        TUKind);
 
   // Note that this is different then passing PTHMgr to Preprocessor's ctor.
   // That argument is used as the IdentifierInfoLookup argument to
@@ -269,7 +272,8 @@ void CompilerInstance::createPreprocessor() {
   // Handle generating dependencies, if requested.
   const DependencyOutputOptions &DepOpts = getDependencyOutputOpts();
   if (!DepOpts.OutputFile.empty())
-    AttachDependencyFileGen(*PP, DepOpts);
+    TheDependencyFileGenerator.reset(
+        DependencyFileGenerator::CreateAndAttachToPreprocessor(*PP, DepOpts));
   if (!DepOpts.DOTOutputFile.empty())
     AttachDependencyGraphGen(*PP, DepOpts.DOTOutputFile,
                              getHeaderSearchOpts().Sysroot);
@@ -1159,6 +1163,9 @@ CompilerInstance::loadModule(SourceLocation ImportLoc,
       if (hasASTConsumer())
         ModuleManager->StartTranslationUnit(&getASTConsumer());
     }
+
+    if (TheDependencyFileGenerator)
+      TheDependencyFileGenerator->AttachToASTReader(*ModuleManager);
 
     // Try to load the module file.
     unsigned ARRFlags = ASTReader::ARR_OutOfDate | ASTReader::ARR_Missing;
