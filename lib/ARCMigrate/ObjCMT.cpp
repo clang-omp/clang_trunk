@@ -1666,7 +1666,7 @@ private:
     void writeLoc(SourceLocation Loc) {
       FileID FID;
       unsigned Offset;
-      llvm::tie(FID, Offset) = SourceMgr.getDecomposedLoc(Loc);
+      std::tie(FID, Offset) = SourceMgr.getDecomposedLoc(Loc);
       assert(!FID.isInvalid());
       SmallString<200> Path =
           StringRef(SourceMgr.getFileEntryForID(FID)->getName());
@@ -1843,7 +1843,7 @@ void ObjCMigrateASTConsumer::HandleTranslationUnit(ASTContext &Ctx) {
   
  if (IsOutputFile) {
    std::string Error;
-   llvm::raw_fd_ostream OS(MigrateDir.c_str(), Error, llvm::sys::fs::F_Binary);
+   llvm::raw_fd_ostream OS(MigrateDir.c_str(), Error, llvm::sys::fs::F_None);
     if (!Error.empty()) {
       DiagnosticsEngine &Diags = Ctx.getDiagnostics();
       Diags.Report(Diags.getCustomDiagID(DiagnosticsEngine::Error, "%0"))

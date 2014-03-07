@@ -24,13 +24,13 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/CodeGenOptions.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/TypeBuilder.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/Support/CallSite.h"
 using namespace clang;
 using namespace CodeGen;
 
@@ -1064,8 +1064,7 @@ void CodeGenFunction::EmitOMPDirectiveWithLoop(
       llvm::BasicBlock *ContBlock = createBasicBlock("omp.cont.block");
 
       BreakContinueStack.push_back(BreakContinue(getJumpDestInCurrentScope(EndBB),
-                                                 getJumpDestInCurrentScope(ContBlock),
-                                                 &Cnt));
+                                                 getJumpDestInCurrentScope(ContBlock)));
       if (HasSimd) {
         RunCleanupsScope Scope(*this);
         BodyFunction = EmitSimdFunction(SimdWrapper);

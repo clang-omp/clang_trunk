@@ -40,13 +40,13 @@ namespace dr102 { // dr102: yes
 namespace dr106 { // dr106: sup 540
   typedef int &r1;
   typedef r1 &r1;
-  typedef const r1 r1;
-  typedef const r1 &r1;
+  typedef const r1 r1; // expected-warning {{has no effect}}
+  typedef const r1 &r1; // expected-warning {{has no effect}}
 
   typedef const int &r2;
   typedef r2 &r2;
-  typedef const r2 r2;
-  typedef const r2 &r2;
+  typedef const r2 r2; // expected-warning {{has no effect}}
+  typedef const r2 &r2; // expected-warning {{has no effect}}
 }
 
 namespace dr107 { // dr107: yes
@@ -593,6 +593,8 @@ namespace dr154 { // dr154: yes
 namespace dr155 { // dr155: dup 632
   struct S { int n; } s = { { 1 } }; // expected-warning {{braces around scalar initializer}}
 }
+
+// dr158 FIXME write codegen test
 
 namespace dr159 { // dr159: 3.5
   namespace X { void f(); }

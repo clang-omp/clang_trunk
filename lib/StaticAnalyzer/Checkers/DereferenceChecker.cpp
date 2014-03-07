@@ -97,7 +97,7 @@ void DereferenceChecker::reportBug(ProgramStateRef State, const Stmt *S,
   // We know that 'location' cannot be non-null.  This is what
   // we call an "explicit" null dereference.
   if (!BT_null)
-    BT_null.reset(new BuiltinBug("Dereference of null pointer"));
+    BT_null.reset(new BuiltinBug(this, "Dereference of null pointer"));
 
   SmallString<100> buf;
   llvm::raw_svector_ostream os(buf);
@@ -180,7 +180,8 @@ void DereferenceChecker::checkLocation(SVal l, bool isLoad, const Stmt* S,
   if (l.isUndef()) {
     if (ExplodedNode *N = C.generateSink()) {
       if (!BT_undef)
-        BT_undef.reset(new BuiltinBug("Dereference of undefined pointer value"));
+        BT_undef.reset(
+            new BuiltinBug(this, "Dereference of undefined pointer value"));
 
       BugReport *report =
         new BugReport(*BT_undef, BT_undef->getDescription(), N);
@@ -200,7 +201,7 @@ void DereferenceChecker::checkLocation(SVal l, bool isLoad, const Stmt* S,
   ProgramStateRef state = C.getState();
 
   ProgramStateRef notNullState, nullState;
-  llvm::tie(notNullState, nullState) = state->assume(location);
+  std::tie(notNullState, nullState) = state->assume(location);
 
   // The explicit NULL case.
   if (nullState) {
@@ -239,8 +240,7 @@ void DereferenceChecker::checkBind(SVal L, SVal V, const Stmt *S,
   ProgramStateRef State = C.getState();
 
   ProgramStateRef StNonNull, StNull;
-  llvm::tie(StNonNull, StNull) =
-      State->assume(V.castAs<DefinedOrUnknownSVal>());
+  std::tie(StNonNull, StNull) = State->assume(V.castAs<DefinedOrUnknownSVal>());
 
   if (StNull) {
     if (!StNonNull) {

@@ -71,6 +71,7 @@ namespace  {
     void PrintCallArgs(CallExpr *E);
     void PrintRawSEHExceptHandler(SEHExceptStmt *S);
     void PrintRawSEHFinallyStmt(SEHFinallyStmt *S);
+    void PrintOMPExecutableDirective(OMPExecutableDirective *S);
 
     void PrintExpr(Expr *E) {
       if (E)
@@ -90,7 +91,7 @@ namespace  {
           return;
       else StmtVisitor<StmtPrinter>::Visit(S);
     }
-    
+
     void VisitStmt(Stmt *Node) LLVM_ATTRIBUTE_UNUSED {
       Indent() << "<<unknown stmt type>>\n";
     }
@@ -1631,6 +1632,12 @@ void StmtPrinter::VisitCXXOperatorCallExpr(CXXOperatorCallExpr *Node) {
 }
 
 void StmtPrinter::VisitCXXMemberCallExpr(CXXMemberCallExpr *Node) {
+  // If we have a conversion operator call only print the argument.
+  CXXMethodDecl *MD = Node->getMethodDecl();
+  if (MD && isa<CXXConversionDecl>(MD)) {
+    PrintExpr(Node->getImplicitObjectArgument());
+    return;
+  }
   VisitCallExpr(cast<CallExpr>(Node));
 }
 

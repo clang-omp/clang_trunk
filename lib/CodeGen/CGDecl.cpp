@@ -956,7 +956,7 @@ CodeGenFunction::EmitAutoVarAlloca(const VarDecl &D) {
 
     llvm::Value *elementCount;
     QualType elementType;
-    llvm::tie(elementCount, elementType) = getVLASize(Ty);
+    std::tie(elementCount, elementType) = getVLASize(Ty);
 
     llvm::Type *llvmTy = ConvertTypeForMem(elementType);
 

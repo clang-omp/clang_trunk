@@ -5666,7 +5666,8 @@ EnableIfAttr *Sema::CheckEnableIf(FunctionDecl *Function, ArrayRef<Expr *> Args,
   bool InitializationFailed = false;
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
     if (i == 0 && !MissingImplicitThis && isa<CXXMethodDecl>(Function) &&
-        !cast<CXXMethodDecl>(Function)->isStatic()) {
+        !cast<CXXMethodDecl>(Function)->isStatic() &&
+        !isa<CXXConstructorDecl>(Function)) {
       CXXMethodDecl *Method = cast<CXXMethodDecl>(Function);
       ExprResult R =
         PerformObjectArgumentInitialization(Args[0], /*Qualifier=*/0,
@@ -10404,7 +10405,7 @@ BuildRecoveryCallExpr(Sema &SemaRef, Scope *S, Expr *Fn,
   LookupResult R(SemaRef, ULE->getName(), ULE->getNameLoc(),
                  Sema::LookupOrdinaryName);
   FunctionCallFilterCCC Validator(SemaRef, Args.size(),
-                                  ExplicitTemplateArgs != 0);
+                                  ExplicitTemplateArgs != 0, false);
   NoTypoCorrectionCCC RejectAll;
   CorrectionCandidateCallback *CCC = AllowTypoCorrection ?
       (CorrectionCandidateCallback*)&Validator :

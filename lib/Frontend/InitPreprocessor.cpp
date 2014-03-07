@@ -315,9 +315,11 @@ static void InitializeStandardPredefinedMacros(const TargetInfo &TI,
     else if (!LangOpts.GNUMode && LangOpts.Digraphs)
       Builder.defineMacro("__STDC_VERSION__", "199409L");
   } else {
-    // FIXME: Use the right value for __cplusplus for C++1y once one is chosen.
-    if (LangOpts.CPlusPlus1y)
-      Builder.defineMacro("__cplusplus", "201305L");
+    // C++1y [cpp.predefined]p1:
+    //   The name __cplusplus is defined to the value 201402L when compiling a
+    //   C++ translation unit.
+     if (LangOpts.CPlusPlus1y)
+      Builder.defineMacro("__cplusplus", "201402L");
     // C++11 [cpp.predefined]p1:
     //   The name __cplusplus is defined to the value 201103L when compiling a
     //   C++ translation unit.
@@ -692,8 +694,10 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
 
   if (LangOpts.getStackProtector() == LangOptions::SSPOn)
     Builder.defineMacro("__SSP__");
+  else if (LangOpts.getStackProtector() == LangOptions::SSPStrong)
+    Builder.defineMacro("__SSP_STRONG__", "2");
   else if (LangOpts.getStackProtector() == LangOptions::SSPReq)
-    Builder.defineMacro("__SSP_ALL__", "2");
+    Builder.defineMacro("__SSP_ALL__", "3");
 
   if (FEOpts.ProgramAction == frontend::RewriteObjC)
     Builder.defineMacro("__weak", "__attribute__((objc_gc(weak)))");

@@ -803,7 +803,7 @@ CXXForRangeStmt::CXXForRangeStmt(DeclStmt *Range, DeclStmt *BeginEndStmt,
 Expr *CXXForRangeStmt::getRangeInit() {
   DeclStmt *RangeStmt = getRangeStmt();
   VarDecl *RangeDecl = dyn_cast_or_null<VarDecl>(RangeStmt->getSingleDecl());
-  assert(RangeDecl &&& "for-range should have a single var decl");
+  assert(RangeDecl && "for-range should have a single var decl");
   return RangeDecl->getInit();
 }
 
@@ -1030,12 +1030,14 @@ void OMPPrivateClause::setDefaultInits(ArrayRef<Expr *> DefaultInits) {
 
 OMPPrivateClause *OMPPrivateClause::Create(ASTContext &C,
                                            SourceLocation StartLoc,
+                                           SourceLocation LParenLoc,
                                            SourceLocation EndLoc,
                                            ArrayRef<Expr *> VL,
                                            ArrayRef<Expr *> DefaultInits) {
   void *Mem = C.Allocate(sizeof(OMPPrivateClause) + sizeof(Expr *) * 2 * VL.size(),
                          llvm::alignOf<OMPPrivateClause>());
-  OMPPrivateClause *Clause = new (Mem) OMPPrivateClause(StartLoc, EndLoc,
+  OMPPrivateClause *Clause = new (Mem) OMPPrivateClause(StartLoc, LParenLoc,
+                                                        EndLoc,
                                                         VL.size());
   Clause->setVars(VL);
   Clause->setDefaultInits(DefaultInits);
@@ -1066,6 +1068,7 @@ void OMPFirstPrivateClause::setInits(ArrayRef<Expr *> Inits) {
 OMPFirstPrivateClause *OMPFirstPrivateClause::Create(
                                                 ASTContext &C,
                                                 SourceLocation StartLoc,
+                                                SourceLocation LParenLoc,
                                                 SourceLocation EndLoc,
                                                 ArrayRef<Expr *> VL,
                                                 ArrayRef<DeclRefExpr *> PseudoVars,
@@ -1074,6 +1077,7 @@ OMPFirstPrivateClause *OMPFirstPrivateClause::Create(
                          sizeof(Expr *) * VL.size() * 3,
                          llvm::alignOf<OMPFirstPrivateClause>());
   OMPFirstPrivateClause *Clause = new (Mem) OMPFirstPrivateClause(StartLoc,
+                                                                  LParenLoc,
                                                                   EndLoc,
                                                                   VL.size());
   Clause->setVars(VL);
@@ -1119,6 +1123,7 @@ void OMPLastPrivateClause::setAssignments(ArrayRef<Expr *> Assignments) {
 
 OMPLastPrivateClause *OMPLastPrivateClause::Create(ASTContext &C,
                                                    SourceLocation StartLoc,
+                                                   SourceLocation LParenLoc,
                                                    SourceLocation EndLoc,
                                                    ArrayRef<Expr *> VL,
                                                    ArrayRef<DeclRefExpr *> PseudoVars1,
@@ -1128,6 +1133,7 @@ OMPLastPrivateClause *OMPLastPrivateClause::Create(ASTContext &C,
                          sizeof(Expr *) * VL.size() * 5,
                          llvm::alignOf<OMPLastPrivateClause>());
   OMPLastPrivateClause *Clause = new (Mem) OMPLastPrivateClause(StartLoc,
+                                                                LParenLoc,
                                                                 EndLoc,
                                                                 VL.size());
   Clause->setVars(VL);
@@ -1149,11 +1155,13 @@ OMPLastPrivateClause *OMPLastPrivateClause::CreateEmpty(ASTContext &C,
 
 OMPSharedClause *OMPSharedClause::Create(ASTContext &C,
                                          SourceLocation StartLoc,
+                                         SourceLocation LParenLoc,
                                          SourceLocation EndLoc,
                                          ArrayRef<Expr *> VL) {
   void *Mem = C.Allocate(sizeof(OMPSharedClause) + sizeof(Expr *) * VL.size(),
                          llvm::alignOf<OMPSharedClause>());
-  OMPSharedClause *Clause = new (Mem) OMPSharedClause(StartLoc, EndLoc,
+  OMPSharedClause *Clause = new (Mem) OMPSharedClause(StartLoc, LParenLoc,
+                                                      EndLoc,
                                                       VL.size());
   Clause->setVars(VL);
   return Clause;
@@ -1189,6 +1197,7 @@ void OMPCopyinClause::setAssignments(ArrayRef<Expr *> Assignments) {
 
 OMPCopyinClause *OMPCopyinClause::Create(ASTContext &C,
                                          SourceLocation StartLoc,
+                                         SourceLocation LParenLoc,
                                          SourceLocation EndLoc,
                                          ArrayRef<Expr *> VL,
                                          ArrayRef<DeclRefExpr *> PseudoVars1,
@@ -1196,7 +1205,8 @@ OMPCopyinClause *OMPCopyinClause::Create(ASTContext &C,
                                          ArrayRef<Expr *> Assignments) {
   void *Mem = C.Allocate(sizeof(OMPCopyinClause) + sizeof(Expr *) * VL.size() * 4,
                          llvm::alignOf<OMPCopyinClause>());
-  OMPCopyinClause *Clause = new (Mem) OMPCopyinClause(StartLoc, EndLoc,
+  OMPCopyinClause *Clause = new (Mem) OMPCopyinClause(StartLoc, LParenLoc,
+                                                      EndLoc,
                                                       VL.size());
   Clause->setVars(VL);
   Clause->setPseudoVars1(PseudoVars1);
@@ -1235,6 +1245,7 @@ void OMPCopyPrivateClause::setAssignments(ArrayRef<Expr *> Assignments) {
 
 OMPCopyPrivateClause *OMPCopyPrivateClause::Create(ASTContext &C,
                                                    SourceLocation StartLoc,
+                                                   SourceLocation LParenLoc,
                                                    SourceLocation EndLoc,
                                                    ArrayRef<Expr *> VL,
                                                    ArrayRef<DeclRefExpr *> PseudoVars1,
@@ -1244,6 +1255,7 @@ OMPCopyPrivateClause *OMPCopyPrivateClause::Create(ASTContext &C,
                          sizeof(Expr *) * VL.size() * 4,
                          llvm::alignOf<OMPCopyPrivateClause>());
   OMPCopyPrivateClause *Clause = new (Mem) OMPCopyPrivateClause(StartLoc,
+                                                                LParenLoc,
                                                                 EndLoc,
                                                                 VL.size());
   Clause->setVars(VL);
@@ -1263,6 +1275,7 @@ OMPCopyPrivateClause *OMPCopyPrivateClause::CreateEmpty(ASTContext &C,
 
 OMPReductionClause *OMPReductionClause::Create(ASTContext &C,
                                                SourceLocation StartLoc,
+                                               SourceLocation LParenLoc,
                                                SourceLocation EndLoc,
                                                ArrayRef<Expr *> VL,
                                                ArrayRef<Expr *> OpExprs,
@@ -1277,7 +1290,8 @@ OMPReductionClause *OMPReductionClause::Create(ASTContext &C,
   void *Mem = C.Allocate(sizeof(OMPReductionClause) +
                          5 * sizeof(Expr *) * VL.size(),
                          llvm::alignOf<OMPReductionClause>());
-  OMPReductionClause *Clause = new (Mem) OMPReductionClause(StartLoc, EndLoc,
+  OMPReductionClause *Clause = new (Mem) OMPReductionClause(StartLoc,
+                                                            LParenLoc, EndLoc,
                                                             VL.size(),
                                                             Op, S, OpName);
   Clause->setVars(VL);
@@ -1323,13 +1337,14 @@ void OMPReductionClause::setDefaultInits(ArrayRef<Expr *> DefaultInits) {
 
 OMPFlushClause *OMPFlushClause::Create(ASTContext &C,
                                        SourceLocation StartLoc,
+                                       SourceLocation LParenLoc,
                                        SourceLocation EndLoc,
                                        ArrayRef<Expr *> VL) {
   void *Mem = C.Allocate(sizeof(OMPFlushClause) +
                          sizeof(Expr *) * VL.size(),
                          llvm::alignOf<OMPFlushClause>());
   OMPFlushClause *Clause = new (Mem) OMPFlushClause(StartLoc,
-                                                    EndLoc,
+                                                    LParenLoc, EndLoc,
                                                     VL.size());
   Clause->setVars(VL);
   return Clause;
@@ -1343,13 +1358,14 @@ OMPFlushClause *OMPFlushClause::CreateEmpty(ASTContext &C, unsigned N) {
 
 OMPUniformClause *OMPUniformClause::Create(ASTContext &C,
                                            SourceLocation StartLoc,
+                                           SourceLocation LParenLoc,
                                            SourceLocation EndLoc,
                                            ArrayRef<Expr *> VL) {
   void *Mem = C.Allocate(sizeof(OMPUniformClause) +
                          sizeof(Expr *) * VL.size(),
                          llvm::alignOf<OMPUniformClause>());
   OMPUniformClause *Clause = new (Mem) OMPUniformClause(StartLoc,
-                                                        EndLoc,
+                                                        LParenLoc, EndLoc,
                                                         VL.size());
   Clause->setVars(VL);
   return Clause;
@@ -1363,6 +1379,7 @@ OMPUniformClause *OMPUniformClause::CreateEmpty(ASTContext &C, unsigned N) {
 
 OMPLinearClause *OMPLinearClause::Create(ASTContext &C,
                                          SourceLocation StartLoc,
+                                         SourceLocation LParenLoc,
                                          SourceLocation EndLoc,
                                          ArrayRef<Expr *> VL,
                                          Expr *St,
@@ -1372,7 +1389,7 @@ OMPLinearClause *OMPLinearClause::Create(ASTContext &C,
                          sizeof(Expr *), // Place for Step
                          llvm::alignOf<OMPLinearClause>());
   OMPLinearClause *Clause = new (Mem) OMPLinearClause(StartLoc,
-                                                      EndLoc,
+                                                      LParenLoc, EndLoc,
                                                       VL.size(),
                                                       StLoc);
   Clause->setVars(VL);
@@ -1389,6 +1406,7 @@ OMPLinearClause *OMPLinearClause::CreateEmpty(ASTContext &C, unsigned N) {
 
 OMPAlignedClause *OMPAlignedClause::Create(ASTContext &C,
                                            SourceLocation StartLoc,
+                                           SourceLocation LParenLoc,
                                            SourceLocation EndLoc,
                                            ArrayRef<Expr *> VL,
                                            Expr *A,
@@ -1398,7 +1416,7 @@ OMPAlignedClause *OMPAlignedClause::Create(ASTContext &C,
                          sizeof(Expr *), // Place for Alignment
                          llvm::alignOf<OMPAlignedClause>());
   OMPAlignedClause *Clause = new (Mem) OMPAlignedClause(StartLoc,
-                                                        EndLoc,
+                                                        LParenLoc, EndLoc,
                                                         VL.size(),
                                                         ALoc);
   Clause->setVars(VL);
@@ -1941,3 +1959,4 @@ bool CapturedStmt::capturesVariable(const VarDecl *Var) const {
 
   return false;
 }
+

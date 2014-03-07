@@ -259,7 +259,7 @@ FormatStyle getLLVMStyle() {
   LLVMStyle.ColumnLimit = 80;
   LLVMStyle.ConstructorInitializerAllOnOneLineOrOnePerLine = false;
   LLVMStyle.ConstructorInitializerIndentWidth = 4;
-  LLVMStyle.Cpp11BracedListStyle = false;
+  LLVMStyle.Cpp11BracedListStyle = true;
   LLVMStyle.DerivePointerBinding = false;
   LLVMStyle.ExperimentalAutoDetectBinPacking = false;
   LLVMStyle.IndentCaseLabels = false;
@@ -272,7 +272,7 @@ FormatStyle getLLVMStyle() {
   LLVMStyle.ObjCSpaceBeforeProtocolList = true;
   LLVMStyle.PointerBindsToType = false;
   LLVMStyle.SpacesBeforeTrailingComments = 1;
-  LLVMStyle.Standard = FormatStyle::LS_Cpp03;
+  LLVMStyle.Standard = FormatStyle::LS_Cpp11;
   LLVMStyle.UseTab = FormatStyle::UT_Never;
   LLVMStyle.SpacesInParentheses = false;
   LLVMStyle.SpaceInEmptyParentheses = false;
@@ -305,7 +305,6 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
   GoogleStyle.AlwaysBreakBeforeMultilineStrings = true;
   GoogleStyle.AlwaysBreakTemplateDeclarations = true;
   GoogleStyle.ConstructorInitializerAllOnOneLineOrOnePerLine = true;
-  GoogleStyle.Cpp11BracedListStyle = true;
   GoogleStyle.DerivePointerBinding = true;
   GoogleStyle.IndentCaseLabels = true;
   GoogleStyle.IndentFunctionDeclarationAfterType = true;
@@ -343,6 +342,7 @@ FormatStyle getChromiumStyle(FormatStyle::LanguageKind Language) {
 FormatStyle getMozillaStyle() {
   FormatStyle MozillaStyle = getLLVMStyle();
   MozillaStyle.AllowAllParametersOfDeclarationOnNextLine = false;
+  MozillaStyle.Cpp11BracedListStyle = false;
   MozillaStyle.ConstructorInitializerAllOnOneLineOrOnePerLine = true;
   MozillaStyle.DerivePointerBinding = true;
   MozillaStyle.IndentCaseLabels = true;
@@ -350,6 +350,7 @@ FormatStyle getMozillaStyle() {
   MozillaStyle.ObjCSpaceBeforeProtocolList = false;
   MozillaStyle.PenaltyReturnTypeOnItsOwnLine = 200;
   MozillaStyle.PointerBindsToType = true;
+  MozillaStyle.Standard = FormatStyle::LS_Cpp03;
   return MozillaStyle;
 }
 
@@ -360,11 +361,13 @@ FormatStyle getWebKitStyle() {
   Style.BreakBeforeBinaryOperators = true;
   Style.BreakBeforeBraces = FormatStyle::BS_Stroustrup;
   Style.BreakConstructorInitializersBeforeComma = true;
+  Style.Cpp11BracedListStyle = false;
   Style.ColumnLimit = 0;
   Style.IndentWidth = 4;
   Style.NamespaceIndentation = FormatStyle::NI_Inner;
   Style.ObjCSpaceAfterProperty = true;
   Style.PointerBindsToType = true;
+  Style.Standard = FormatStyle::LS_Cpp03;
   return Style;
 }
 
@@ -373,8 +376,10 @@ FormatStyle getGNUStyle() {
   Style.BreakBeforeBinaryOperators = true;
   Style.BreakBeforeBraces = FormatStyle::BS_GNU;
   Style.BreakBeforeTernaryOperators = true;
+  Style.Cpp11BracedListStyle = false;
   Style.ColumnLimit = 79;
   Style.SpaceBeforeParens = FormatStyle::SBPO_Always;
+  Style.Standard = FormatStyle::LS_Cpp03;
   return Style;
 }
 
@@ -581,7 +586,7 @@ private:
     if (I[1]->InPPDirective != (*I)->InPPDirective ||
         (I[1]->InPPDirective && I[1]->First->HasUnescapedNewline))
       return 0;
-    Limit = LimitConsideringMacros(I + 1, E, Limit);
+    Limit = limitConsideringMacros(I + 1, E, Limit);
     AnnotatedLine &Line = **I;
     if (Line.Last->isNot(tok::r_paren))
       return 0;
@@ -625,7 +630,7 @@ private:
       // Check that we still have three lines and they fit into the limit.
       if (I + 2 == E || I[2]->Type == LT_Invalid)
         return 0;
-      Limit = LimitConsideringMacros(I + 2, E, Limit);
+      Limit = limitConsideringMacros(I + 2, E, Limit);
 
       if (!nextTwoLinesFitInto(I, Limit))
         return 0;
@@ -654,7 +659,7 @@ private:
   /// Returns the modified column limit for \p I if it is inside a macro and
   /// needs a trailing '\'.
   unsigned
-  LimitConsideringMacros(SmallVectorImpl<AnnotatedLine *>::const_iterator I,
+  limitConsideringMacros(SmallVectorImpl<AnnotatedLine *>::const_iterator I,
                          SmallVectorImpl<AnnotatedLine *>::const_iterator E,
                          unsigned Limit) {
     if (I[0]->InPPDirective && I + 1 != E &&

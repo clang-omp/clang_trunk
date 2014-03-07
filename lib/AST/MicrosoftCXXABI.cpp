@@ -109,12 +109,10 @@ CXXRecordDecl::getMSInheritanceModel() const {
   return IA->getSemanticSpelling();
 }
 
-void CXXRecordDecl::setMSInheritanceModel() {
-  if (hasAttr<MSInheritanceAttr>())
-    return;
-
-  addAttr(MSInheritanceAttr::CreateImplicit(
-      getASTContext(), calculateInheritanceModel(), getSourceRange()));
+MSVtorDispAttr::Mode CXXRecordDecl::getMSVtorDispMode() const {
+  if (MSVtorDispAttr *VDA = getAttr<MSVtorDispAttr>())
+    return VDA->getVtorDispMode();
+  return MSVtorDispAttr::Mode(getASTContext().getLangOpts().VtorDispMode);
 }
 
 // Returns the number of pointer and integer slots used to represent a member
@@ -171,7 +169,7 @@ std::pair<uint64_t, unsigned> MicrosoftCXXABI::getMemberPointerWidthAndAlign(
   assert(Target.getTriple().getArch() == llvm::Triple::x86 ||
          Target.getTriple().getArch() == llvm::Triple::x86_64);
   unsigned Ptrs, Ints;
-  llvm::tie(Ptrs, Ints) = getMSMemberPointerSlots(MPT);
+  std::tie(Ptrs, Ints) = getMSMemberPointerSlots(MPT);
   // The nominal struct is laid out with pointers followed by ints and aligned
   // to a pointer width if any are present and an int width otherwise.
   unsigned PtrSize = Target.getPointerWidth(0);

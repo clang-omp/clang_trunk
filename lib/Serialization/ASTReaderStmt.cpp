@@ -1766,6 +1766,7 @@ OMPClause *OMPClauseReader::readClause() {
 
 void OMPClauseReader::VisitOMPIfClause(OMPIfClause *C) {
   C->setCondition(Reader->Reader.ReadSubExpr());
+  C->setLParenLoc(Reader->ReadSourceLocation(Record, Idx));
 }
 
 void OMPClauseReader::VisitOMPFinalClause(OMPFinalClause *C) {
@@ -1783,7 +1784,7 @@ void OMPClauseReader::VisitOMPCollapseClause(OMPCollapseClause *C) {
 void OMPClauseReader::VisitOMPDefaultClause(OMPDefaultClause *C) {
   C->setDefaultKind(
        static_cast<OpenMPDefaultClauseKind>(Record[Idx++]));
-  C->setDefaultKindLoc(Reader->ReadSourceLocation(Record, Idx));
+  C->setDefaultKindKwLoc(Reader->ReadSourceLocation(Record, Idx));
 }
 
 void OMPClauseReader::VisitOMPProcBindClause(OMPProcBindClause *C) {
@@ -2089,6 +2090,7 @@ void ASTStmtReader::VisitOMPExecutableDirective(OMPExecutableDirective *E) {
 
 void ASTStmtReader::VisitOMPParallelDirective(OMPParallelDirective *D) {
   VisitStmt(D);
+  // The NumClauses field was read in ReadStmtFromStream.
   ++Idx;
   VisitOMPExecutableDirective(D);
 }
@@ -2110,6 +2112,7 @@ void ASTStmtReader::VisitOMPForDirective(OMPForDirective *D) {
 
 void ASTStmtReader::VisitOMPSimdDirective(OMPSimdDirective *D) {
   VisitStmt(D);
+  // Two fields (NumClauses and CollapsedNum) were read in ReadStmtFromStream.
   Idx += 2;
   VisitOMPExecutableDirective(D);
   D->setNewIterVar(Reader.ReadSubExpr());
@@ -2695,6 +2698,7 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
                                               DeclarationNameInfo(),
                                               0);
       break;
+
     case STMT_OMP_PARALLEL_DIRECTIVE:
       S = OMPParallelDirective::CreateEmpty(Context, Record[ASTStmtReader::NumStmtFields], Empty);
       break;
@@ -2704,10 +2708,12 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       }
       break;
     case STMT_OMP_SIMD_DIRECTIVE: {
-      unsigned Val = Record[ASTStmtReader::NumStmtFields];
-      S = OMPSimdDirective::CreateEmpty(Context, Val, Record[ASTStmtReader::NumStmtFields + 1], Empty);
-      }
+      unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
+      unsigned CollapsedNum = Record[ASTStmtReader::NumStmtFields + 1];
+      S = OMPSimdDirective::CreateEmpty(Context, NumClauses,
+                                        CollapsedNum, Empty);
       break;
+      }
     case STMT_OMP_FOR_SIMD_DIRECTIVE: {
       unsigned Val = Record[ASTStmtReader::NumStmtFields];
       S = OMPForSimdDirective::CreateEmpty(Context, Val, Record[ASTStmtReader::NumStmtFields + 1], Empty);
@@ -2760,11 +2766,11 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
     case EXPR_CXX_MEMBER_CALL:
       S = new (Context) CXXMemberCallExpr(Context, Empty);
       break;
-        
+
     case EXPR_CXX_CONSTRUCT:
       S = new (Context) CXXConstructExpr(Empty);
       break;
-      
+
     case EXPR_CXX_TEMPORARY_OBJECT:
       S = new (Context) CXXTemporaryObjectExpr(Empty);
       break;

@@ -221,6 +221,8 @@ OPENMP_TASK_CLAUSE(private)
 OPENMP_TASK_CLAUSE(firstprivate)
 OPENMP_TASK_CLAUSE(shared)
 
+// FIXME: clauses allowed for directive 'omp simd'.
+
 // Static attributes for 'default' clause.
 OPENMP_DEFAULT_KIND(none)
 OPENMP_DEFAULT_KIND(shared)
@@ -278,3 +280,4 @@ OPENMP_FLUSH_CLAUSE(flush)
 #undef OPENMP_SIMD_CLAUSE
 #undef OPENMP_FOR_SIMD_CLAUSE
 #undef OPENMP_SCHEDULE_KIND
+

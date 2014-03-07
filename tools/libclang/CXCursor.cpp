@@ -558,7 +558,7 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
     K = CXCursor_OMPOrderedDirective;
     break;
   }
-  
+
   CXCursor C = { K, 0, { Parent, S, TU } };
   return C;
 }

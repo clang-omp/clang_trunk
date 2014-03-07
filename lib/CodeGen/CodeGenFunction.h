@@ -33,8 +33,8 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/ValueHandle.h"
 
 namespace llvm {
   class BasicBlock;
@@ -298,29 +298,29 @@ public:
       CGPragmaOmpSimd(const OMPExecutableDirective *S)
         : SimdOmp(S) {}
 
-      virtual bool emitSafelen(CodeGenFunction *CGF) const LLVM_OVERRIDE;
+      virtual bool emitSafelen(CodeGenFunction *CGF) const override;
       virtual bool walkLocalVariablesToEmit(
                       CodeGenFunction *CGF,
-                      CGSIMDForStmtInfo *Info) const LLVM_OVERRIDE;
+                      CGSIMDForStmtInfo *Info) const override;
 
       virtual void emitInit(CodeGenFunction &CGF,
-          llvm::Value *&LoopIndex, llvm::Value *&LoopCount) LLVM_OVERRIDE;
+          llvm::Value *&LoopIndex, llvm::Value *&LoopCount) override;
 
       virtual void emitIncrement(CodeGenFunction &CGF,
-                                 llvm::Value *IndexVar) const LLVM_OVERRIDE { }
+                                 llvm::Value *IndexVar) const override { }
 
-      virtual void emitLinearFinal(CodeGenFunction &CGF) const LLVM_OVERRIDE;
+      virtual void emitLinearFinal(CodeGenFunction &CGF) const override;
 
-      virtual SourceLocation getForLoc() const LLVM_OVERRIDE;
-      virtual SourceRange getSourceRange() const LLVM_OVERRIDE;
-      virtual const Stmt *getInit() const LLVM_OVERRIDE;
-      virtual const Expr *getCond() const LLVM_OVERRIDE;
-      virtual const CapturedStmt *getAssociatedStmt() const LLVM_OVERRIDE;
-      virtual const Expr *getLoopCount() const LLVM_OVERRIDE;
-      virtual Stmt *extractLoopBody(Stmt *S) const LLVM_OVERRIDE;
-      virtual bool isOmp() const LLVM_OVERRIDE { return true; }
-      virtual const Stmt *getStmt() const LLVM_OVERRIDE { return SimdOmp; }
-      virtual ~CGPragmaOmpSimd() LLVM_OVERRIDE { }
+      virtual SourceLocation getForLoc() const override;
+      virtual SourceRange getSourceRange() const override;
+      virtual const Stmt *getInit() const override;
+      virtual const Expr *getCond() const override;
+      virtual const CapturedStmt *getAssociatedStmt() const override;
+      virtual const Expr *getLoopCount() const override;
+      virtual Stmt *extractLoopBody(Stmt *S) const override;
+      virtual bool isOmp() const override { return true; }
+      virtual const Stmt *getStmt() const override { return SimdOmp; }
+      virtual ~CGPragmaOmpSimd() override { }
 
     private:
       const OMPExecutableDirective *SimdOmp;
@@ -836,8 +836,8 @@ public:
       // act exactly like l-values but are formally required to be
       // r-values in C.
       return expr->isGLValue() ||
-             expr->getType()->isRecordType() ||
-             expr->getType()->isFunctionType();
+             expr->getType()->isFunctionType() ||
+             hasAggregateEvaluationKind(expr->getType());
     }
 
     static OpaqueValueMappingData bind(CodeGenFunction &CGF,
@@ -966,18 +966,13 @@ private:
   llvm::DenseMap<const LabelDecl*, JumpDest> LabelMap;
 
   // BreakContinueStack - This keeps track of where break and continue
-  // statements should jump to and the associated base counter for
-  // instrumentation.
+  // statements should jump to.
   struct BreakContinue {
-    BreakContinue(JumpDest Break, JumpDest Continue, RegionCounter *LoopCnt,
-                  bool CountBreak = true)
-      : BreakBlock(Break), ContinueBlock(Continue), LoopCnt(LoopCnt),
-        CountBreak(CountBreak) {}
+    BreakContinue(JumpDest Break, JumpDest Continue)
+      : BreakBlock(Break), ContinueBlock(Continue) {}
 
     JumpDest BreakBlock;
     JumpDest ContinueBlock;
-    RegionCounter *LoopCnt;
-    bool CountBreak;
   };
   SmallVector<BreakContinue, 8> BreakContinueStack;
 
@@ -1326,6 +1321,7 @@ public:
   void EmitDestructorBody(FunctionArgList &Args);
   void emitImplicitAssignmentOperatorBody(FunctionArgList &Args);
   void EmitFunctionBody(FunctionArgList &Args, const Stmt *Body);
+  void EmitBlockWithFallThrough(llvm::BasicBlock *BB, RegionCounter &Cnt);
 
   void EmitForwardingCallToLambda(const CXXMethodDecl *LambdaCallOperator,
                                   CallArgList &CallArgs);
@@ -2462,9 +2458,18 @@ public:
   llvm::Value *EmitAArch64CompareBuiltinExpr(llvm::Value *Op, llvm::Type *Ty);
   llvm::Value *EmitAArch64BuiltinExpr(unsigned BuiltinID, const CallExpr *E);
   llvm::Value *EmitARMBuiltinExpr(unsigned BuiltinID, const CallExpr *E);
-  llvm::Value *EmitCommonNeonBuiltinExpr(unsigned BuiltinID, const CallExpr *E,
+
+  llvm::Value *EmitCommonNeonBuiltinExpr(unsigned BuiltinID,
+                                         unsigned LLVMIntrinsic,
+                                         unsigned AltLLVMIntrinsic,
+                                         const char *NameHint,
+                                         unsigned Modifier,
+                                         const CallExpr *E,
                                          SmallVectorImpl<llvm::Value *> &Ops,
                                          llvm::Value *Align = 0);
+  llvm::Function *LookupNeonLLVMIntrinsic(unsigned IntrinsicID,
+                                          unsigned Modifier, llvm::Type *ArgTy,
+                                          const CallExpr *E);
   llvm::Value *EmitNeonCall(llvm::Function *F,
                             SmallVectorImpl<llvm::Value*> &O,
                             const char *name,

@@ -51,7 +51,8 @@ void VLASizeChecker::reportBug(VLASize_Kind Kind,
     return;
 
   if (!BT)
-    BT.reset(new BuiltinBug("Dangerous variable-length array (VLA) declaration"));
+    BT.reset(new BuiltinBug(
+        this, "Dangerous variable-length array (VLA) declaration"));
 
   SmallString<256> buf;
   llvm::raw_svector_ostream os(buf);
@@ -113,7 +114,7 @@ void VLASizeChecker::checkPreStmt(const DeclStmt *DS, CheckerContext &C) const {
   DefinedSVal sizeD = sizeV.castAs<DefinedSVal>();
 
   ProgramStateRef stateNotZero, stateZero;
-  llvm::tie(stateNotZero, stateZero) = state->assume(sizeD);
+  std::tie(stateNotZero, stateZero) = state->assume(sizeD);
 
   if (stateZero && !stateNotZero) {
     reportBug(VLA_Zero, SE, stateZero, C);

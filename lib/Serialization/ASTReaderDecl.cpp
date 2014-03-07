@@ -413,7 +413,7 @@ void ASTDeclReader::VisitDecl(Decl *D) {
           
           // Note that this declaration was hidden because its owning module is 
           // not yet visible.
-          Reader.HiddenNamesMap[Owner].push_back(D);
+          Reader.HiddenNamesMap[Owner].HiddenDecls.push_back(D);
         }
       }
     }
@@ -910,8 +910,8 @@ void ASTDeclReader::VisitObjCImplementationDecl(ObjCImplementationDecl *D) {
   D->setIvarRBraceLoc(ReadSourceLocation(Record, Idx));
   D->setHasNonZeroConstructors(Record[Idx++]);
   D->setHasDestructors(Record[Idx++]);
-  llvm::tie(D->IvarInitializers, D->NumIvarInitializers)
-      = Reader.ReadCXXCtorInitializers(F, Record, Idx);
+  std::tie(D->IvarInitializers, D->NumIvarInitializers) =
+      Reader.ReadCXXCtorInitializers(F, Record, Idx);
 }
 
 
@@ -974,7 +974,7 @@ ASTDeclReader::RedeclarableResult ASTDeclReader::VisitVarDeclImpl(VarDecl *VD) {
   VD->setCachedLinkage(VarLinkage);
 
   // Reconstruct the one piece of the IdentifierNamespace that we need.
-  if (VarLinkage != NoLinkage &&
+  if (VD->getStorageClass() == SC_Extern && VarLinkage != NoLinkage &&
       VD->getLexicalDeclContext()->isFunctionOrMethod())
     VD->setLocalExternDecl();
 
@@ -1351,8 +1351,8 @@ void ASTDeclReader::VisitCXXConstructorDecl(CXXConstructorDecl *D) {
   VisitCXXMethodDecl(D);
   
   D->IsExplicitSpecified = Record[Idx++];
-  llvm::tie(D->CtorInitializers, D->NumCtorInitializers)
-      = Reader.ReadCXXCtorInitializers(F, Record, Idx);
+  std::tie(D->CtorInitializers, D->NumCtorInitializers) =
+      Reader.ReadCXXCtorInitializers(F, Record, Idx);
 }
 
 void ASTDeclReader::VisitCXXDestructorDecl(CXXDestructorDecl *D) {
