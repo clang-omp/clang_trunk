@@ -61,6 +61,7 @@ void test_invalid_clause()
 void test_non_identifiers()
 {
   int i, x;
+
   // expected-warning@+1 {{extra tokens at the end of '#pragma omp simd' are ignored}}
   #pragma omp simd;
   for (i = 0; i < 16; ++i) ;
@@ -68,6 +69,11 @@ void test_non_identifiers()
   // expected-warning@+1 {{extra tokens at the end of '#pragma omp simd' are ignored}}
   #pragma omp simd firstprivate(x);
   for (i = 0; i < 16; ++i) ;
+
+  // expected-warning@+1 {{extra tokens at the end of '#pragma omp simd' are ignored}}
+  #pragma omp simd private(x);
+  for (i = 0; i < 16; ++i) ;
+
   // expected-warning@+1 {{extra tokens at the end of '#pragma omp simd' are ignored}}
   #pragma omp simd , private(x);
   for (i = 0; i < 16; ++i) ;

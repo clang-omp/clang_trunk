@@ -899,7 +899,6 @@ void CodeGenFunction::EmitOMPDirectiveWithLoop(
     ArrayRef<Expr *> Arr = getCountersFromLoopDirective(&S);
 //    llvm::SmallVector<const Expr *, 16> Incs;
     const Stmt *Body = S.getAssociatedStmt();
-    RegionCounter Cnt = getPGORegionCounter(Body);
 
     if (const CapturedStmt *CS = dyn_cast_or_null<CapturedStmt>(Body))
       Body = CS->getCapturedStmt();

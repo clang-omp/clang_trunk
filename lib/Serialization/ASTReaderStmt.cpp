@@ -1773,12 +1773,13 @@ void OMPClauseReader::VisitOMPFinalClause(OMPFinalClause *C) {
   C->setCondition(Reader->Reader.ReadSubExpr());
 }
 
-void OMPClauseReader::VisitOMPNumThreadsClause(OMPNumThreadsClause *C) {
-  C->setNumThreads(Reader->Reader.ReadSubExpr());
-}
-
 void OMPClauseReader::VisitOMPCollapseClause(OMPCollapseClause *C) {
   C->setNumForLoops(Reader->Reader.ReadSubExpr());
+}
+
+void OMPClauseReader::VisitOMPNumThreadsClause(OMPNumThreadsClause *C) {
+  C->setNumThreads(Reader->Reader.ReadSubExpr());
+  C->setLParenLoc(Reader->ReadSourceLocation(Record, Idx));
 }
 
 void OMPClauseReader::VisitOMPDefaultClause(OMPDefaultClause *C) {

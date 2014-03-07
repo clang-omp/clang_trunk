@@ -1,23 +1,25 @@
-// RUN: %clang_cc1 -verify -fopenmp -ast-print %s | FileCheck %s
-// RUN: %clang_cc1 -fopenmp -x c++ -std=c++11 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
+// RUN: %clang_cc1 -verify -fopenmp=libiomp5 -ast-print %s | FileCheck %s
+// RUN: %clang_cc1 -fopenmp=libiomp5 -x c++ -std=c++11 -emit-pch -o %t %s
+// RUN: %clang_cc1 -fopenmp=libiomp5 -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
 // expected-no-diagnostics
 
 #ifndef HEADER
 #define HEADER
 
 void foo() {}
-
+int g_ind = 1;
 template<class T, class N> T reduct(T* arr, N num) {
   N i;
   N ind;
+  N myind;
   T sum = (T)0;
 // CHECK: T sum = (T)0;
 #pragma omp simd linear(ind), reduction(+:sum)
 // CHECK-NEXT: #pragma omp simd linear(ind) reduction(+: sum)
   for (i = 0; i < num; ++i) {
-    T cur = arr[ind];
-    ++ind;
+    myind = ind;
+    T cur = arr[myind];
+    ind += g_ind;
     sum += cur;
   }
 }
@@ -28,11 +30,14 @@ template<class T> struct S {
   {}
   T result(T *v) const {
     T res;
+    T val;
 // CHECK: T res;
+// CHECK-NEXT: T val;
 #pragma omp simd lastprivate(res) safelen(7)
 // CHECK-NEXT: #pragma omp simd lastprivate(res) safelen(7) 
     for (T i = 7; i < m_a; ++i) {
-      res = v[i-7] + m_a;
+      val = v[i-7] + m_a;
+      res = val;
     }
     return res;
   }

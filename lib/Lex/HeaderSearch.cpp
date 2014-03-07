@@ -219,6 +219,32 @@ const char *DirectoryLookup::getName() const {
   return getHeaderMap()->getFileName();
 }
 
+static const FileEntry *
+getFileAndSuggestModule(HeaderSearch &HS, StringRef FileName,
+                        const DirectoryEntry *Dir, bool IsSystemHeaderDir,
+                        ModuleMap::KnownHeader *SuggestedModule) {
+  // If we have a module map that might map this header, load it and
+  // check whether we'll have a suggestion for a module.
+  HS.hasModuleMap(FileName, Dir, IsSystemHeaderDir);
+  if (SuggestedModule) {
+    const FileEntry *File = HS.getFileMgr().getFile(FileName,
+                                                    /*OpenFile=*/false);
+    if (File) {
+      // If there is a module that corresponds to this header, suggest it.
+      *SuggestedModule = HS.findModuleForHeader(File);
+
+      // FIXME: This appears to be a no-op. We loaded the module map for this
+      // directory at the start of this function.
+      if (!SuggestedModule->getModule() &&
+          HS.hasModuleMap(FileName, Dir, IsSystemHeaderDir))
+        *SuggestedModule = HS.findModuleForHeader(File);
+    }
+
+    return File;
+  }
+
+  return HS.getFileMgr().getFile(FileName, /*openFile=*/true);
+}
 
 /// LookupFile - Lookup the specified file in this search path, returning it
 /// if it exists or returning null if not.
@@ -246,25 +272,10 @@ const FileEntry *DirectoryLookup::LookupFile(
       RelativePath->clear();
       RelativePath->append(Filename.begin(), Filename.end());
     }
-    
-    // If we have a module map that might map this header, load it and
-    // check whether we'll have a suggestion for a module.
-    HS.hasModuleMap(TmpDir, getDir(), isSystemHeaderDirectory());
-    if (SuggestedModule) {
-      const FileEntry *File = HS.getFileMgr().getFile(TmpDir.str(),
-                                                      /*openFile=*/false);
-      if (!File)
-        return File;
-      
-      // If there is a module that corresponds to this header, suggest it.
-      *SuggestedModule = HS.findModuleForHeader(File);
-      if (!SuggestedModule->getModule() &&
-          HS.hasModuleMap(TmpDir, getDir(), isSystemHeaderDirectory()))
-        *SuggestedModule = HS.findModuleForHeader(File);
-      return File;
-    }
-    
-    return HS.getFileMgr().getFile(TmpDir.str(), /*openFile=*/true);
+
+    return getFileAndSuggestModule(HS, TmpDir.str(), getDir(),
+                                   isSystemHeaderDirectory(),
+                                   SuggestedModule);
   }
 
   if (isFramework())
@@ -573,6 +584,7 @@ const FileEntry *HeaderSearch::LookupFile(
 
   // This is the header that MSVC's header search would have found.
   const FileEntry *MSFE = 0;
+  ModuleMap::KnownHeader MSSuggestedModule;
 
   // Unless disabled, check to see if the file is in the #includer's
   // directory.  This cannot be based on CurDir, because each includer could be
@@ -590,8 +602,16 @@ const FileEntry *HeaderSearch::LookupFile(
       TmpDir = Includer->getDir()->getName();
       TmpDir.push_back('/');
       TmpDir.append(Filename.begin(), Filename.end());
+
+      // FIXME: We don't cache the result of getFileInfo across the call to
+      // getFileAndSuggestModule, because it's a reference to an element of
+      // a container that could be reallocated across this call.
+      bool IncluderIsSystemHeader =
+          getFileInfo(Includer).DirInfo != SrcMgr::C_User;
       if (const FileEntry *FE =
-              FileMgr.getFile(TmpDir.str(), /*openFile=*/true)) {
+              getFileAndSuggestModule(*this, TmpDir.str(), Includer->getDir(),
+                                      IncluderIsSystemHeader,
+                                      SuggestedModule)) {
         // Leave CurDir unset.
         // This file is a system header or C++ unfriendly if the old file is.
         //
@@ -629,6 +649,10 @@ const FileEntry *HeaderSearch::LookupFile(
           return FE;
         } else {
           MSFE = FE;
+          if (SuggestedModule) {
+            MSSuggestedModule = *SuggestedModule;
+            *SuggestedModule = ModuleMap::KnownHeader();
+          }
           break;
         }
       }
@@ -709,8 +733,11 @@ const FileEntry *HeaderSearch::LookupFile(
       }
     }
 
-    if (checkMSVCHeaderSearch(Diags, MSFE, FE, IncludeLoc))
+    if (checkMSVCHeaderSearch(Diags, MSFE, FE, IncludeLoc)) {
+      if (SuggestedModule)
+        *SuggestedModule = MSSuggestedModule;
       return MSFE;
+    }
 
     // Remember this location for the next lookup we do.
     CacheLookup.second = i;
@@ -734,19 +761,26 @@ const FileEntry *HeaderSearch::LookupFile(
           ScratchFilename, IncludeLoc, /*isAngled=*/true, FromDir, CurDir,
           Includers.front(), SearchPath, RelativePath, SuggestedModule);
 
-      if (checkMSVCHeaderSearch(Diags, MSFE, FE, IncludeLoc))
+      if (checkMSVCHeaderSearch(Diags, MSFE, FE, IncludeLoc)) {
+        if (SuggestedModule)
+          *SuggestedModule = MSSuggestedModule;
         return MSFE;
+      }
 
       std::pair<unsigned, unsigned> &CacheLookup 
         = LookupFileCache.GetOrCreateValue(Filename).getValue();
       CacheLookup.second
         = LookupFileCache.GetOrCreateValue(ScratchFilename).getValue().second;
+      // FIXME: SuggestedModule.
       return FE;
     }
   }
 
-  if (checkMSVCHeaderSearch(Diags, MSFE, 0, IncludeLoc))
+  if (checkMSVCHeaderSearch(Diags, MSFE, 0, IncludeLoc)) {
+    if (SuggestedModule)
+      *SuggestedModule = MSSuggestedModule;
     return MSFE;
+  }
 
   // Otherwise, didn't find it. Remember we didn't find this.
   CacheLookup.second = SearchDirs.size();
