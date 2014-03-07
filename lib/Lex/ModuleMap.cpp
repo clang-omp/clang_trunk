@@ -297,6 +297,8 @@ ModuleMap::findModuleForHeader(const FileEntry *File,
       Result = *I;
       // If 'File' is a public header of this module, this is as good as we
       // are going to get.
+      // FIXME: If we have a RequestingModule, we should prefer the header from
+      // that module.
       if (I->getRole() == ModuleMap::NormalHeader)
         break;
     }
@@ -1994,6 +1996,7 @@ void ModuleMapParser::parseInferredModuleDecl(bool Framework, bool Explicit) {
     // We'll be inferring framework modules for this directory.
     Map.InferredDirectories[Directory].InferModules = true;
     Map.InferredDirectories[Directory].InferSystemModules = Attrs.IsSystem;
+    // FIXME: Handle the 'framework' keyword.
   }
 
   // Parse the opening brace.

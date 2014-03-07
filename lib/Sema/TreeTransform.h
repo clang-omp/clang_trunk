@@ -6643,6 +6643,28 @@ TreeTransform<Derived>::TransformOMPForDirective(OMPForDirective *D) {
 
 template<typename Derived>
 OMPClause *
+TreeTransform<Derived>::TransformOMPIfClause(OMPIfClause *C) {
+  ExprResult Cond = getDerived().TransformExpr(C->getCondition());
+  if (Cond.isInvalid())
+    return 0;
+  return getDerived().RebuildOMPIfClause(Cond.take(), C->getLocStart(),
+                                         C->getLParenLoc(), C->getLocEnd());
+}
+
+template<typename Derived>
+OMPClause *
+TreeTransform<Derived>::TransformOMPNumThreadsClause(OMPNumThreadsClause *C) {
+  ExprResult NumThreads = getDerived().TransformExpr(C->getNumThreads());
+  if (NumThreads.isInvalid())
+    return 0;
+  return getDerived().RebuildOMPNumThreadsClause(NumThreads.take(),
+                                                 C->getLocStart(),
+                                                 C->getLParenLoc(),
+                                                 C->getLocEnd());
+}
+
+template<typename Derived>
+OMPClause *
 TreeTransform<Derived>::TransformOMPDefaultClause(OMPDefaultClause *C) {
   return getDerived().RebuildOMPDefaultClause(C->getDefaultKind(),
                                               C->getDefaultKindKwLoc(),
@@ -6804,21 +6826,6 @@ TreeTransform<Derived>::TransformOMPOrderedDirective(OMPOrderedDirective *D) {
 
 template<typename Derived>
 OMPClause *
-TreeTransform<Derived>::TransformOMPIfClause(OMPIfClause *C) {
-  // Transform condition.
-  ExprResult E = getDerived().TransformExpr(C->getCondition());
-
-  if (E.isInvalid())
-    return 0;
-
-  return getDerived().RebuildOMPIfClause(E.take(),
-                                         C->getLocStart(),
-                                         C->getLParenLoc(),
-                                         C->getLocEnd());
-}
-
-template<typename Derived>
-OMPClause *
 TreeTransform<Derived>::TransformOMPFinalClause(OMPFinalClause *C) {
   // Transform condition.
   ExprResult E = getDerived().TransformExpr(C->getCondition());
@@ -6830,21 +6837,6 @@ TreeTransform<Derived>::TransformOMPFinalClause(OMPFinalClause *C) {
                                          C->getLocStart(),
                                          C->getLParenLoc(),
                                          C->getLocEnd());
-}
-
-template<typename Derived>
-OMPClause *
-TreeTransform<Derived>::TransformOMPNumThreadsClause(OMPNumThreadsClause *C) {
-  // Transform expression.
-  ExprResult E = getDerived().TransformExpr(C->getNumThreads());
-
-  if (E.isInvalid())
-    return 0;
-
-  return getDerived().RebuildOMPNumThreadsClause(E.take(),
-                                                 C->getLocStart(),
-                                                 C->getLParenLoc(),
-                                                 C->getLocEnd());
 }
 
 template<typename Derived>

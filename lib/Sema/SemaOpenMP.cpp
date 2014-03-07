@@ -3013,7 +3013,7 @@ OMPClause *Sema::ActOnOpenMPSimpleClause(OpenMPClauseKind Kind,
 }
 
 OMPClause *Sema::ActOnOpenMPDefaultClause(OpenMPDefaultClauseKind Kind,
-                                          SourceLocation KindLoc,
+                                          SourceLocation KindKwLoc,
                                           SourceLocation StartLoc,
                                           SourceLocation LParenLoc,
                                           SourceLocation EndLoc) {
@@ -3036,7 +3036,7 @@ OMPClause *Sema::ActOnOpenMPDefaultClause(OpenMPDefaultClauseKind Kind,
         break;
       }
     }
-    Diag(KindLoc, diag::err_omp_unexpected_clause_value)
+    Diag(KindKwLoc, diag::err_omp_unexpected_clause_value)
       << Values << getOpenMPClauseName(OMPC_default);
     return 0;
   }
@@ -3050,7 +3050,7 @@ OMPClause *Sema::ActOnOpenMPDefaultClause(OpenMPDefaultClauseKind Kind,
   default:
     break;
   }
-  return new (Context) OMPDefaultClause(Kind, KindLoc, StartLoc, LParenLoc,
+  return new (Context) OMPDefaultClause(Kind, KindKwLoc, StartLoc, LParenLoc,
                                         EndLoc);
 }
 
