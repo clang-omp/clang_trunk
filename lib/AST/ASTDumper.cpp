@@ -762,7 +762,7 @@ void ASTDumper::dumpDecl(const Decl *D) {
     if (ND->isHidden())
       OS << " hidden";
 
-  bool HasAttrs = D->attr_begin() != D->attr_end();
+  bool HasAttrs = D->hasAttrs();
   const FullComment *Comment =
       D->getASTContext().getLocalCommentForDeclUncached(D);
   // Decls within functions are visited by the body
@@ -1439,9 +1439,8 @@ void ASTDumper::VisitObjCPropertyImplDecl(const ObjCPropertyImplDecl *D) {
 }
 
 void ASTDumper::VisitBlockDecl(const BlockDecl *D) {
-  for (BlockDecl::param_const_iterator I = D->param_begin(), E = D->param_end();
-       I != E; ++I)
-    dumpDecl(*I);
+  for (auto I : D->params())
+    dumpDecl(I);
 
   if (D->isVariadic()) {
     IndentScope Indent(*this);

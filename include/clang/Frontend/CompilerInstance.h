@@ -18,10 +18,10 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/StringRef.h"
 #include <cassert>
 #include <list>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -91,22 +91,22 @@ class CompilerInstance : public ModuleLoader {
   IntrusiveRefCntPtr<ASTContext> Context;
 
   /// The AST consumer.
-  OwningPtr<ASTConsumer> Consumer;
+  std::unique_ptr<ASTConsumer> Consumer;
 
   /// The code completion consumer.
-  OwningPtr<CodeCompleteConsumer> CompletionConsumer;
+  std::unique_ptr<CodeCompleteConsumer> CompletionConsumer;
 
   /// \brief The semantic analysis object.
-  OwningPtr<Sema> TheSema;
+  std::unique_ptr<Sema> TheSema;
 
   /// \brief The frontend timer
-  OwningPtr<llvm::Timer> FrontendTimer;
+  std::unique_ptr<llvm::Timer> FrontendTimer;
 
   /// \brief The ASTReader, if one exists.
   IntrusiveRefCntPtr<ASTReader> ModuleManager;
 
   /// \brief The dependency file generator.
-  OwningPtr<DependencyFileGenerator> TheDependencyFileGenerator;
+  std::unique_ptr<DependencyFileGenerator> TheDependencyFileGenerator;
 
   /// \brief The set of top-level modules that has already been loaded,
   /// along with the module map
@@ -426,7 +426,7 @@ public:
   /// @name ASTConsumer
   /// {
 
-  bool hasASTConsumer() const { return Consumer.isValid(); }
+  bool hasASTConsumer() const { return (bool)Consumer; }
 
   ASTConsumer &getASTConsumer() const {
     assert(Consumer && "Compiler instance has no AST consumer!");
@@ -435,7 +435,7 @@ public:
 
   /// takeASTConsumer - Remove the current AST consumer and give ownership to
   /// the caller.
-  ASTConsumer *takeASTConsumer() { return Consumer.take(); }
+  ASTConsumer *takeASTConsumer() { return Consumer.release(); }
 
   /// setASTConsumer - Replace the current AST consumer; the compiler instance
   /// takes ownership of \p Value.
@@ -444,15 +444,15 @@ public:
   /// }
   /// @name Semantic analysis
   /// {
-  bool hasSema() const { return TheSema.isValid(); }
-  
+  bool hasSema() const { return (bool)TheSema; }
+
   Sema &getSema() const { 
     assert(TheSema && "Compiler instance has no Sema object!");
     return *TheSema;
   }
-  
-  Sema *takeSema() { return TheSema.take(); }
-  
+
+  Sema *takeSema() { return TheSema.release(); }
+
   /// }
   /// @name Module Management
   /// {
@@ -464,9 +464,7 @@ public:
   /// @name Code Completion
   /// {
 
-  bool hasCodeCompletionConsumer() const {
-    return CompletionConsumer.isValid();
-  }
+  bool hasCodeCompletionConsumer() const { return (bool)CompletionConsumer; }
 
   CodeCompleteConsumer &getCodeCompletionConsumer() const {
     assert(CompletionConsumer &&
@@ -477,7 +475,7 @@ public:
   /// takeCodeCompletionConsumer - Remove the current code completion consumer
   /// and give ownership to the caller.
   CodeCompleteConsumer *takeCodeCompletionConsumer() {
-    return CompletionConsumer.take();
+    return CompletionConsumer.release();
   }
 
   /// setCodeCompletionConsumer - Replace the current code completion consumer;
@@ -488,7 +486,7 @@ public:
   /// @name Frontend timer
   /// {
 
-  bool hasFrontendTimer() const { return FrontendTimer.isValid(); }
+  bool hasFrontendTimer() const { return (bool)FrontendTimer; }
 
   llvm::Timer &getFrontendTimer() const {
     assert(FrontendTimer && "Compiler instance has no frontend timer!");

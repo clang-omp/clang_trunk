@@ -36,7 +36,6 @@
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -45,6 +44,7 @@
 #include "llvm/Support/DataTypes.h"
 #include <deque>
 #include <map>
+#include <memory>
 #include <string>
 #include <sys/stat.h>
 #include <utility>
@@ -188,8 +188,9 @@ public:
 
 /// \brief Simple wrapper class for chaining listeners.
 class ChainedASTReaderListener : public ASTReaderListener {
-  OwningPtr<ASTReaderListener> First;
-  OwningPtr<ASTReaderListener> Second;
+  std::unique_ptr<ASTReaderListener> First;
+  std::unique_ptr<ASTReaderListener> Second;
+
 public:
   /// Takes ownership of \p First and \p Second.
   ChainedASTReaderListener(ASTReaderListener *First, ASTReaderListener *Second)
@@ -322,7 +323,7 @@ public:
 
 private:
   /// \brief The receiver of some callbacks invoked by ASTReader.
-  OwningPtr<ASTReaderListener> Listener;
+  std::unique_ptr<ASTReaderListener> Listener;
 
   /// \brief The receiver of deserialization events.
   ASTDeserializationListener *DeserializationListener;
@@ -352,7 +353,7 @@ private:
   SourceLocation CurrentImportLoc;
 
   /// \brief The global module index, if loaded.
-  llvm::OwningPtr<GlobalModuleIndex> GlobalIndex;
+  std::unique_ptr<GlobalModuleIndex> GlobalIndex;
 
   /// \brief A map of global bit offsets to the module that stores entities
   /// at those bit offsets.
@@ -1325,7 +1326,7 @@ public:
   /// Takes ownership of \p L.
   void addListener(ASTReaderListener *L) {
     if (Listener)
-      L = new ChainedASTReaderListener(L, Listener.take());
+      L = new ChainedASTReaderListener(L, Listener.release());
     Listener.reset(L);
   }
 
@@ -1333,7 +1334,7 @@ public:
   void setDeserializationListener(ASTDeserializationListener *Listener);
 
   /// \brief Determine whether this AST reader has a global index.
-  bool hasGlobalIndex() const { return GlobalIndex.isValid(); }
+  bool hasGlobalIndex() const { return (bool)GlobalIndex; }
 
   /// \brief Attempts to load the global index.
   ///

@@ -4804,9 +4804,8 @@ std::string ASTContext::getObjCEncodingForBlock(const BlockExpr *Expr) const {
   SourceLocation Loc;
   CharUnits PtrSize = getTypeSizeInChars(VoidPtrTy);
   CharUnits ParmOffset = PtrSize;
-  for (BlockDecl::param_const_iterator PI = Decl->param_begin(),
-       E = Decl->param_end(); PI != E; ++PI) {
-    QualType PType = (*PI)->getType();
+  for (auto PI : Decl->params()) {
+    QualType PType = PI->getType();
     CharUnits sz = getObjCEncodingTypeSize(PType);
     if (sz.isZero())
       continue;
@@ -4820,9 +4819,7 @@ std::string ASTContext::getObjCEncodingForBlock(const BlockExpr *Expr) const {
   
   // Argument types.
   ParmOffset = PtrSize;
-  for (BlockDecl::param_const_iterator PI = Decl->param_begin(), E =
-       Decl->param_end(); PI != E; ++PI) {
-    ParmVarDecl *PVDecl = *PI;
+  for (auto PVDecl : Decl->params()) {
     QualType PType = PVDecl->getOriginalType(); 
     if (const ArrayType *AT =
           dyn_cast<ArrayType>(PType->getCanonicalTypeInternal())) {
@@ -4850,9 +4847,8 @@ bool ASTContext::getObjCEncodingForFunctionDecl(const FunctionDecl *Decl,
   getObjCEncodingForType(Decl->getReturnType(), S);
   CharUnits ParmOffset;
   // Compute size of all parameters.
-  for (FunctionDecl::param_const_iterator PI = Decl->param_begin(),
-       E = Decl->param_end(); PI != E; ++PI) {
-    QualType PType = (*PI)->getType();
+  for (auto PI : Decl->params()) {
+    QualType PType = PI->getType();
     CharUnits sz = getObjCEncodingTypeSize(PType);
     if (sz.isZero())
       continue;
@@ -4865,9 +4861,7 @@ bool ASTContext::getObjCEncodingForFunctionDecl(const FunctionDecl *Decl,
   ParmOffset = CharUnits::Zero();
 
   // Argument types.
-  for (FunctionDecl::param_const_iterator PI = Decl->param_begin(),
-       E = Decl->param_end(); PI != E; ++PI) {
-    ParmVarDecl *PVDecl = *PI;
+  for (auto PVDecl : Decl->params()) {
     QualType PType = PVDecl->getOriginalType();
     if (const ArrayType *AT =
           dyn_cast<ArrayType>(PType->getCanonicalTypeInternal())) {
@@ -5375,9 +5369,7 @@ void ASTContext::getObjCEncodingForTypeImpl(QualType T, std::string& S,
       if (!RDecl->isUnion()) {
         getObjCEncodingForStructureImpl(RDecl, S, FD);
       } else {
-        for (RecordDecl::field_iterator Field = RDecl->field_begin(),
-                                     FieldEnd = RDecl->field_end();
-             Field != FieldEnd; ++Field) {
+        for (const auto *Field : RDecl->fields()) {
           if (FD) {
             S += '"';
             S += Field->getNameAsString();
@@ -5387,7 +5379,7 @@ void ASTContext::getObjCEncodingForTypeImpl(QualType T, std::string& S,
           // Special case bit-fields.
           if (Field->isBitField()) {
             getObjCEncodingForTypeImpl(Field->getType(), S, false, true,
-                                       *Field);
+                                       Field);
           } else {
             QualType qt = Field->getType();
             getLegacyIntegralTypeEncoding(qt);
@@ -6851,9 +6843,8 @@ QualType ASTContext::mergeTransparentUnionType(QualType T, QualType SubType,
   if (const RecordType *UT = T->getAsUnionType()) {
     RecordDecl *UD = UT->getDecl();
     if (UD->hasAttr<TransparentUnionAttr>()) {
-      for (RecordDecl::field_iterator it = UD->field_begin(),
-           itend = UD->field_end(); it != itend; ++it) {
-        QualType ET = it->getType().getUnqualifiedType();
+      for (const auto *I : UD->fields()) {
+        QualType ET = I->getType().getUnqualifiedType();
         QualType MT = mergeTypes(ET, SubType, OfBlockPointer, Unqualified);
         if (!MT.isNull())
           return MT;

@@ -30,7 +30,6 @@
 #include "clang/Basic/Specifiers.h"
 #include "clang/Basic/TargetInfo.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/type_traits.h"
 #include <algorithm>
 
 using namespace clang;
@@ -159,8 +158,7 @@ static bool usesTypeVisibility(const NamedDecl *D) {
 /// Does the given declaration have member specialization information,
 /// and if so, is it an explicit specialization?
 template <class T> static typename
-llvm::enable_if_c<!llvm::is_base_of<RedeclarableTemplateDecl, T>::value,
-                  bool>::type
+std::enable_if<!std::is_base_of<RedeclarableTemplateDecl, T>::value, bool>::type
 isExplicitMemberSpecialization(const T *D) {
   if (const MemberSpecializationInfo *member =
         D->getMemberSpecializationInfo()) {
@@ -3505,8 +3503,8 @@ LabelDecl *LabelDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
 void ValueDecl::anchor() { }
 
 bool ValueDecl::isWeak() const {
-  for (attr_iterator I = attr_begin(), E = attr_end(); I != E; ++I)
-    if (isa<WeakAttr>(*I) || isa<WeakRefAttr>(*I))
+  for (const auto *I : attrs())
+    if (isa<WeakAttr>(I) || isa<WeakRefAttr>(I))
       return true;
 
   return isWeakImported();

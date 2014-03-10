@@ -19,7 +19,6 @@
 #include "clang/Lex/HeaderSearchOptions.h"
 #include "clang/Serialization/ASTReader.h"
 #include "llvm/ADT/Hashing.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -35,6 +34,7 @@
 #include "llvm/Support/Process.h"
 #include "llvm/Support/system_error.h"
 #include <atomic>
+#include <memory>
 #include <sys/stat.h>
 using namespace clang;
 
@@ -1671,12 +1671,12 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
   bool Success = true;
 
   // Parse the arguments.
-  OwningPtr<OptTable> Opts(createDriverOptTable());
+  std::unique_ptr<OptTable> Opts(createDriverOptTable());
   const unsigned IncludedFlagsBitmask = options::CC1Option;
   unsigned MissingArgIndex, MissingArgCount;
-  OwningPtr<InputArgList> Args(
-    Opts->ParseArgs(ArgBegin, ArgEnd, MissingArgIndex, MissingArgCount,
-                    IncludedFlagsBitmask));
+  std::unique_ptr<InputArgList> Args(
+      Opts->ParseArgs(ArgBegin, ArgEnd, MissingArgIndex, MissingArgCount,
+                      IncludedFlagsBitmask));
 
   // Check for missing argument error.
   if (MissingArgCount) {
@@ -1836,7 +1836,7 @@ std::string CompilerInvocation::getModuleHash() const {
   //   $sysroot/System/Library/CoreServices/SystemVersion.plist
   // as part of the module hash.
   if (!hsOpts.Sysroot.empty()) {
-    llvm::OwningPtr<llvm::MemoryBuffer> buffer;
+    std::unique_ptr<llvm::MemoryBuffer> buffer;
     SmallString<128> systemVersionFile;
     systemVersionFile += hsOpts.Sysroot;
     llvm::sys::path::append(systemVersionFile, "System");

@@ -33,10 +33,10 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/Allocator.h"
+#include <memory>
 #include <vector>
 
 namespace llvm {
@@ -394,7 +394,7 @@ private:
   PartialDiagnostic::StorageAllocator DiagAllocator;
 
   /// \brief The current C++ ABI.
-  OwningPtr<CXXABI> ABI;
+  std::unique_ptr<CXXABI> ABI;
   CXXABI *createCXXABI(const TargetInfo &T);
 
   /// \brief The logical -> physical address space map.
@@ -2300,9 +2300,9 @@ private:
   friend class DeclarationNameTable;
   void ReleaseDeclContextMaps();
 
-  llvm::OwningPtr<ParentMap> AllParents;
+  std::unique_ptr<ParentMap> AllParents;
 
-  llvm::OwningPtr<VTableContextBase> VTContext;
+  std::unique_ptr<VTableContextBase> VTContext;
 };
 
 /// \brief Utility function for constructing a nullary selector.

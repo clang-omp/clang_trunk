@@ -2225,7 +2225,8 @@ void ASTWriter::WriteSubmodules(Module *WritingModule) {
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 6)); // Parent
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // IsFramework
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // IsExplicit
-  Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // IsSystem  
+  Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // IsSystem
+  Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // IsExternC
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // InferSubmodules...
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // InferExplicit...
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // InferExportWild...
@@ -2313,6 +2314,7 @@ void ASTWriter::WriteSubmodules(Module *WritingModule) {
     Record.push_back(Mod->IsFramework);
     Record.push_back(Mod->IsExplicit);
     Record.push_back(Mod->IsSystem);
+    Record.push_back(Mod->IsExternC);
     Record.push_back(Mod->InferSubmodules);
     Record.push_back(Mod->InferExplicitSubmodules);
     Record.push_back(Mod->InferExportWildcard);
@@ -2595,9 +2597,8 @@ uint64_t ASTWriter::WriteDeclContextLexicalBlock(ASTContext &Context,
   RecordData Record;
   Record.push_back(DECL_CONTEXT_LEXICAL);
   SmallVector<KindDeclIDPair, 64> Decls;
-  for (DeclContext::decl_iterator D = DC->decls_begin(), DEnd = DC->decls_end();
-         D != DEnd; ++D)
-    Decls.push_back(std::make_pair((*D)->getKind(), GetDeclRef(*D)));
+  for (const auto *D : DC->decls())
+    Decls.push_back(std::make_pair(D->getKind(), GetDeclRef(D)));
 
   ++NumLexicalDeclContexts;
   Stream.EmitRecordWithBlob(DeclContextLexicalAbbrev, Record, data(Decls));
@@ -4050,11 +4051,9 @@ void ASTWriter::WriteASTCore(Sema &SemaRef,
   // translation unit that do not come from other AST files.
   const TranslationUnitDecl *TU = Context.getTranslationUnitDecl();
   SmallVector<KindDeclIDPair, 64> NewGlobalDecls;
-  for (DeclContext::decl_iterator I = TU->noload_decls_begin(),
-                                  E = TU->noload_decls_end();
-       I != E; ++I) {
-    if (!(*I)->isFromASTFile())
-      NewGlobalDecls.push_back(std::make_pair((*I)->getKind(), GetDeclRef(*I)));
+  for (const auto *I : TU->noload_decls()) {
+    if (!I->isFromASTFile())
+      NewGlobalDecls.push_back(std::make_pair(I->getKind(), GetDeclRef(I)));
   }
   
   llvm::BitCodeAbbrev *Abv = new llvm::BitCodeAbbrev();

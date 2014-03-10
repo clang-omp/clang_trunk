@@ -408,8 +408,8 @@ AvailabilityResult Decl::getAvailability(std::string *Message) const {
   AvailabilityResult Result = AR_Available;
   std::string ResultMessage;
 
-  for (attr_iterator A = attr_begin(), AEnd = attr_end(); A != AEnd; ++A) {
-    if (DeprecatedAttr *Deprecated = dyn_cast<DeprecatedAttr>(*A)) {
+  for (const auto *A : attrs()) {
+    if (const auto *Deprecated = dyn_cast<DeprecatedAttr>(A)) {
       if (Result >= AR_Deprecated)
         continue;
 
@@ -420,13 +420,13 @@ AvailabilityResult Decl::getAvailability(std::string *Message) const {
       continue;
     }
 
-    if (UnavailableAttr *Unavailable = dyn_cast<UnavailableAttr>(*A)) {
+    if (const auto *Unavailable = dyn_cast<UnavailableAttr>(A)) {
       if (Message)
         *Message = Unavailable->getMessage();
       return AR_Unavailable;
     }
 
-    if (AvailabilityAttr *Availability = dyn_cast<AvailabilityAttr>(*A)) {
+    if (const auto *Availability = dyn_cast<AvailabilityAttr>(A)) {
       AvailabilityResult AR = CheckAvailability(getASTContext(), Availability,
                                                 Message);
 
@@ -482,11 +482,11 @@ bool Decl::isWeakImported() const {
   if (!canBeWeakImported(IsDefinition))
     return false;
 
-  for (attr_iterator A = attr_begin(), AEnd = attr_end(); A != AEnd; ++A) {
-    if (isa<WeakImportAttr>(*A))
+  for (const auto *A : attrs()) {
+    if (isa<WeakImportAttr>(A))
       return true;
 
-    if (AvailabilityAttr *Availability = dyn_cast<AvailabilityAttr>(*A)) {
+    if (const auto *Availability = dyn_cast<AvailabilityAttr>(A)) {
       if (CheckAvailability(getASTContext(), Availability, 0) 
                                                          == AR_NotYetIntroduced)
         return true;
@@ -1080,14 +1080,9 @@ ExternalASTSource::SetExternalVisibleDeclsForName(const DeclContext *DC,
   return List.getLookupResult();
 }
 
-DeclContext::decl_iterator DeclContext::noload_decls_begin() const {
-  return decl_iterator(FirstDecl);
-}
-
 DeclContext::decl_iterator DeclContext::decls_begin() const {
   if (hasExternalLexicalStorage())
     LoadLexicalDeclsFromExternalStorage();
-
   return decl_iterator(FirstDecl);
 }
 
@@ -1532,12 +1527,12 @@ void DeclContext::makeDeclVisibleInContextImpl(NamedDecl *D, bool Internal) {
 
 /// Returns iterator range [First, Last) of UsingDirectiveDecls stored within
 /// this context.
-DeclContext::udir_iterator_range
+DeclContext::udir_range
 DeclContext::getUsingDirectives() const {
   // FIXME: Use something more efficient than normal lookup for using
   // directives. In C++, using directives are looked up more than anything else.
   lookup_const_result Result = lookup(UsingDirectiveDecl::getName());
-  return udir_iterator_range(reinterpret_cast<udir_iterator>(Result.begin()),
+  return udir_range(reinterpret_cast<udir_iterator>(Result.begin()),
                              reinterpret_cast<udir_iterator>(Result.end()));
 }
 

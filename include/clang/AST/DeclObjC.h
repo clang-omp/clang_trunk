@@ -342,10 +342,23 @@ public:
   unsigned param_size() const { return NumParams; }
   typedef const ParmVarDecl *const *param_const_iterator;
   typedef ParmVarDecl *const *param_iterator;
-  param_const_iterator param_begin() const { return getParams(); }
-  param_const_iterator param_end() const { return getParams() + NumParams; }
-  param_iterator param_begin() { return getParams(); }
-  param_iterator param_end() { return getParams() + NumParams; }
+  typedef llvm::iterator_range<param_iterator> param_range;
+  typedef llvm::iterator_range<param_const_iterator> param_const_range;
+
+  param_range params() { return param_range(param_begin(), param_end()); }
+  param_const_range params() const {
+    return param_const_range(param_begin(), param_end());
+  }
+
+  param_const_iterator param_begin() const {
+    return param_const_iterator(getParams());
+  }
+  param_const_iterator param_end() const {
+    return param_const_iterator(getParams() + NumParams);
+  }
+  param_iterator param_begin() { return param_iterator(getParams()); }
+  param_iterator param_end() { return param_iterator(getParams() + NumParams); }
+
   // This method returns and of the parameters which are part of the selector
   // name mangling requirements.
   param_const_iterator sel_param_end() const {

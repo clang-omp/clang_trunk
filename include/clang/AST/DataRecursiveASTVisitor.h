@@ -601,8 +601,8 @@ bool DataRecursiveASTVisitor<Derived>::TraverseDecl(Decl *D) {
   }
 
   // Visit any attributes attached to this declaration.
-  for (Decl::attr_iterator I=D->attr_begin(), E=D->attr_end(); I != E; ++I) {
-    if (!getDerived().TraverseAttr(*I))
+  for (auto *I : D->attrs()) {
+    if (!getDerived().TraverseAttr(I))
       return false;
   }
   return true;
@@ -1225,13 +1225,11 @@ bool DataRecursiveASTVisitor<Derived>::TraverseDeclContextHelper(DeclContext *DC
   if (!DC)
     return true;
 
-  for (DeclContext::decl_iterator Child = DC->decls_begin(),
-           ChildEnd = DC->decls_end();
-       Child != ChildEnd; ++Child) {
+  for (auto *Child : DC->decls()) {
     // BlockDecls and CapturedDecls are traversed through BlockExprs and
     // CapturedStmts respectively.
-    if (!isa<BlockDecl>(*Child) && !isa<CapturedDecl>(*Child))
-      TRY_TO(TraverseDecl(*Child));
+    if (!isa<BlockDecl>(Child) && !isa<CapturedDecl>(Child))
+      TRY_TO(TraverseDecl(Child));
   }
 
   return true;

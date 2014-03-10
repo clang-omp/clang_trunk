@@ -18,10 +18,10 @@
 #include "clang/Lex/ModuleMap.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Support/Allocator.h"
+#include <memory>
 #include <vector>
 
 namespace clang {
@@ -205,7 +205,7 @@ class HeaderSearch {
   /// include_alias pragma for Microsoft compatibility.
   typedef llvm::StringMap<std::string, llvm::BumpPtrAllocator>
     IncludeAliasMap;
-  OwningPtr<IncludeAliasMap> IncludeAliases;
+  std::unique_ptr<IncludeAliasMap> IncludeAliases;
 
   /// HeaderMaps - This is a mapping from FileEntry -> HeaderMap, uniquing
   /// headermaps.  This vector owns the headermap.
@@ -281,9 +281,7 @@ public:
   }
 
   /// \brief Checks whether the map exists or not.
-  bool HasIncludeAliasMap() const {
-    return IncludeAliases.isValid();
-  }
+  bool HasIncludeAliasMap() const { return (bool)IncludeAliases; }
 
   /// \brief Map the source include name to the dest include name.
   ///

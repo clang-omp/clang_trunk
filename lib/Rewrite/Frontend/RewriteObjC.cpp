@@ -23,11 +23,11 @@
 #include "clang/Lex/Lexer.h"
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
+#include <memory>
 
 using namespace clang;
 using llvm::utostr;
@@ -1141,9 +1141,7 @@ void RewriteObjC::RewriteObjCMethodDecl(const ObjCInterfaceDecl *IDecl,
   ResultStr += " _cmd";
 
   // Method arguments.
-  for (ObjCMethodDecl::param_iterator PI = OMD->param_begin(),
-       E = OMD->param_end(); PI != E; ++PI) {
-    ParmVarDecl *PDecl = *PI;
+  for (const auto *PDecl : OMD->params()) {
     ResultStr += ", ";
     if (PDecl->getType()->isObjCQualifiedIdType()) {
       ResultStr += "id ";
@@ -2975,11 +2973,10 @@ Stmt *RewriteObjC::SynthMessageExpr(ObjCMessageExpr *Exp,
   ArgTypes.push_back(Context->getObjCSelType());
   if (ObjCMethodDecl *OMD = Exp->getMethodDecl()) {
     // Push any user argument types.
-    for (ObjCMethodDecl::param_iterator PI = OMD->param_begin(),
-         E = OMD->param_end(); PI != E; ++PI) {
-      QualType t = (*PI)->getType()->isObjCQualifiedIdType()
+    for (const auto *PI : OMD->params()) {
+      QualType t = PI->getType()->isObjCQualifiedIdType()
                      ? Context->getObjCIdType()
-                     : (*PI)->getType();
+                     : PI->getType();
       // Make sure we convert "t (^)(...)" to "t (*)(...)".
       (void)convertBlockPointerToFunctionPointer(t);
       ArgTypes.push_back(t);
@@ -4866,9 +4863,7 @@ Stmt *RewriteObjC::RewriteFunctionBodyOrGlobalInitializer(Stmt *S) {
 }
 
 void RewriteObjC::RewriteRecordBody(RecordDecl *RD) {
-  for (RecordDecl::field_iterator i = RD->field_begin(), 
-                                  e = RD->field_end(); i != e; ++i) {
-    FieldDecl *FD = *i;
+  for (auto *FD : RD->fields()) {
     if (isTopLevelBlockPointerType(FD->getType()))
       RewriteBlockPointerDecl(FD);
     if (FD->getType()->isObjCQualifiedIdType() ||
