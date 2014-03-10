@@ -21,22 +21,23 @@
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/CodeGenOptions.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include <memory>
 using namespace clang;
 
 namespace {
   class CodeGeneratorImpl : public CodeGenerator {
     DiagnosticsEngine &Diags;
-    OwningPtr<const llvm::DataLayout> TD;
+    std::unique_ptr<const llvm::DataLayout> TD;
     ASTContext *Ctx;
     const CodeGenOptions CodeGenOpts;  // Intentionally copied in.
   protected:
-    OwningPtr<llvm::Module> M;
-    OwningPtr<CodeGen::CodeGenModule> Builder;
+    std::unique_ptr<llvm::Module> M;
+    std::unique_ptr<CodeGen::CodeGenModule> Builder;
+
   public:
     CodeGeneratorImpl(DiagnosticsEngine &diags, const std::string& ModuleName,
                       const CodeGenOptions &CGO, llvm::LLVMContext& C)
@@ -49,9 +50,7 @@ namespace {
       return M.get();
     }
 
-    virtual llvm::Module* ReleaseModule() {
-      return M.take();
-    }
+    virtual llvm::Module *ReleaseModule() { return M.release(); }
 
     virtual void Initialize(ASTContext &Context) {
       Ctx = &Context;
@@ -96,15 +95,13 @@ namespace {
       // In C++, we may have member functions that need to be emitted at this 
       // point.
       if (Ctx->getLangOpts().CPlusPlus && !D->isDependentContext()) {
-        for (DeclContext::decl_iterator M = D->decls_begin(), 
-                                     MEnd = D->decls_end();
-             M != MEnd; ++M)
-          if (CXXMethodDecl *Method = dyn_cast<CXXMethodDecl>(*M)) {
+        for (auto *M : D->decls())
+          if (auto *Method = dyn_cast<CXXMethodDecl>(M)) {
             if (Method->doesThisDeclarationHaveABody() &&
                 (Method->hasAttr<UsedAttr>() || 
                  Method->hasAttr<ConstructorAttr>()))
               Builder->EmitTopLevelDecl(Method);
-          } else if (OMPThreadPrivateDecl *TD = dyn_cast<OMPThreadPrivateDecl>(*M))
+          } else if (OMPThreadPrivateDecl *TD = dyn_cast<OMPThreadPrivateDecl>(M))
             Builder->EmitTopLevelDecl(TD);
       }
     }

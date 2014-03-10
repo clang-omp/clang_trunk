@@ -21,7 +21,7 @@
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Basic/Builtins.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/OwningPtr.h"
+#include <memory>
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Format.h"
@@ -291,7 +291,7 @@ class CFGBuilder {
   typedef BlockScopePosPair JumpSource;
 
   ASTContext *Context;
-  OwningPtr<CFG> cfg;
+  std::unique_ptr<CFG> cfg;
 
   CFGBlock *Block;
   CFGBlock *Succ;
@@ -724,7 +724,7 @@ CFG* CFGBuilder::buildCFG(const Decl *D, Stmt *Statement) {
   // Create an empty entry block that has no predecessors.
   cfg->setEntry(createBlock());
 
-  return cfg.take();
+  return cfg.release();
 }
 
 /// createBlock - Used to lazily create blocks that are connected
@@ -902,8 +902,7 @@ void CFGBuilder::addImplicitDtorsForDestructor(const CXXDestructorDecl *DD) {
   }
 
   // First destroy member objects.
-  for (CXXRecordDecl::field_iterator FI = RD->field_begin(),
-      FE = RD->field_end(); FI != FE; ++FI) {
+  for (auto *FI : RD->fields()) {
     // Check for constant size array. Set type to array element type.
     QualType QT = FI->getType();
     if (const ConstantArrayType *AT = Context->getAsConstantArrayType(QT)) {
@@ -915,7 +914,7 @@ void CFGBuilder::addImplicitDtorsForDestructor(const CXXDestructorDecl *DD) {
     if (const CXXRecordDecl *CD = QT->getAsCXXRecordDecl())
       if (!CD->hasTrivialDestructor()) {
         autoCreateBlock();
-        appendMemberDtor(Block, *FI);
+        appendMemberDtor(Block, FI);
       }
   }
 }
@@ -3351,10 +3350,12 @@ CFGBlock *CFGBuilder::VisitCXXBindTemporaryExprForTemporaryDtors(
     // a new block for the destructor which does not have as a successor
     // anything built thus far. Control won't flow out of this block.
     const CXXDestructorDecl *Dtor = E->getTemporary()->getDestructor();
-    if (Dtor->isNoReturn())
+    if (Dtor->isNoReturn()) {
+      Succ = B;
       Block = createNoReturnBlock();
-    else
+    } else {
       autoCreateBlock();
+    }
 
     appendTemporaryDtor(Block, E);
     B = Block;
@@ -3403,6 +3404,7 @@ CFGBlock *CFGBuilder::VisitConditionalOperatorForTemporaryDtors(
 
   Block = createBlock(false);
   Block->setTerminator(CFGTerminator(E, true));
+  assert(Block->getTerminator().isTemporaryDtorsBranch());
 
   // See if this is a known constant.
   const TryResult &KnownVal = tryEvaluateBool(E->getCond());
@@ -3764,6 +3766,13 @@ public:
   void VisitExpr(Expr *E) {
     E->printPretty(OS, Helper, Policy);
   }
+
+public:
+  void print(CFGTerminator T) {
+    if (T.isTemporaryDtorsBranch())
+      OS << "(Temp Dtor) ";
+    Visit(T.getStmt());
+  }
 };
 } // end anonymous namespace
 
@@ -3967,7 +3976,7 @@ static void print_block(raw_ostream &OS, const CFG* cfg,
 
     PrintingPolicy PP(Helper.getLangOpts());
     CFGBlockTerminatorPrint TPrinter(OS, &Helper, PP);
-    TPrinter.Visit(const_cast<Stmt*>(B.getTerminator().getStmt()));
+    TPrinter.print(B.getTerminator());
     OS << '\n';
     
     if (ShowColors)
@@ -4105,7 +4114,7 @@ void CFGBlock::print(raw_ostream &OS, const CFG* cfg,
 void CFGBlock::printTerminator(raw_ostream &OS,
                                const LangOptions &LO) const {
   CFGBlockTerminatorPrint TPrinter(OS, NULL, PrintingPolicy(LO));
-  TPrinter.Visit(const_cast<Stmt*>(getTerminator().getStmt()));
+  TPrinter.print(getTerminator());
 }
 
 Stmt *CFGBlock::getTerminatorCondition() {

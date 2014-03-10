@@ -18,7 +18,6 @@
 #include "clang/CodeGen/ModuleBuilder.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/IR/DiagnosticInfo.h"
@@ -31,6 +30,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/Timer.h"
+#include <memory>
 using namespace clang;
 using namespace llvm;
 
@@ -47,9 +47,9 @@ namespace clang {
 
     Timer LLVMIRGeneration;
 
-    OwningPtr<CodeGenerator> Gen;
+    std::unique_ptr<CodeGenerator> Gen;
 
-    OwningPtr<llvm::Module> TheModule, LinkModule;
+    std::unique_ptr<llvm::Module> TheModule, LinkModule;
 
   public:
     BackendConsumer(BackendAction action, DiagnosticsEngine &_Diags,
@@ -66,8 +66,8 @@ namespace clang {
       llvm::TimePassesIsEnabled = TimePasses;
     }
 
-    llvm::Module *takeModule() { return TheModule.take(); }
-    llvm::Module *takeLinkModule() { return LinkModule.take(); }
+    llvm::Module *takeModule() { return TheModule.release(); }
+    llvm::Module *takeLinkModule() { return LinkModule.release(); }
 
     virtual void HandleCXXStaticMemberVarInstantiation(VarDecl *VD) {
       Gen->HandleCXXStaticMemberVarInstantiation(VD);
@@ -125,7 +125,7 @@ namespace clang {
       if (!M) {
         // The module has been released by IR gen on failures, do not double
         // free.
-        TheModule.take();
+        TheModule.release();
         return;
       }
 
@@ -435,9 +435,7 @@ void CodeGenAction::EndSourceFileAction() {
   TheModule.reset(BEConsumer->takeModule());
 }
 
-llvm::Module *CodeGenAction::takeModule() {
-  return TheModule.take();
-}
+llvm::Module *CodeGenAction::takeModule() { return TheModule.release(); }
 
 llvm::LLVMContext *CodeGenAction::takeLLVMContext() {
   OwnsVMContext = false;
@@ -467,7 +465,7 @@ static raw_ostream *GetOutputStream(CompilerInstance &CI,
 ASTConsumer *CodeGenAction::CreateASTConsumer(CompilerInstance &CI,
                                               StringRef InFile) {
   BackendAction BA = static_cast<BackendAction>(Act);
-  OwningPtr<raw_ostream> OS(GetOutputStream(CI, InFile, BA));
+  std::unique_ptr<raw_ostream> OS(GetOutputStream(CI, InFile, BA));
   if (BA != Backend_EmitNothing && !OS)
     return 0;
 
@@ -497,12 +495,10 @@ ASTConsumer *CodeGenAction::CreateASTConsumer(CompilerInstance &CI,
     LinkModuleToUse = ModuleOrErr.get();
   }
 
-  BEConsumer = 
-      new BackendConsumer(BA, CI.getDiagnostics(),
-                          CI.getCodeGenOpts(), CI.getTargetOpts(),
-                          CI.getLangOpts(),
-                          CI.getFrontendOpts().ShowTimers, InFile,
-                          LinkModuleToUse, OS.take(), *VMContext);
+  BEConsumer = new BackendConsumer(BA, CI.getDiagnostics(), CI.getCodeGenOpts(),
+                                   CI.getTargetOpts(), CI.getLangOpts(),
+                                   CI.getFrontendOpts().ShowTimers, InFile,
+                                   LinkModuleToUse, OS.release(), *VMContext);
   return BEConsumer;
 }
 

@@ -20,10 +20,10 @@
 #include "clang/Edit/Commit.h"
 #include "clang/Edit/EditsReceiver.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cstdio>
+#include <memory>
 
 using namespace clang;
 
@@ -87,7 +87,7 @@ bool FixItRewriter::WriteFixedFiles(
     int fd;
     std::string Filename = FixItOpts->RewriteFilename(Entry->getName(), fd);
     std::string Err;
-    OwningPtr<llvm::raw_fd_ostream> OS;
+    std::unique_ptr<llvm::raw_fd_ostream> OS;
     if (fd != -1) {
       OS.reset(new llvm::raw_fd_ostream(fd, /*shouldClose=*/true));
     } else {

@@ -22,7 +22,6 @@
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Frontend/Utils.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -46,6 +45,7 @@
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/system_error.h"
+#include <memory>
 using namespace clang;
 using namespace clang::driver;
 using namespace llvm::opt;
@@ -341,11 +341,10 @@ int main(int argc_, const char **argv_) {
 
   IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions;
   {
-    OwningPtr<OptTable> Opts(createDriverOptTable());
+    std::unique_ptr<OptTable> Opts(createDriverOptTable());
     unsigned MissingArgIndex, MissingArgCount;
-    OwningPtr<InputArgList> Args(Opts->ParseArgs(argv.begin()+1, argv.end(),
-                                                 MissingArgIndex,
-                                                 MissingArgCount));
+    std::unique_ptr<InputArgList> Args(Opts->ParseArgs(
+        argv.begin() + 1, argv.end(), MissingArgIndex, MissingArgCount));
     // We ignore MissingArgCount and the return value of ParseDiagnosticArgs.
     // Any errors that would be diagnosed here will also be diagnosed later,
     // when the DiagnosticsEngine actually exists.
@@ -408,7 +407,7 @@ int main(int argc_, const char **argv_) {
   if (TheDriver.CCLogDiagnostics)
     TheDriver.CCLogDiagnosticsFilename = ::getenv("CC_LOG_DIAGNOSTICS_FILE");
 
-  OwningPtr<Compilation> C(TheDriver.BuildCompilation(argv));
+  std::unique_ptr<Compilation> C(TheDriver.BuildCompilation(argv));
   int Res = 0;
   SmallVector<std::pair<int, const Command *>, 4> FailingCommands;
   if (C.get())

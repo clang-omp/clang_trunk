@@ -427,7 +427,7 @@ bool Preprocessor::HandleEndOfFile(Token &Result, bool isEndOfMacro) {
   if (!isIncrementalProcessingEnabled())
     CurPPLexer = 0;
 
-  if (TUKind != TU_Prefix) {
+  if (TUKind == TU_Complete) {
     // This is the end of the top-level file. 'WarnUnusedMacroLocs' has
     // collected all macro locations that we need to warn because they are not
     // used.
@@ -524,7 +524,7 @@ bool Preprocessor::HandleEndOfTokenLexer(Token &Result) {
   if (NumCachedTokenLexers == TokenLexerCacheSize)
     CurTokenLexer.reset();
   else
-    TokenLexerCache[NumCachedTokenLexers++] = CurTokenLexer.take();
+    TokenLexerCache[NumCachedTokenLexers++] = CurTokenLexer.release();
 
   // Handle this like a #include file being popped off the stack.
   return HandleEndOfFile(Result, true);
@@ -541,7 +541,7 @@ void Preprocessor::RemoveTopOfLexerStack() {
     if (NumCachedTokenLexers == TokenLexerCacheSize)
       CurTokenLexer.reset();
     else
-      TokenLexerCache[NumCachedTokenLexers++] = CurTokenLexer.take();
+      TokenLexerCache[NumCachedTokenLexers++] = CurTokenLexer.release();
   }
 
   PopIncludeMacroStack();

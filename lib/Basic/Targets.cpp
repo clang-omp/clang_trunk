@@ -20,7 +20,6 @@
 #include "clang/Basic/TargetBuiltins.h"
 #include "clang/Basic/TargetOptions.h"
 #include "llvm/ADT/APFloat.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -29,6 +28,7 @@
 #include "llvm/MC/MCSectionMachO.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
+#include <memory>
 using namespace clang;
 
 //===----------------------------------------------------------------------===//
@@ -5965,7 +5965,7 @@ TargetInfo *TargetInfo::CreateTargetInfo(DiagnosticsEngine &Diags,
   llvm::Triple Triple(Opts->Triple);
 
   // Construct the target
-  OwningPtr<TargetInfo> Target(AllocateTarget(Triple));
+  std::unique_ptr<TargetInfo> Target(AllocateTarget(Triple));
   if (!Target) {
     Diags.Report(diag::err_target_unknown_triple) << Triple.str();
     return 0;
@@ -6015,5 +6015,5 @@ TargetInfo *TargetInfo::CreateTargetInfo(DiagnosticsEngine &Diags,
   if (!Target->handleTargetFeatures(Opts->Features, Diags))
     return 0;
 
-  return Target.take();
+  return Target.release();
 }

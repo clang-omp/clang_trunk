@@ -19,7 +19,6 @@
 #include "clang/Driver/Tool.h"
 #include "clang/Driver/ToolChain.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -36,6 +35,7 @@
 #include "llvm/Support/Program.h"
 #include "llvm/Support/raw_ostream.h"
 #include <map>
+#include <memory>
 
 // FIXME: It would prevent us from including llvm-config.h
 // if config.h were included before system_error.h.
@@ -1203,7 +1203,7 @@ void Driver::BuildActions(const ToolChain &TC, DerivedArgList &Args,
     }
 
     // Build the pipeline for this file.
-    OwningPtr<Action> Current(new InputAction(*InputArg, InputType));
+    std::unique_ptr<Action> Current(new InputAction(*InputArg, InputType));
     for (SmallVectorImpl<phases::ID>::iterator
            i = PL.begin(), e = PL.end(); i != e; ++i) {
       phases::ID Phase = *i;
@@ -1215,7 +1215,7 @@ void Driver::BuildActions(const ToolChain &TC, DerivedArgList &Args,
       // Queue linker inputs.
       if (Phase == phases::Link) {
         assert((i + 1) == e && "linking must be final compilation step.");
-        LinkerInputs.push_back(Current.take());
+        LinkerInputs.push_back(Current.release());
         break;
       }
 
@@ -1226,14 +1226,14 @@ void Driver::BuildActions(const ToolChain &TC, DerivedArgList &Args,
         continue;
 
       // Otherwise construct the appropriate action.
-      Current.reset(ConstructPhaseAction(Args, Phase, Current.take()));
+      Current.reset(ConstructPhaseAction(Args, Phase, Current.release()));
       if (Current->getType() == types::TY_Nothing)
         break;
     }
 
     // If we ended with something, add to the output list.
     if (Current)
-      Actions.push_back(Current.take());
+      Actions.push_back(Current.release());
   }
 
   // Add a link action if necessary.

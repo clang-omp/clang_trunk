@@ -168,10 +168,7 @@ void Sema::InstantiateAttrs(const MultiLevelTemplateArgumentList &TemplateArgs,
                             const Decl *Tmpl, Decl *New,
                             LateInstantiatedAttrVec *LateAttrs,
                             LocalInstantiationScope *OuterMostScope) {
-  for (AttrVec::const_iterator i = Tmpl->attr_begin(), e = Tmpl->attr_end();
-       i != e; ++i) {
-    const Attr *TmplAttr = *i;
-
+  for (const auto *TmplAttr : Tmpl->attrs()) {
     // FIXME: This should be generalized to more than just the AlignedAttr.
     const AlignedAttr *Aligned = dyn_cast<AlignedAttr>(TmplAttr);
     if (Aligned && Aligned->isAlignmentDependent()) {
@@ -562,10 +559,8 @@ Decl *TemplateDeclInstantiator::VisitIndirectFieldDecl(IndirectFieldDecl *D) {
     new (SemaRef.Context)NamedDecl*[D->getChainingSize()];
 
   int i = 0;
-  for (IndirectFieldDecl::chain_iterator PI =
-       D->chain_begin(), PE = D->chain_end();
-       PI != PE; ++PI) {
-    NamedDecl *Next = SemaRef.FindInstantiatedDecl(D->getLocation(), *PI,
+  for (auto *PI : D->chain()) {
+    NamedDecl *Next = SemaRef.FindInstantiatedDecl(D->getLocation(), PI,
                                               TemplateArgs);
     if (!Next)
       return 0;
@@ -735,9 +730,7 @@ void TemplateDeclInstantiator::InstantiateEnumDefinition(
   SmallVector<Decl*, 4> Enumerators;
 
   EnumConstantDecl *LastEnumConst = 0;
-  for (EnumDecl::enumerator_iterator EC = Pattern->enumerator_begin(),
-         ECEnd = Pattern->enumerator_end();
-       EC != ECEnd; ++EC) {
+  for (auto *EC : Pattern->enumerators()) {
     // The specified value for the enumerator.
     ExprResult Value = SemaRef.Owned((Expr *)0);
     if (Expr *UninstValue = EC->getInitExpr()) {
@@ -767,7 +760,7 @@ void TemplateDeclInstantiator::InstantiateEnumDefinition(
     }
 
     if (EnumConst) {
-      SemaRef.InstantiateAttrs(TemplateArgs, *EC, EnumConst);
+      SemaRef.InstantiateAttrs(TemplateArgs, EC, EnumConst);
 
       EnumConst->setAccess(Enum->getAccess());
       Enum->addDecl(EnumConst);
@@ -778,7 +771,7 @@ void TemplateDeclInstantiator::InstantiateEnumDefinition(
           !Enum->isScoped()) {
         // If the enumeration is within a function or method, record the enum
         // constant as a local.
-        SemaRef.CurrentInstantiationScope->InstantiatedLocal(*EC, EnumConst);
+        SemaRef.CurrentInstantiationScope->InstantiatedLocal(EC, EnumConst);
       }
     }
   }
@@ -4778,10 +4771,7 @@ void Sema::PerformPendingInstantiations(bool LocalOnly) {
 
 void Sema::PerformDependentDiagnostics(const DeclContext *Pattern,
                        const MultiLevelTemplateArgumentList &TemplateArgs) {
-  for (DeclContext::ddiag_iterator I = Pattern->ddiag_begin(),
-         E = Pattern->ddiag_end(); I != E; ++I) {
-    DependentDiagnostic *DD = *I;
-
+  for (auto DD : Pattern->ddiags()) {
     switch (DD->getKind()) {
     case DependentDiagnostic::Access:
       HandleDependentAccessCheck(*DD, TemplateArgs);

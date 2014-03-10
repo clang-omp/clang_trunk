@@ -679,7 +679,7 @@ llvm::Value *CodeGenFunction::EmitBlockLiteral(const BlockExpr *blockExpr) {
   }
 
   // Find the block info for this block and take ownership of it.
-  OwningPtr<CGBlockInfo> blockInfo;
+  std::unique_ptr<CGBlockInfo> blockInfo;
   blockInfo.reset(findAndRemoveBlockInfo(&FirstBlockInfo,
                                          blockExpr->getBlockDecl()));
 
@@ -1117,9 +1117,8 @@ CodeGenFunction::GenerateBlockFunction(GlobalDecl GD,
   args.push_back(&selfDecl);
 
   // Now add the rest of the parameters.
-  for (BlockDecl::param_const_iterator i = blockDecl->param_begin(),
-       e = blockDecl->param_end(); i != e; ++i)
-    args.push_back(*i);
+  for (auto i : blockDecl->params())
+    args.push_back(i);
 
   // Create the function declaration.
   const FunctionProtoType *fnType = blockInfo.getBlockExpr()->getFunctionType();

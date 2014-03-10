@@ -24,11 +24,11 @@
 #include "clang/Lex/Lexer.h"
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
+#include <memory>
 
 using namespace clang;
 using llvm::utostr;
@@ -1337,9 +1337,7 @@ void RewriteModernObjC::RewriteObjCMethodDecl(const ObjCInterfaceDecl *IDecl,
   ResultStr += " _cmd";
 
   // Method arguments.
-  for (ObjCMethodDecl::param_iterator PI = OMD->param_begin(),
-       E = OMD->param_end(); PI != E; ++PI) {
-    ParmVarDecl *PDecl = *PI;
+  for (const auto *PDecl : OMD->params()) {
     ResultStr += ", ";
     if (PDecl->getType()->isObjCQualifiedIdType()) {
       ResultStr += "id ";
@@ -2733,9 +2731,8 @@ Stmt *RewriteModernObjC::RewriteObjCBoxedExpr(ObjCBoxedExpr *Exp) {
   SmallVector<QualType, 4> ArgTypes;
   ArgTypes.push_back(Context->getObjCIdType());
   ArgTypes.push_back(Context->getObjCSelType());
-  for (ObjCMethodDecl::param_iterator PI = BoxingMethod->param_begin(),
-       E = BoxingMethod->param_end(); PI != E; ++PI)
-    ArgTypes.push_back((*PI)->getType());
+  for (const auto PI : BoxingMethod->parameters())
+    ArgTypes.push_back(PI->getType());
   
   QualType returnType = Exp->getType();
   // Get the type, we will need to reference it in a couple spots.
@@ -2863,9 +2860,8 @@ Stmt *RewriteModernObjC::RewriteObjCArrayLiteralExpr(ObjCArrayLiteral *Exp) {
   SmallVector<QualType, 4> ArgTypes;
   ArgTypes.push_back(Context->getObjCIdType());
   ArgTypes.push_back(Context->getObjCSelType());
-  for (ObjCMethodDecl::param_iterator PI = ArrayMethod->param_begin(),
-       E = ArrayMethod->param_end(); PI != E; ++PI)
-    ArgTypes.push_back((*PI)->getType());
+  for (const auto *PI : ArrayMethod->params())
+    ArgTypes.push_back(PI->getType());
   
   QualType returnType = Exp->getType();
   // Get the type, we will need to reference it in a couple spots.
@@ -3021,9 +3017,8 @@ Stmt *RewriteModernObjC::RewriteObjCDictionaryLiteralExpr(ObjCDictionaryLiteral 
   SmallVector<QualType, 8> ArgTypes;
   ArgTypes.push_back(Context->getObjCIdType());
   ArgTypes.push_back(Context->getObjCSelType());
-  for (ObjCMethodDecl::param_iterator PI = DictMethod->param_begin(),
-       E = DictMethod->param_end(); PI != E; ++PI) {
-    QualType T = (*PI)->getType();
+  for (const auto *PI : DictMethod->params()) {
+    QualType T = PI->getType();
     if (const PointerType* PT = T->getAs<PointerType>()) {
       QualType PointeeTy = PT->getPointeeType();
       convertToUnqualifiedObjCType(PointeeTy);
@@ -3600,11 +3595,10 @@ Stmt *RewriteModernObjC::SynthMessageExpr(ObjCMessageExpr *Exp,
   ArgTypes.push_back(Context->getObjCSelType());
   if (ObjCMethodDecl *OMD = Exp->getMethodDecl()) {
     // Push any user argument types.
-    for (ObjCMethodDecl::param_iterator PI = OMD->param_begin(),
-         E = OMD->param_end(); PI != E; ++PI) {
-      QualType t = (*PI)->getType()->isObjCQualifiedIdType()
+    for (const auto *PI : OMD->params()) {
+      QualType t = PI->getType()->isObjCQualifiedIdType()
                      ? Context->getObjCIdType()
-                     : (*PI)->getType();
+                     : PI->getType();
       // Make sure we convert "t (^)(...)" to "t (*)(...)".
       (void)convertBlockPointerToFunctionPointer(t);
       ArgTypes.push_back(t);
@@ -3794,11 +3788,8 @@ bool RewriteModernObjC::RewriteObjCFieldDeclType(QualType &Type,
         return true;
       }
       Result += " {\n";
-      for (RecordDecl::field_iterator i = RD->field_begin(), 
-           e = RD->field_end(); i != e; ++i) {
-        FieldDecl *FD = *i;
+      for (auto *FD : RD->fields())
         RewriteObjCFieldDecl(FD, Result);
-      }
       Result += "\t} "; 
       return true;
     }
@@ -3815,8 +3806,7 @@ bool RewriteModernObjC::RewriteObjCFieldDeclType(QualType &Type,
       }
       
       Result += " {\n";
-      for (EnumDecl::enumerator_iterator EC = ED->enumerator_begin(),
-           ECEnd = ED->enumerator_end(); EC != ECEnd; ++EC) {
+      for (const auto *EC : ED->enumerators()) {
         Result += "\t"; Result += EC->getName(); Result += " = ";
         llvm::APSInt Val = EC->getInitVal();
         Result += Val.toString(10);
@@ -5854,9 +5844,7 @@ Stmt *RewriteModernObjC::RewriteFunctionBodyOrGlobalInitializer(Stmt *S) {
 }
 
 void RewriteModernObjC::RewriteRecordBody(RecordDecl *RD) {
-  for (RecordDecl::field_iterator i = RD->field_begin(), 
-                                  e = RD->field_end(); i != e; ++i) {
-    FieldDecl *FD = *i;
+  for (auto *FD : RD->fields()) {
     if (isTopLevelBlockPointerType(FD->getType()))
       RewriteBlockPointerDecl(FD);
     if (FD->getType()->isObjCQualifiedIdType() ||

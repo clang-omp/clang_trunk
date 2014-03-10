@@ -1911,9 +1911,7 @@ CGObjCCommonMac::EmitMessageSend(CodeGen::CodeGenFunction &CGF,
   
   bool requiresnullCheck = false;
   if (CGM.getLangOpts().ObjCAutoRefCount && Method)
-    for (ObjCMethodDecl::param_const_iterator i = Method->param_begin(),
-         e = Method->param_end(); i != e; ++i) {
-      const ParmVarDecl *ParamDecl = (*i);
+    for (const auto *ParamDecl : Method->params()) {
       if (ParamDecl->hasAttr<NSConsumedAttr>()) {
         if (!nullReturn.NullBB)
           nullReturn.init(CGF, Arg0);
@@ -2203,9 +2201,7 @@ void CGObjCCommonMac::BuildRCBlockVarRecordLayout(const RecordType *RT,
                                                   bool ByrefLayout) {
   const RecordDecl *RD = RT->getDecl();
   SmallVector<const FieldDecl*, 16> Fields;
-  for (RecordDecl::field_iterator i = RD->field_begin(),
-       e = RD->field_end(); i != e; ++i)
-    Fields.push_back(*i);
+  llvm::copy(RD->fields(), std::back_inserter(Fields));
   llvm::Type *Ty = CGM.getTypes().ConvertType(QualType(RT, 0));
   const llvm::StructLayout *RecLayout =
     CGM.getDataLayout().getStructLayout(cast<llvm::StructType>(Ty));
@@ -4518,9 +4514,7 @@ void CGObjCCommonMac::BuildAggrIvarRecordLayout(const RecordType *RT,
   const RecordDecl *RD = RT->getDecl();
   // FIXME - Use iterator.
   SmallVector<const FieldDecl*, 16> Fields;
-  for (RecordDecl::field_iterator i = RD->field_begin(),
-                                  e = RD->field_end(); i != e; ++i)
-    Fields.push_back(*i);
+  llvm::copy(RD->fields(), std::back_inserter(Fields));
   llvm::Type *Ty = CGM.getTypes().ConvertType(QualType(RT, 0));
   const llvm::StructLayout *RecLayout =
     CGM.getDataLayout().getStructLayout(cast<llvm::StructType>(Ty));
@@ -6602,9 +6596,7 @@ CGObjCNonFragileABIMac::EmitVTableMessageSend(CodeGenFunction &CGF,
   
   bool requiresnullCheck = false;
   if (CGM.getLangOpts().ObjCAutoRefCount && method)
-    for (ObjCMethodDecl::param_const_iterator i = method->param_begin(),
-         e = method->param_end(); i != e; ++i) {
-      const ParmVarDecl *ParamDecl = (*i);
+    for (const auto *ParamDecl : method->params()) {
       if (ParamDecl->hasAttr<NSConsumedAttr>()) {
         if (!nullReturn.NullBB)
           nullReturn.init(CGF, arg0);

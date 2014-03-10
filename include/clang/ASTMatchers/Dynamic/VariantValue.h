@@ -21,9 +21,8 @@
 #include "clang/ASTMatchers/ASTMatchersInternal.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/Optional.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/Support/type_traits.h"
+#include <memory>
 #include <vector>
 
 namespace clang {
@@ -174,7 +173,7 @@ private:
     const MatcherT &matcher() const { return *Out; }
 
   private:
-    OwningPtr<MatcherT> Out;
+    std::unique_ptr<MatcherT> Out;
   };
 
   IntrusiveRefCntPtr<const Payload> Value;

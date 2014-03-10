@@ -18,9 +18,9 @@
 #include "CodeGenModule.h"
 #include "CodeGenTypes.h"
 #include "clang/Frontend/CodeGenOptions.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include <memory>
 
 namespace clang {
 namespace CodeGen {
@@ -30,7 +30,7 @@ class RegionCounter;
 class PGOProfileData {
 private:
   /// The PGO data
-  llvm::OwningPtr<llvm::MemoryBuffer> DataBuffer;
+  std::unique_ptr<llvm::MemoryBuffer> DataBuffer;
   /// Offsets into DataBuffer for each function's counters
   llvm::StringMap<unsigned> DataOffsets;
   /// Execution counts for each function.
