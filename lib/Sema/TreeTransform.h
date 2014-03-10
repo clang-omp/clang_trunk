@@ -6582,7 +6582,7 @@ StmtResult TreeTransform<Derived>::TransformSEHHandler(Stmt *Handler) {
 template<typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformOMPExecutableDirective(
-                                 OMPExecutableDirective *D) {
+                                            OMPExecutableDirective *D) {
   // Transform the clauses
   llvm::SmallVector<OMPClause *, 5> TClauses;
   ArrayRef<OMPClause *> Clauses = D->clauses();
@@ -6599,12 +6599,13 @@ TreeTransform<Derived>::TransformOMPExecutableDirective(
       TClauses.push_back(0);
     }
   }
-  if (!D->getAssociatedStmt()) {
-    return StmtError();
-  }
-  StmtResult AssociatedStmt =
-    getDerived().TransformStmt(D->getAssociatedStmt());
-  if (AssociatedStmt.isInvalid())
+  StmtResult AssociatedStmt;
+  if (D->hasAssociatedStmt() && D->getAssociatedStmt()) {
+    AssociatedStmt =
+      getDerived().TransformStmt(D->getAssociatedStmt());
+    if (!AssociatedStmt.isUsable())
+      return StmtError();
+  } else if (D->hasAssociatedStmt())
     return StmtError();
   Stmt *AStmt = AssociatedStmt.take();
   DeclarationNameInfo DirName;
