@@ -431,7 +431,7 @@ RValue CodeGenFunction::EmitObjCMessageExpr(const ObjCMessageExpr *E,
 
 namespace {
 struct FinishARCDealloc : EHScopeStack::Cleanup {
-  void Emit(CodeGenFunction &CGF, Flags flags) {
+  void Emit(CodeGenFunction &CGF, Flags flags) override {
     const ObjCMethodDecl *method = cast<ObjCMethodDecl>(CGF.CurCodeDecl);
 
     const ObjCImplDecl *impl = cast<ObjCImplDecl>(method->getDeclContext());
@@ -507,7 +507,7 @@ void CodeGenFunction::GenerateObjCMethod(const ObjCMethodDecl *OMD) {
   Cnt.beginRegion(Builder);
   EmitCompoundStmtWithoutScope(*cast<CompoundStmt>(OMD->getBody()));
   FinishFunction(OMD->getBodyRBrace());
-  PGO.emitWriteoutFunction();
+  PGO.emitInstrumentationData();
   PGO.destroyRegionCounters();
 }
 
@@ -1298,7 +1298,7 @@ namespace {
       : addr(addr), ivar(ivar), destroyer(destroyer),
         useEHCleanupForArray(useEHCleanupForArray) {}
 
-    void Emit(CodeGenFunction &CGF, Flags flags) {
+    void Emit(CodeGenFunction &CGF, Flags flags) override {
       LValue lvalue
         = CGF.EmitLValueForIvar(CGF.TypeOfSelfObject(), addr, ivar, /*CVR*/ 0);
       CGF.emitDestroy(lvalue.getAddress(), ivar->getType(), destroyer,
@@ -1362,11 +1362,9 @@ void CodeGenFunction::GenerateObjCCtorDtorMethod(ObjCImplementationDecl *IMP,
     // Suppress the final autorelease in ARC.
     AutoreleaseResult = false;
 
-    for (ObjCImplementationDecl::init_const_iterator B = IMP->init_begin(),
-           E = IMP->init_end(); B != E; ++B) {
-      CXXCtorInitializer *IvarInit = (*B);
+    for (const auto *IvarInit : IMP->inits()) {
       FieldDecl *Field = IvarInit->getAnyMember();
-      ObjCIvarDecl  *Ivar = cast<ObjCIvarDecl>(Field);
+      ObjCIvarDecl *Ivar = cast<ObjCIvarDecl>(Field);
       LValue LV = EmitLValueForIvar(TypeOfSelfObject(), 
                                     LoadObjCSelf(), Ivar, 0);
       EmitAggExpr(IvarInit->getInit(),
@@ -1511,9 +1509,13 @@ void CodeGenFunction::EmitObjCForCollectionStmt(const ObjCForCollectionStmt &S){
   llvm::Value *zero = llvm::Constant::getNullValue(UnsignedLongLTy);
 
   // If the limit pointer was zero to begin with, the collection is
-  // empty; skip all this.
+  // empty; skip all this. Set the branch weight assuming this has the same
+  // probability of exiting the loop as any other loop exit.
+  uint64_t EntryCount = PGO.getCurrentRegionCount();
+  RegionCounter Cnt = getPGORegionCounter(&S);
   Builder.CreateCondBr(Builder.CreateICmpEQ(initialBufferLimit, zero, "iszero"),
-                       EmptyBB, LoopInitBB);
+                       EmptyBB, LoopInitBB,
+                       PGO.createBranchWeights(EntryCount, Cnt.getCount()));
 
   // Otherwise, initialize the loop.
   EmitBlock(LoopInitBB);
@@ -1542,7 +1544,6 @@ void CodeGenFunction::EmitObjCForCollectionStmt(const ObjCForCollectionStmt &S){
   llvm::PHINode *count = Builder.CreatePHI(UnsignedLongLTy, 3, "forcoll.count");
   count->addIncoming(initialBufferLimit, LoopInitBB);
 
-  RegionCounter Cnt = getPGORegionCounter(&S);
   Cnt.beginRegion(Builder);
 
   // Check whether the mutations value has changed from where it was
@@ -1651,10 +1652,13 @@ void CodeGenFunction::EmitObjCForCollectionStmt(const ObjCForCollectionStmt &S){
   llvm::Value *indexPlusOne
     = Builder.CreateAdd(index, llvm::ConstantInt::get(UnsignedLongLTy, 1));
 
-  // TODO: We should probably model this as a "continue" for PGO
   // If we haven't overrun the buffer yet, we can continue.
+  // Set the branch weights based on the simplifying assumption that this is
+  // like a while-loop, i.e., ignoring that the false branch fetches more
+  // elements and then returns to the loop.
   Builder.CreateCondBr(Builder.CreateICmpULT(indexPlusOne, count),
-                       LoopBodyBB, FetchMoreBB);
+                       LoopBodyBB, FetchMoreBB,
+                       PGO.createBranchWeights(Cnt.getCount(), EntryCount));
 
   index->addIncoming(indexPlusOne, AfterBody.getBlock());
   count->addIncoming(count, AfterBody.getBlock());
@@ -1675,8 +1679,6 @@ void CodeGenFunction::EmitObjCForCollectionStmt(const ObjCForCollectionStmt &S){
   index->addIncoming(zero, Builder.GetInsertBlock());
   count->addIncoming(refetchCount, Builder.GetInsertBlock());
 
-  // TODO: We should be applying PGO weights here, but this needs to handle the
-  // branch before FetchMoreBB or we risk getting the numbers wrong.
   Builder.CreateCondBr(Builder.CreateICmpEQ(refetchCount, zero),
                        EmptyBB, LoopBodyBB);
 
@@ -1699,7 +1701,6 @@ void CodeGenFunction::EmitObjCForCollectionStmt(const ObjCForCollectionStmt &S){
     PopCleanupBlock();
 
   EmitBlock(LoopEnd.getBlock());
-  // TODO: Once we calculate PGO weights above, set the region count here
 }
 
 void CodeGenFunction::EmitObjCAtTryStmt(const ObjCAtTryStmt &S) {
@@ -1727,7 +1728,7 @@ namespace {
     CallObjCRelease(llvm::Value *object) : object(object) {}
     llvm::Value *object;
 
-    void Emit(CodeGenFunction &CGF, Flags flags) {
+    void Emit(CodeGenFunction &CGF, Flags flags) override {
       // Releases at the end of the full-expression are imprecise.
       CGF.EmitARCRelease(object, ARCImpreciseLifetime);
     }
@@ -2336,7 +2337,7 @@ namespace {
 
     CallObjCAutoreleasePoolObject(llvm::Value *token) : Token(token) {}
 
-    void Emit(CodeGenFunction &CGF, Flags flags) {
+    void Emit(CodeGenFunction &CGF, Flags flags) override {
       CGF.EmitObjCAutoreleasePoolPop(Token);
     }
   };
@@ -2345,7 +2346,7 @@ namespace {
 
     CallObjCMRRAutoreleasePoolObject(llvm::Value *token) : Token(token) {}
 
-    void Emit(CodeGenFunction &CGF, Flags flags) {
+    void Emit(CodeGenFunction &CGF, Flags flags) override {
       CGF.EmitObjCMRRAutoreleasePoolPop(Token);
     }
   };
@@ -2836,9 +2837,8 @@ void CodeGenFunction::EmitObjCAutoreleasePoolStmt(
     EHStack.pushCleanup<CallObjCMRRAutoreleasePoolObject>(NormalCleanup, token);
   }
 
-  for (CompoundStmt::const_body_iterator I = S.body_begin(),
-       E = S.body_end(); I != E; ++I)
-    EmitStmt(*I);
+  for (const auto *I : S.body())
+    EmitStmt(I);
 
   if (DI)
     DI->EmitLexicalBlockEnd(Builder, S.getRBracLoc());

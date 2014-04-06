@@ -497,10 +497,9 @@ CodeGenTypes::arrangeLLVMFunctionInfo(CanQualType resultType,
   if (retInfo.canHaveCoerceToType() && retInfo.getCoerceToType() == 0)
     retInfo.setCoerceToType(ConvertType(FI->getReturnType()));
 
-  for (CGFunctionInfo::arg_iterator I = FI->arg_begin(), E = FI->arg_end();
-       I != E; ++I)
-    if (I->info.canHaveCoerceToType() && I->info.getCoerceToType() == 0)
-      I->info.setCoerceToType(ConvertType(I->type));
+  for (auto &I : FI->arguments())
+    if (I.info.canHaveCoerceToType() && I.info.getCoerceToType() == 0)
+      I.info.setCoerceToType(ConvertType(I.type));
 
   bool erased = FunctionsBeingProcessed.erase(FI); (void)erased;
   assert(erased && "Not in set?");
@@ -879,6 +878,11 @@ bool CodeGenModule::ReturnTypeUsesSRet(const CGFunctionInfo &FI) {
   return FI.getReturnInfo().isIndirect();
 }
 
+bool CodeGenModule::ReturnSlotInterferesWithArgs(const CGFunctionInfo &FI) {
+  return ReturnTypeUsesSRet(FI) &&
+         getTargetCodeGenInfo().doesReturnSlotInterfereWithArgs();
+}
+
 bool CodeGenModule::ReturnTypeUsesFPRet(QualType ResultType) {
   if (const BuiltinType *BT = ResultType->getAs<BuiltinType>()) {
     switch (BT->getKind()) {
@@ -1169,10 +1173,9 @@ void CodeGenModule::ConstructAttributeList(const CGFunctionInfo &FI,
                                     llvm::AttributeSet::ReturnIndex,
                                     RetAttrs));
 
-  for (CGFunctionInfo::const_arg_iterator it = FI.arg_begin(),
-         ie = FI.arg_end(); it != ie; ++it) {
-    QualType ParamType = it->type;
-    const ABIArgInfo &AI = it->info;
+  for (const auto &I : FI.arguments()) {
+    QualType ParamType = I.type;
+    const ABIArgInfo &AI = I.info;
     llvm::AttrBuilder Attrs;
 
     if (AI.getPaddingType()) {
@@ -2015,9 +2018,8 @@ static void emitWriteback(CodeGenFunction &CGF,
 
 static void emitWritebacks(CodeGenFunction &CGF,
                            const CallArgList &args) {
-  for (CallArgList::writeback_iterator
-         i = args.writeback_begin(), e = args.writeback_end(); i != e; ++i)
-    emitWriteback(CGF, *i);
+  for (const auto &I : args.writebacks())
+    emitWriteback(CGF, I);
 }
 
 static void deactivateArgCleanupsBeforeCall(CodeGenFunction &CGF,
@@ -2250,7 +2252,7 @@ struct DestroyUnpassedArg : EHScopeStack::Cleanup {
   llvm::Value *Addr;
   QualType Ty;
 
-  void Emit(CodeGenFunction &CGF, Flags flags) {
+  void Emit(CodeGenFunction &CGF, Flags flags) override {
     const CXXDestructorDecl *Dtor = Ty->getAsCXXRecordDecl()->getDestructor();
     assert(!Dtor->isTrivial());
     CGF.EmitCXXDestructorCall(Dtor, Dtor_Complete, /*for vbase*/ false,
@@ -2601,6 +2603,13 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
         // Store the RValue into the argument struct.
         llvm::Value *Addr =
             Builder.CreateStructGEP(ArgMemory, ArgInfo.getInAllocaFieldIndex());
+        unsigned AS = Addr->getType()->getPointerAddressSpace();
+        llvm::Type *MemType = ConvertTypeForMem(I->Ty)->getPointerTo(AS);
+        // There are some cases where a trivial bitcast is not avoidable.  The
+        // definition of a type later in a translation unit may change it's type
+        // from {}* to (%struct.foo*)*.
+        if (Addr->getType() != MemType)
+          Addr = Builder.CreateBitCast(Addr, MemType);
         LValue argLV = MakeAddrLValue(Addr, I->Ty, TypeAlign);
         EmitInitStoreOfNonAggregate(*this, RV, argLV);
       }

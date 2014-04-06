@@ -1035,29 +1035,6 @@ OMPClause *Parser::ParseOpenMPClause(OpenMPDirectiveKind DKind,
 ///    thread_limit-clause:
 ///      'thread_limit' '(' expression ')'
 ///
-#if 0
-OMPClause *Parser::ParseOpenMPSingleExprClause(OpenMPClauseKind Kind) {
-  SourceLocation Loc = ConsumeToken();
-
-  BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_openmp_end);
-  if (T.expectAndConsume(diag::err_expected_lparen_after,
-                         getOpenMPClauseName(Kind)))
-    return 0;
-
-  ExprResult LHS(ParseCastExpression(false, false, NotTypeCast));
-  ExprResult Val(ParseRHSOfBinaryExpression(LHS, prec::Conditional));
-
-  // Parse ')'.
-  T.consumeClose();
-
-  if (Val.isInvalid())
-    return 0;
-
-  return Actions.ActOnOpenMPSingleExprClause(Kind, Val.take(), Loc,
-                                             T.getOpenLocation(),
-                                             T.getCloseLocation());
-}
-#endif
 OMPClause *Parser::ParseOpenMPSingleExprClause(OpenMPClauseKind Kind) {
   SourceLocation Loc = Tok.getLocation();
   SourceLocation LOpen = ConsumeAnyToken();

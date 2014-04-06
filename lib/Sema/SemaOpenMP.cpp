@@ -166,6 +166,7 @@ public:
   void setDefaultDSAShared() { Stack.back().DefaultAttr = DSA_shared; }
   DefaultDataSharingAttributes getDefaultDSA() { return Stack.back().DefaultAttr; }
 
+  Scope *getCurScope() const { return Stack.back().CurScope; }
   Scope *getCurScope() { return Stack.back().CurScope; }
 };
 } // end anonymous namespace.
@@ -550,7 +551,7 @@ private:
   Sema &Actions;
 public:
   VarDeclFilterCCC(Sema &S) : Actions(S) { }
-  virtual bool ValidateCandidate(const TypoCorrection &Candidate) {
+  bool ValidateCandidate(const TypoCorrection &Candidate) override {
     NamedDecl *ND = Candidate.getCorrectionDecl();
     if (VarDecl *VD = dyn_cast_or_null<VarDecl>(ND)) {
       return VD->hasGlobalStorage() &&
@@ -2921,6 +2922,9 @@ OMPClause *Sema::ActOnOpenMPNumThreadsClause(Expr *NumThreads,
 
 Expr *Sema::ActOnConstantPositiveSubExpressionInClause(Expr *E) {
   if (!E) return 0;
+  if (E->isValueDependent() || E->isTypeDependent() ||
+      E->isInstantiationDependent() || E->containsUnexpandedParameterPack())
+    return E;
   llvm::APSInt Result;
   ExprResult ICE = VerifyIntegerConstantExpression(E, &Result);
   if (ICE.isInvalid())
@@ -3019,7 +3023,9 @@ OMPClause *Sema::ActOnOpenMPDefaultClause(OpenMPDefaultClauseKind Kind,
                                           SourceLocation EndLoc) {
   if (Kind == OMPC_DEFAULT_unknown) {
     std::string Values;
-    std::string Sep(NUM_OPENMP_DEFAULT_KINDS > 1 ? ", " : "");
+    static_assert(NUM_OPENMP_DEFAULT_KINDS > 1,
+                  "NUM_OPENMP_DEFAULT_KINDS not greater than 1");
+    std::string Sep(", ");
     for (unsigned i = OMPC_DEFAULT_unknown + 1;
          i < NUM_OPENMP_DEFAULT_KINDS; ++i) {
       Values += "'";
@@ -5491,7 +5497,7 @@ bool Sema::isNotOpenMPCanonicalLoopForm(Stmt *S, OpenMPDirectiveKind Kind,
   Stmt *Body = For->getBody();
   if (!Body) {
     Diag(S->getLocStart(), diag::err_omp_directive_nonblock)
-      << getOpenMPDirectiveName(Kind) << Body;
+      << getOpenMPDirectiveName(Kind) << Body->getLocStart();
     return true;
   }
 
@@ -5690,7 +5696,7 @@ bool Sema::isNotOpenMPCanonicalLoopForm(Stmt *S, OpenMPDirectiveKind Kind,
     // we can apply 'std::distance' to the init and test arguments
     // of the for-loop.
     CXXScopeSpec SS;
-    SS.Extend(Context, getStdNamespace(), SourceLocation(), SourceLocation());
+    SS.Extend(Context, getOrCreateStdNamespace(), SourceLocation(), SourceLocation());
     IdentifierInfo *IIT = &Context.Idents.get("iterator_traits");
     DeclarationNameInfo DNIIT(IIT, SourceLocation());
     LookupResult RIT(*this, DNIIT, LookupNestedNameSpecifierName);

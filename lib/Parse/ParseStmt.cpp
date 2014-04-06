@@ -142,7 +142,7 @@ public:
     WantCXXNamedCasts = false;
   }
 
-  virtual bool ValidateCandidate(const TypoCorrection &candidate) {
+  bool ValidateCandidate(const TypoCorrection &candidate) override {
     if (FieldDecl *FD = candidate.getCorrectionDeclAs<FieldDecl>())
       return !candidate.getCorrectionSpecifier() || isa<ObjCIvarDecl>(FD);
     if (NextToken.is(tok::equal))
@@ -1766,7 +1766,7 @@ namespace {
 
     void *LookupInlineAsmIdentifier(StringRef &LineBuf,
                                     InlineAsmIdentifierInfo &Info,
-                                    bool IsUnevaluatedContext) {
+                                    bool IsUnevaluatedContext) override {
       // Collect the desired tokens.
       SmallVector<Token, 16> LineToks;
       const Token *FirstOrigToken = 0;
@@ -1806,7 +1806,7 @@ namespace {
     }
 
     bool LookupInlineAsmField(StringRef Base, StringRef Member,
-                              unsigned &Offset) {
+                              unsigned &Offset) override {
       return TheParser.getActions().LookupInlineAsmField(Base, Member,
                                                          Offset, AsmLoc);
     }
@@ -2210,6 +2210,11 @@ StmtResult Parser::ParseMicrosoftAsmStatement(SourceLocation AsmLoc) {
                                NumOutputs, NumInputs, OpExprs, Constraints,
                                Clobbers, MII, IP, Callback))
     return StmtError();
+
+  // Filter out "fpsw".  Clang doesn't accept it, and it always lists flags and
+  // fpsr as clobbers.
+  auto End = std::remove(Clobbers.begin(), Clobbers.end(), "fpsw");
+  Clobbers.erase(End, Clobbers.end());
 
   // Build the vector of clobber StringRefs.
   unsigned NumClobbers = Clobbers.size();

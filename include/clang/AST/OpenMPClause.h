@@ -94,7 +94,7 @@ protected:
               reinterpret_cast<Expr **>(static_cast<T *>(this) + 1));
   }
 
-  /// \brief Build clause with number of variables \a N.
+  /// \brief Build a clause with \a N variables
   ///
   /// \param N Number of the variables in the clause.
   ///
@@ -103,6 +103,8 @@ protected:
 public:
   typedef llvm::MutableArrayRef<Expr *>::iterator varlist_iterator;
   typedef ArrayRef<const Expr *>::iterator varlist_const_iterator;
+  typedef llvm::iterator_range<varlist_iterator> varlist_range;
+  typedef llvm::iterator_range<varlist_const_iterator> varlist_const_range;
 
   unsigned varlist_size() const { return NumVars; }
   bool varlist_empty() const { return NumVars == 0; }
@@ -349,6 +351,62 @@ public:
   StmtRange children() {
     return StmtRange(&NumForLoops, &NumForLoops + 1);
   }
+};
+
+/// \brief This represents 'safelen' clause in the '#pragma omp ...'
+/// directive.
+///
+/// \code
+/// #pragma omp simd safelen(4)
+/// \endcode
+/// In this example directive '#pragma omp simd' has clause 'safelen'
+/// with single expression '4'.
+/// If the safelen clause is used then no two iterations executed
+/// concurrently with SIMD instructions can have a greater distance
+/// in the logical iteration space than its value. The parameter of
+/// the safelen clause must be a constant positive integer expression.
+///
+class OMPSafelenClause : public OMPClause {
+  friend class OMPClauseReader;
+  /// \brief Location of '('.
+  SourceLocation LParenLoc;
+  /// \brief Safe iteration space distance.
+  Stmt *Safelen;
+
+  /// \brief Set safelen.
+  void setSafelen(Expr *Len) { Safelen = Len; }
+
+public:
+  /// \brief Build 'safelen' clause.
+  ///
+  /// \param Len Expression associated with this clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param EndLoc Ending location of the clause.
+  ///
+  OMPSafelenClause(Expr *Len, SourceLocation StartLoc, SourceLocation LParenLoc,
+                   SourceLocation EndLoc)
+      : OMPClause(OMPC_safelen, StartLoc, EndLoc), LParenLoc(LParenLoc),
+        Safelen(Len) {}
+
+  /// \brief Build an empty clause.
+  ///
+  explicit OMPSafelenClause()
+      : OMPClause(OMPC_safelen, SourceLocation(), SourceLocation()),
+        LParenLoc(SourceLocation()), Safelen(0) {}
+
+  /// \brief Sets the location of '('.
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
+  /// \brief Returns the location of '('.
+  SourceLocation getLParenLoc() const { return LParenLoc; }
+
+  /// \brief Return safe iteration space distance.
+  Expr *getSafelen() const { return cast_or_null<Expr>(Safelen); }
+
+  static bool classof(const OMPClause *T) {
+    return T->getClauseKind() == OMPC_safelen;
+  }
+
+  StmtRange children() { return StmtRange(&Safelen, &Safelen + 1); }
 };
 
 /// \brief This represents 'default' clause in the '#pragma omp ...' directive.
@@ -1840,66 +1898,6 @@ public:
   StmtRange children() {
     return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
                      reinterpret_cast<Stmt **>(varlist_end()));
-  }
-};
-
-/// \brief This represents 'safelen' clause in the '#pragma omp ...'
-/// directive.
-///
-/// \code
-/// #pragma omp simd safelen(4)
-/// \endcode
-/// In this example directive '#pragma omp simd' has clause 'safelen'
-/// with single expression '4'.
-/// If the safelen clause is used then no two iterations executed
-/// concurrently with SIMD instructions can have a greater distance
-/// in the logical iteration space than its value. The parameter of
-/// the safelen clause must be a constant positive integer expression.
-///
-class OMPSafelenClause : public OMPClause {
-  friend class OMPClauseReader;
-  /// \brief Location of '('.
-  SourceLocation LParenLoc;
-  /// \brief Safe iteration space distance.
-  Stmt *Safelen;
-  /// \brief Set the safe iteration space distance.
-  ///
-  /// \param E safe iteration space distance.
-  ///
-  void setSafelen(Expr *E) { Safelen = E; }
-public:
-  /// \brief Build 'safelen' clause.
-  ///
-  /// \param E Expression associated with this clause.
-  /// \param StartLoc Starting location of the clause.
-  /// \param EndLoc Ending location of the clause.
-  ///
-  OMPSafelenClause(Expr *E, SourceLocation StartLoc, SourceLocation LParenLoc,
-                   SourceLocation EndLoc)
-    : OMPClause(OMPC_safelen, StartLoc, EndLoc), LParenLoc(LParenLoc),
-      Safelen(E) { }
-
-  /// \brief Build an empty clause.
-  ///
-  explicit OMPSafelenClause()
-    : OMPClause(OMPC_safelen, SourceLocation(), SourceLocation()),
-      Safelen(0) { }
-
-  /// \brief Sets the location of '('.
-  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
-  /// \brief Returns the location of '('.
-  SourceLocation getLParenLoc() const { return LParenLoc; }
-
-  /// \brief Return safe iteration space distance.
-  ///
-  Expr *getSafelen() { return dyn_cast_or_null<Expr>(Safelen); }
-
-  static bool classof(const OMPClause *T) {
-    return T->getClauseKind() == OMPC_safelen;
-  }
-
-  StmtRange children() {
-    return StmtRange(&Safelen, &Safelen + 1);
   }
 };
 

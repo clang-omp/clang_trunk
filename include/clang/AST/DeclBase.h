@@ -54,20 +54,6 @@ class TranslationUnitDecl;
 class UsingDirectiveDecl;
 }
 
-namespace llvm {
-// DeclContext* is only 4-byte aligned on 32-bit systems.
-template<>
-  class PointerLikeTypeTraits<clang::DeclContext*> {
-  typedef clang::DeclContext* PT;
-public:
-  static inline void *getAsVoidPointer(PT P) { return P; }
-  static inline PT getFromVoidPointer(void *P) {
-    return static_cast<PT>(P);
-  }
-  enum { NumLowBitsAvailable = 2 };
-};
-}
-
 namespace clang {
 
   /// \brief Captures the result of checking the availability of a
@@ -472,6 +458,12 @@ public:
 
     if (Vec.empty())
       HasAttrs = false;
+  }
+
+  template <typename T>
+  llvm::iterator_range<specific_attr_iterator<T>> specific_attrs() const {
+    return llvm::iterator_range<specific_attr_iterator<T>>(
+        specific_attr_begin<T>(), specific_attr_end<T>());
   }
 
   template <typename T>
@@ -1006,7 +998,7 @@ public:
                        SourceManager &sm, const char *Msg)
   : TheDecl(theDecl), Loc(L), SM(sm), Message(Msg) {}
 
-  virtual void print(raw_ostream &OS) const;
+  void print(raw_ostream &OS) const override;
 };
 
 typedef llvm::MutableArrayRef<NamedDecl*> DeclContextLookupResult;
@@ -1574,6 +1566,11 @@ public:
   /// of looking up every possible name.
   class all_lookups_iterator;
 
+  typedef llvm::iterator_range<all_lookups_iterator> lookups_range;
+
+  lookups_range lookups() const;
+  lookups_range noload_lookups() const;
+
   /// \brief Iterators over all possible lookups within this context.
   all_lookups_iterator lookups_begin() const;
   all_lookups_iterator lookups_end() const;
@@ -1584,21 +1581,9 @@ public:
   all_lookups_iterator noload_lookups_begin() const;
   all_lookups_iterator noload_lookups_end() const;
 
-  /// udir_iterator - Iterates through the using-directives stored
-  /// within this context.
-  typedef UsingDirectiveDecl * const * udir_iterator;
+  typedef llvm::iterator_range<UsingDirectiveDecl * const *> udir_range;
 
-  typedef llvm::iterator_range<udir_iterator> udir_range;
-
-  udir_range getUsingDirectives() const;
-
-  udir_iterator using_directives_begin() const {
-    return getUsingDirectives().begin();
-  }
-
-  udir_iterator using_directives_end() const {
-    return getUsingDirectives().end();
-  }
+  udir_range using_directives() const;
 
   // These are all defined in DependentDiagnostic.h.
   class ddiag_iterator;
@@ -1659,7 +1644,7 @@ public:
   void dumpLookups(llvm::raw_ostream &OS) const;
 
 private:
-  void reconcileExternalVisibleStorage();
+  void reconcileExternalVisibleStorage() const;
   void LoadLexicalDeclsFromExternalStorage() const;
 
   /// @brief Makes a declaration visible within this context, but
