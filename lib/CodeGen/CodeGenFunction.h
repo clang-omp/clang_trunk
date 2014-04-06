@@ -134,13 +134,20 @@ public:
   LoopInfoStack LoopStack;
   CGBuilderTy Builder;
 
+  /// CGBuilder insert helper. This function is called after an instruction is
+  /// created using Builder.
+  void InsertHelper(llvm::Instruction *I,
+                    const llvm::Twine &Name,
+                    llvm::BasicBlock *BB,
+                    llvm::BasicBlock::iterator InsertPt) const;
+
   /// CurFuncDecl - Holds the Decl for the current outermost
   /// non-closure context.
   const Decl *CurFuncDecl;
   /// CurCodeDecl - This is the inner-most code context, which includes blocks.
   const Decl *CurCodeDecl;
   /// Root CodeGenFunction for OpenMP context in which current CodeGenFunction
-  /// was created ().
+  /// was created.
   CodeGenFunction *OpenMPRoot;
   const CGFunctionInfo *CurFnInfo;
   QualType FnRetTy;
@@ -207,6 +214,8 @@ public:
     /// \brief Get the name of the capture helper.
     virtual StringRef getHelperName() const { return "__captured_stmt"; }
 
+    static bool classof(const CGCapturedStmtInfo *) { return true; }
+
   private:
     /// \brief The kind of captured statement being generated.
     CapturedRegionKind Kind;
@@ -233,6 +242,7 @@ public:
 
     virtual ~CGOpenMPCapturedStmtInfo() { };
   };
+
   CGCapturedStmtInfo *CapturedStmtInfo;
 
   class CGSIMDForStmtInfo; // Defined below, after simd wrappers.
@@ -320,6 +330,7 @@ public:
       virtual Stmt *extractLoopBody(Stmt *S) const override;
       virtual bool isOmp() const override { return true; }
       virtual const Stmt *getStmt() const override { return SimdOmp; }
+      llvm::ConstantInt *emitClauseTail(CodeGenFunction *CGF, Expr *E) const;
       virtual ~CGPragmaOmpSimd() override { }
 
     private:
@@ -1028,17 +1039,19 @@ public:
   /// is cleared completely and then restored to original state upon
   /// destruction.
   class LocalVarsDeclGuard {
-  private:
     CodeGenFunction &CGF;
     DeclMapTy LocalDeclMap;
-  public:
-    LocalVarsDeclGuard(CodeGenFunction &CGF, bool Empty = false)
-      : CGF(CGF), LocalDeclMap(CGF.LocalDeclMap) {
-        if (Empty) CGF.LocalDeclMap.clear();
-      }
-    ~LocalVarsDeclGuard() { CGF.LocalDeclMap = LocalDeclMap; }
+    public:
+      LocalVarsDeclGuard(CodeGenFunction &CGF, bool Empty = false)
+        : CGF(CGF), LocalDeclMap() {
+          if (Empty) {
+            LocalDeclMap.swap(CGF.LocalDeclMap);
+          } else {
+            LocalDeclMap.copyFrom(CGF.LocalDeclMap);
+          }
+        }
+      ~LocalVarsDeclGuard() { CGF.LocalDeclMap.swap(LocalDeclMap); }
   };
-
   /// A scope within which we are constructing the fields of an object which
   /// might use a CXXDefaultInitExpr. This stashes away a 'this' value to use
   /// if we need to evaluate a CXXDefaultInitExpr within the evaluation.
