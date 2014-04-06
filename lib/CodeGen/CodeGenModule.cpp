@@ -1028,6 +1028,13 @@ void CodeGenModule::EmitDeferred() {
     // Otherwise, emit the definition and move on to the next one.
     EmitGlobalDefinition(D, GV);
   }
+
+  // Emit deferred openmp directives
+  while (!DeferredOMP.empty()) {
+    const OMPDeclareSimdDecl *DSimd = DeferredOMP.back();
+    DeferredOMP.pop_back();
+    EmitOMPDeclareSimd(DSimd);
+  }
 }
 
 void CodeGenModule::EmitGlobalAnnotations() {
@@ -2120,6 +2127,20 @@ void CodeGenModule::EmitGlobalFunctionDefinition(GlobalDecl GD,
                                                  llvm::GlobalValue *GV) {
   const FunctionDecl *D = cast<FunctionDecl>(GD.getDecl());
 
+  // If a method is deffered then defer its omp directive too.
+  if (const CXXMethodDecl *MD = dyn_cast_or_null<CXXMethodDecl>(D)) {
+    const CXXRecordDecl *Parent = MD->getParent();
+    for (DeclContext::decl_iterator DI = Parent->decls_begin(),
+                                    DE = Parent->decls_end();
+                                    DI != DE; ++DI) {
+      if (const OMPDeclareSimdDecl *DSimd =
+          dyn_cast_or_null<OMPDeclareSimdDecl>(*DI)) {
+        if (dyn_cast_or_null<FunctionDecl>(DSimd->getFunction()) == D) {
+          DeferredOMP.push_back(DSimd);
+        }
+      }
+    }
+  }
   // Compute the function info and LLVM type.
   const CGFunctionInfo &FI = getTypes().arrangeGlobalDeclaration(GD);
   llvm::FunctionType *Ty = getTypes().GetFunctionType(FI);
@@ -3110,6 +3131,9 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
     break;
   case Decl::OMPDeclareReduction:
     EmitOMPDeclareReduction(cast<OMPDeclareReductionDecl>(D));
+    break;
+  case Decl::OMPDeclareSimd:
+    EmitOMPDeclareSimd(cast<OMPDeclareSimdDecl>(D));
     break;
 
   case Decl::ClassTemplateSpecialization: {

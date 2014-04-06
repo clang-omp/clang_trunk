@@ -25,6 +25,7 @@ add_clang_library(clangCodeGen
   CGCXX.cpp
   CGCXXABI.cpp
   CGCall.cpp
+  CGElementalFunction.cpp
   CGClass.cpp
   CGCleanup.cpp
   CGDebugInfo.cpp

@@ -1408,7 +1408,6 @@ DEF_TRAVERSE_DECL(LabelDecl, {
   // There is no code in a LabelDecl.
 })
 
-
 DEF_TRAVERSE_DECL(NamespaceDecl, {
     // Code in an unnamed namespace shows up automatically in
     // decls_begin()/decls_end().  Thus we don't need to recurse on
@@ -1472,6 +1471,10 @@ DEF_TRAVERSE_DECL(OMPThreadPrivateDecl, {
     for (auto *I : D->varlists()) {
       TRY_TO(TraverseStmt(I));
     }
+  })
+
+DEF_TRAVERSE_DECL(OMPDeclareSimdDecl, {
+    if (D->getFunction()) { TRY_TO(TraverseDecl(D->getFunction())); }
   })
 
 DEF_TRAVERSE_DECL(OMPDeclareReductionDecl, {

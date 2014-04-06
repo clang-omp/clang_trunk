@@ -1391,6 +1391,10 @@ DEF_TRAVERSE_DECL(OMPThreadPrivateDecl, {
     }
   })
 
+DEF_TRAVERSE_DECL(OMPDeclareSimdDecl, {
+    if (D->getFunction()) { TRY_TO(TraverseDecl(D->getFunction())); }
+  })
+
 DEF_TRAVERSE_DECL(OMPDeclareReductionDecl, {
     for (OMPDeclareReductionDecl::datalist_iterator I = D->datalist_begin(),
                                                     E = D->datalist_end();
