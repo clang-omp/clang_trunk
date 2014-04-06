@@ -2599,8 +2599,7 @@ Decl *TemplateDeclInstantiator::VisitDecl(Decl *D) {
 
 Decl *TemplateDeclInstantiator::VisitOMPDeclareSimdDecl(
                                      OMPDeclareSimdDecl *D) {
-  return TouchOMPDeclareSimdDecl(D, D->getFunction(),
-                                 SemaRef.CurContext);
+  return TouchOMPDeclareSimdDecl(D, D->getFunction(), Owner);
 }
 
 void TemplateDeclInstantiator::TouchOMPVarlist(
