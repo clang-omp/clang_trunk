@@ -1956,8 +1956,10 @@ void OMPClauseEnqueue::VisitOMPDefaultClause(const OMPDefaultClause *C) { }
 
 template<typename T>
 void OMPClauseEnqueue::VisitOMPClauseList(T *Node) {
-  for (const auto *I : Node->varlists())
-    Visitor->AddStmt(I);
+  for (typename T::varlist_const_iterator I = Node->varlist_begin(),
+                                          E = Node->varlist_end();
+         I != E; ++I)
+    Visitor->AddStmt(*I);
 }
 
 void OMPClauseEnqueue::VisitOMPPrivateClause(const OMPPrivateClause *C) {
