@@ -1707,8 +1707,8 @@ void OMPClauseWriter::VisitOMPDistScheduleClause(OMPDistScheduleClause *C) {
 
 void OMPClauseWriter::VisitOMPPrivateClause(OMPPrivateClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPPrivateClause>::varlist_iterator I = C->varlist_begin(),
-                                                      E = C->varlist_end();
+  for (OMPPrivateClause::varlist_iterator I = C->varlist_begin(),
+                                          E = C->varlist_end();
        I != E; ++I)
     Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getDefaultInits().begin(),
@@ -1719,9 +1719,8 @@ void OMPClauseWriter::VisitOMPPrivateClause(OMPPrivateClause *C) {
 
 void OMPClauseWriter::VisitOMPFirstPrivateClause(OMPFirstPrivateClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPFirstPrivateClause>::varlist_iterator
-                                                   I = C->varlist_begin(),
-                                                   E = C->varlist_end();
+  for (OMPFirstPrivateClause::varlist_iterator I = C->varlist_begin(),
+                                               E = C->varlist_end();
        I != E; ++I)
     Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getPseudoVars().begin(),
@@ -1736,9 +1735,8 @@ void OMPClauseWriter::VisitOMPFirstPrivateClause(OMPFirstPrivateClause *C) {
 
 void OMPClauseWriter::VisitOMPLastPrivateClause(OMPLastPrivateClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPLastPrivateClause>::varlist_iterator
-                                                      I = C->varlist_begin(),
-                                                      E = C->varlist_end();
+  for (OMPLastPrivateClause::varlist_iterator I = C->varlist_begin(),
+                                              E = C->varlist_end();
        I != E; ++I)
     Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getPseudoVars1().begin(),
@@ -1761,16 +1759,16 @@ void OMPClauseWriter::VisitOMPLastPrivateClause(OMPLastPrivateClause *C) {
 
 void OMPClauseWriter::VisitOMPSharedClause(OMPSharedClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPSharedClause>::varlist_iterator I = C->varlist_begin(),
-                                                     E = C->varlist_end();
+  for (OMPSharedClause::varlist_iterator I = C->varlist_begin(),
+                                         E = C->varlist_end();
        I != E; ++I)
     Writer.AddStmt(*I);
 }
 
 void OMPClauseWriter::VisitOMPCopyinClause(OMPCopyinClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPCopyinClause>::varlist_iterator I = C->varlist_begin(),
-                                                     E = C->varlist_end();
+  for (OMPCopyinClause::varlist_iterator I = C->varlist_begin(),
+                                         E = C->varlist_end();
        I != E; ++I)
     Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getPseudoVars1().begin(),
@@ -1789,8 +1787,8 @@ void OMPClauseWriter::VisitOMPCopyinClause(OMPCopyinClause *C) {
 
 void OMPClauseWriter::VisitOMPCopyPrivateClause(OMPCopyPrivateClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPCopyPrivateClause>::varlist_iterator I = C->varlist_begin(),
-                                                     E = C->varlist_end();
+  for (OMPCopyPrivateClause::varlist_iterator I = C->varlist_begin(),
+                                              E = C->varlist_end();
        I != E; ++I)
     Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getPseudoVars1().begin(),
@@ -1812,8 +1810,8 @@ void OMPClauseWriter::VisitOMPReductionClause(OMPReductionClause *C) {
   Record.push_back(C->getOperator());
   Writer.AddNestedNameSpecifierLoc(C->getSpec(), Record);
   Writer.AddDeclarationNameInfo(C->getOpName(), Record);
-  for (OMPVarList<OMPReductionClause>::varlist_iterator I = C->varlist_begin(),
-                                                        E = C->varlist_end();
+  for (OMPReductionClause::varlist_iterator I = C->varlist_begin(),
+                                            E = C->varlist_end();
        I != E; ++I)
     Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getOpExprs().begin(),
@@ -1858,16 +1856,16 @@ void OMPClauseWriter::VisitOMPNotInBranchClause(OMPNotInBranchClause *C) { }
 
 void OMPClauseWriter::VisitOMPFlushClause(OMPFlushClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPFlushClause>::varlist_iterator I = C->varlist_begin(),
-                                                    E = C->varlist_end();
+  for (OMPFlushClause::varlist_iterator I = C->varlist_begin(),
+                                        E = C->varlist_end();
        I != E; ++I)
     Writer.AddStmt(*I);
 }
 
 void OMPClauseWriter::VisitOMPUniformClause(OMPUniformClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPUniformClause>::varlist_iterator I = C->varlist_begin(),
-                                                      E = C->varlist_end();
+  for (OMPUniformClause::varlist_iterator I = C->varlist_begin(),
+                                          E = C->varlist_end();
        I != E; ++I)
     Writer.AddStmt(*I);
 }
@@ -1886,8 +1884,8 @@ void OMPClauseWriter::VisitOMPThreadLimitClause(OMPThreadLimitClause *C) {
 
 void OMPClauseWriter::VisitOMPLinearClause(OMPLinearClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPLinearClause>::varlist_iterator I = C->varlist_begin(),
-                                                     E = C->varlist_end();
+  for (OMPLinearClause::varlist_iterator I = C->varlist_begin(),
+                                         E = C->varlist_end();
        I != E; ++I)
     Writer.AddStmt(*I);
   Writer.AddStmt(C->getStep());
@@ -1895,8 +1893,8 @@ void OMPClauseWriter::VisitOMPLinearClause(OMPLinearClause *C) {
 
 void OMPClauseWriter::VisitOMPAlignedClause(OMPAlignedClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPAlignedClause>::varlist_iterator I = C->varlist_begin(),
-                                                      E = C->varlist_end();
+  for (OMPAlignedClause::varlist_iterator I = C->varlist_begin(),
+                                          E = C->varlist_end();
         I != E; ++I)
     Writer.AddStmt(*I);
   Writer.AddStmt(C->getAlignment());
