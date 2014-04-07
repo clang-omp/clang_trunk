@@ -11587,7 +11587,8 @@ static bool isVariableCapturable(CapturingScopeInfo *CSI, VarDecl *Var,
 #define DEPENDENT_TYPE(Class, Base) case Type::Class:
 #define NON_CANONICAL_UNLESS_DEPENDENT_TYPE(Class, Base)
 #include "clang/AST/TypeNodes.def"
-        llvm_unreachable("unexpected dependent type!");
+          type = QualType();
+          break;
 
       // These types are never variably-modified.
       case Type::Builtin:
@@ -11663,11 +11664,14 @@ static bool isVariableCapturable(CapturingScopeInfo *CSI, VarDecl *Var,
         break;
 
       case Type::Typedef:
+          type = cast<TypedefType>(ty)->desugar();
+          break;
       case Type::Decltype:
+          type = cast<DecltypeType>(ty)->desugar();
+          break;
       case Type::Auto:
-        // Stop walking: nothing to do.
-        type = QualType();
-        break;;
+          type = cast<AutoType>(ty)->getDeducedType();
+          break;
 
       case Type::TypeOfExpr:
         type = cast<TypeOfExprType>(ty)->getUnderlyingExpr()->getType();
@@ -11677,7 +11681,7 @@ static bool isVariableCapturable(CapturingScopeInfo *CSI, VarDecl *Var,
         type = cast<AtomicType>(ty)->getValueType();
         break;
       }
-    } while (type->isVariablyModifiedType());
+    } while (!type.isNull() && type->isVariablyModifiedType());
   }
 
   // Prohibit variably-modified types in blocks and lambdas ;
