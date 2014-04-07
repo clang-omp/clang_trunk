@@ -190,7 +190,22 @@ OpenMPClauseKind DSAStackTy::getDSA(StackTy::reverse_iterator Iter, VarDecl *D,
   E = 0;
   if (Iter == Stack.rend() - 1) {
     Kind = OMPD_unknown;
-    return OMPC_shared;
+    // OpenMP [2.9.1.1, Data-sharing Attribute Rules for Variables Referenced
+    // in a region but not in construct]
+    //  File-scope or namespace-scope variables referenced in called routines
+    //  in the region are shared unless they appear in a threadprivate
+    //  directive.
+    if (!D->isFunctionOrMethodVarDecl())
+      return OMPC_shared;
+
+    // OpenMP [2.9.1.2, Data-sharing Attribute Rules for Variables Referenced
+    // in a region but not in construct]
+    //  Variables with static storage duration that are declared in called
+    //  routines in the region are shared.
+    if (D->hasGlobalStorage())
+      return OMPC_shared;
+
+    return OMPC_unknown;
   }
 
   // OpenMP [2.9.1.1, Data-sharing Attribute Rules for Variables Referenced
@@ -4358,7 +4373,7 @@ OMPClause *Sema::ActOnOpenMPLastPrivateClause(ArrayRef<Expr *> VarList,
     OpenMPDirectiveKind DKind;
     OpenMPDirectiveKind CurrDir = DSAStack->getCurrentDirective();
     Kind = DSAStack->getImplicitDSA(VD, DKind, PrevRef);
-    if (Kind != OMPC_shared &&
+    if ((Kind != OMPC_shared && Kind != OMPC_unknown && DKind != OMPD_unknown) &&
         (CurrDir == OMPD_for || CurrDir == OMPD_sections ||
          CurrDir == OMPD_for_simd ||
          CurrDir == OMPD_parallel_for || CurrDir == OMPD_parallel_for_simd ||
@@ -5151,7 +5166,7 @@ OMPClause *Sema::ActOnOpenMPReductionClause(ArrayRef<Expr *> VarList,
     OpenMPDirectiveKind DKind;
     OpenMPDirectiveKind CurrDir = DSAStack->getCurrentDirective();
     Kind = DSAStack->getImplicitDSA(VD, DKind, PrevRef);
-    if (Kind != OMPC_shared &&
+    if ((Kind != OMPC_shared && Kind != OMPC_unknown && DKind != OMPD_unknown) &&
         (CurrDir == OMPD_for || CurrDir == OMPD_sections ||
          CurrDir == OMPD_for_simd ||
          CurrDir == OMPD_parallel_for || CurrDir == OMPD_parallel_for_simd ||
