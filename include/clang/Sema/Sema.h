@@ -141,6 +141,7 @@ namespace clang {
   class ObjCPropertyDecl;
   class ObjCProtocolDecl;
   class OMPDeclareReductionDecl;
+  class OMPDeclareSimdDecl;
   class OMPThreadPrivateDecl;
   class OMPClause;
   class OverloadCandidateSet;
@@ -1013,6 +1014,18 @@ public:
     return FunctionScopes.back();
   }
   
+  sema::FunctionScopeInfo *getEnclosingFunction() const {
+    if (FunctionScopes.empty())
+      return 0;
+    
+    for (int e = FunctionScopes.size()-1; e >= 0; --e) {
+      if (isa<sema::BlockScopeInfo>(FunctionScopes[e]))
+        continue;
+      return FunctionScopes[e];
+    }
+    return 0;
+  }
+  
   template <typename ExprT>
   void recordUseOfEvaluatedWeak(const ExprT *E, bool IsRead=true) {
     if (!isUnevaluatedContext())
@@ -1116,6 +1129,8 @@ public:
   CanThrowResult canThrow(const Expr *E);
   const FunctionProtoType *ResolveExceptionSpec(SourceLocation Loc,
                                                 const FunctionProtoType *FPT);
+  void UpdateExceptionSpec(FunctionDecl *FD,
+                           const FunctionProtoType::ExtProtoInfo &EPI);
   bool CheckSpecifiedExceptionType(QualType &T, const SourceRange &Range);
   bool CheckDistantExceptionSpec(QualType T);
   bool CheckEquivalentExceptionSpec(FunctionDecl *Old, FunctionDecl *New);
@@ -1178,7 +1193,7 @@ public:
   public:
     BoundTypeDiagnoser1(unsigned DiagID, const T1 &Arg1)
       : TypeDiagnoser(DiagID == 0), DiagID(DiagID), Arg1(Arg1) { }
-    virtual void diagnose(Sema &S, SourceLocation Loc, QualType T) {
+    void diagnose(Sema &S, SourceLocation Loc, QualType T) override {
       if (Suppressed) return;
       S.Diag(Loc, DiagID) << getPrintable(Arg1) << T;
     }
@@ -1198,7 +1213,7 @@ public:
       : TypeDiagnoser(DiagID == 0), DiagID(DiagID), Arg1(Arg1),
         Arg2(Arg2) { }
 
-    virtual void diagnose(Sema &S, SourceLocation Loc, QualType T) {
+    void diagnose(Sema &S, SourceLocation Loc, QualType T) override {
       if (Suppressed) return;
       S.Diag(Loc, DiagID) << getPrintable(Arg1) << getPrintable(Arg2) << T;
     }
@@ -1219,7 +1234,7 @@ public:
     : TypeDiagnoser(DiagID == 0), DiagID(DiagID), Arg1(Arg1),
       Arg2(Arg2), Arg3(Arg3) { }
 
-    virtual void diagnose(Sema &S, SourceLocation Loc, QualType T) {
+    void diagnose(Sema &S, SourceLocation Loc, QualType T) override {
       if (Suppressed) return;
       S.Diag(Loc, DiagID)
         << getPrintable(Arg1) << getPrintable(Arg2) << getPrintable(Arg3) << T;
@@ -1577,6 +1592,16 @@ public:
   bool isObjCMethodDecl(Decl *D) {
     return D && isa<ObjCMethodDecl>(D);
   }
+
+  /// \brief Determine whether we can delay parsing the body of a function or
+  /// function template until it is used, assuming we don't care about emitting
+  /// code for that function.
+  ///
+  /// This will be \c false if we may need the body of the function in the
+  /// middle of parsing an expression (where it's impractical to switch to
+  /// parsing a different function), for instance, if it's constexpr in C++11
+  /// or has an 'auto' return type in C++14. These cases are essentially bugs.
+  bool canDelayFunctionBody(const Declarator &D);
 
   /// \brief Determine whether we can skip parsing the body of a function
   /// definition, assuming we don't care about analyzing its body or emitting
@@ -2096,10 +2121,10 @@ public:
           AllowScopedEnumerations(AllowScopedEnumerations) {}
 
     /// Match an integral or (possibly scoped) enumeration type.
-    bool match(QualType T);
+    bool match(QualType T) override;
 
     SemaDiagnosticBuilder
-    diagnoseNoMatch(Sema &S, SourceLocation Loc, QualType T) {
+    diagnoseNoMatch(Sema &S, SourceLocation Loc, QualType T) override {
       return diagnoseNotInt(S, Loc, T);
     }
 
@@ -2935,6 +2960,8 @@ public:
                                  SourceLocation CondLParen, Expr *Cond,
                                  SourceLocation CondRParen);
 
+  void CheckForLoopConditionalStatement(Expr *Second, Expr *Third, Stmt *Body);
+
   StmtResult ActOnForStmt(SourceLocation ForLoc,
                           SourceLocation LParenLoc,
                           Stmt *First, FullExprArg Second,
@@ -3396,6 +3423,8 @@ public:
                                      Expr *Idx, SourceLocation RLoc);
   ExprResult CreateBuiltinArraySubscriptExpr(Expr *Base, SourceLocation LLoc,
                                              Expr *Idx, SourceLocation RLoc);
+  ExprResult ActOnCEANIndexExpr(Scope *S, Expr *Base, Expr *LowerBound,
+                                SourceLocation ColonLoc, Expr *Length);
 
   ExprResult BuildMemberReferenceExpr(Expr *Base, QualType BaseType,
                                       SourceLocation OpLoc, bool IsArrow,
@@ -3712,6 +3741,7 @@ public:
                                    const LookupResult &Previous);
   bool CheckUsingDeclQualifier(SourceLocation UsingLoc,
                                const CXXScopeSpec &SS,
+                               const DeclarationNameInfo &NameInfo,
                                SourceLocation NameLoc);
 
   NamedDecl *BuildUsingDeclaration(Scope *S, AccessSpecifier AS,
@@ -6250,13 +6280,15 @@ public:
                           SourceRange InstantiationRange = SourceRange());
 
     /// \brief Note that we are substituting prior template arguments into a
-    /// non-type or template template parameter.
+    /// non-type parameter.
     InstantiatingTemplate(Sema &SemaRef, SourceLocation PointOfInstantiation,
                           NamedDecl *Template,
                           NonTypeTemplateParmDecl *Param,
                           ArrayRef<TemplateArgument> TemplateArgs,
                           SourceRange InstantiationRange);
 
+    /// \brief Note that we are substituting prior template arguments into a
+    /// template template parameter.
     InstantiatingTemplate(Sema &SemaRef, SourceLocation PointOfInstantiation,
                           NamedDecl *Template,
                           TemplateTemplateParmDecl *Param,
@@ -6287,6 +6319,15 @@ public:
     bool SavedInNonInstantiationSFINAEContext;
     bool CheckInstantiationDepth(SourceLocation PointOfInstantiation,
                                  SourceRange InstantiationRange);
+
+    // FIXME: Replace this with a constructor once we can use delegating
+    // constructors in llvm.
+    void Initialize(
+        ActiveTemplateInstantiation::InstantiationKind Kind,
+        SourceLocation PointOfInstantiation, SourceRange InstantiationRange,
+        Decl *Entity, NamedDecl *Template = nullptr,
+        ArrayRef<TemplateArgument> TemplateArgs = ArrayRef<TemplateArgument>(),
+        sema::TemplateDeductionInfo *DeductionInfo = nullptr);
 
     InstantiatingTemplate(const InstantiatingTemplate&) LLVM_DELETED_FUNCTION;
 
@@ -6423,6 +6464,11 @@ public:
   /// enclosing function, so that they can reference function-local
   /// types, static variables, enumerators, etc.
   std::deque<PendingImplicitInstantiation> PendingLocalImplicitInstantiations;
+
+  /// \brief We store OpenMP declarative pragmas that will need to be
+  /// instantiated together with the templated functions.
+  typedef llvm::DenseMap<Decl *, OMPDeclareSimdDecl *> PendingOMPInstMap;
+  PendingOMPInstMap PendingOMP;
 
   class SavePendingLocalImplicitInstantiationsRAII {
   public:
@@ -7076,8 +7122,8 @@ public:
   
   // OpenMP directives and clauses.
 private:
-  llvm::SmallVector<Stmt *, 64> AdditionalOpenMPStmt;
   void *VarDataSharingAttributesStack;
+  /// \brief Initialization of data-sharing attributes stack.
   void InitDataSharingAttributesStack();
   void DestroyDataSharingAttributesStack();
   /// \brief Check if \a S ia for-loop in canonical form for OpenMP.
@@ -7101,15 +7147,29 @@ private:
                           Expr *&NewVar,
                           Expr *&NewVarCntExpr,
                           Expr *&NewFinal,
-                          SmallVector<Expr *, 8> &VarCnts);
+                          SmallVector<Expr *, 4> &VarCnts);
 
   /// \brief A helper to rebuild a constant positive integer expression.
   Expr *ActOnConstantPositiveSubExpressionInClause(Expr *E);
 
+  /// \brief A helper to rebuild a linear step for linear clause.
+  Expr *ActOnConstantLinearStep(Expr *E);
+
   /// \brief A helper to add two simd-specific arguments into captured stmt.
   CapturedStmt *AddSimdArgsIntoCapturedStmt(CapturedStmt *Cap, Expr *NewVar);
 
+  bool HasOpenMPRegion(OpenMPDirectiveKind Kind);
+
 public:
+  /// \brief Called on start of new data sharing attribute block.
+  void StartOpenMPDSABlock(OpenMPDirectiveKind K,
+                           const DeclarationNameInfo &DirName,
+                           Scope *CurScope);
+  /// \brief Called on end of data sharing attribute block.
+  void EndOpenMPDSABlock(Stmt *CurDirective);
+
+  typedef llvm::DenseMap<FunctionTemplateDecl*, OMPDeclareSimdDecl*> OMPDeclareSimdMap;
+  OMPDeclareSimdMap OMPDSimdMap;
 
   /// \brief Called on correct id-expression from the '#pragma omp
   /// threadprivate'.
@@ -7120,10 +7180,34 @@ public:
   DeclGroupPtrTy ActOnOpenMPThreadprivateDirective(
                                      SourceLocation Loc,
                                      ArrayRef<Expr *> VarList);
-  // \brief Builds a new OpenMPThreadPrivateDecl and checks its correctness.
+  /// \brief Builds a new OMPThreadPrivateDecl and checks its correctness.
   OMPThreadPrivateDecl *CheckOMPThreadPrivateDecl(
                                      SourceLocation Loc,
                                      ArrayRef<Expr *> VarList);
+
+  /// \brief Called on well-formed '#pragma omp declare simd'.
+  DeclGroupPtrTy ActOnOpenMPDeclareSimdDirective(
+                    SourceLocation Loc,
+                    Decl *FuncDecl,
+                    ArrayRef<SourceRange> SrcRanges,
+                    ArrayRef<unsigned> BeginIdx,
+                    ArrayRef<unsigned> EndIdx,
+                    ArrayRef<OMPClause *> CL);
+  /// \brief Builds a new OMPDeclareSimdDecl and checks its correctness.
+  OMPDeclareSimdDecl *CheckOMPDeclareSimdDecl(
+                    SourceLocation Loc,
+                    Decl *FuncDecl,
+                    ArrayRef<SourceRange> SrcRanges,
+                    ArrayRef<unsigned> BeginIdx,
+                    ArrayRef<unsigned> EndIdx,
+                    ArrayRef<OMPClause *> CL,
+                    DeclContext *CurDC);
+  /// \brief Transforms arrays into array of SimdVariant structures and
+  ///        stores it into D.
+  void CompleteOMPDeclareSimdDecl(OMPDeclareSimdDecl *D,
+                                  ArrayRef<SourceRange> SrcRanges,
+                                  ArrayRef<unsigned> BeginIdx,
+                                  ArrayRef<unsigned> EndIdx);
 
   /// \brief A RAII object to enter scope of a declare reduction.
   class OMPDeclareReductionRAII {
@@ -7226,25 +7310,20 @@ public:
                                                    ArrayRef<SourceRange> TyRanges,
                                                    ArrayRef<Expr *> Combiners,
                                                    ArrayRef<Expr *> Inits);
-  // \brief Builds a new OpenMPThreadPrivateDecl and checks its correctness.
+  /// \brief Builds a new OMPDeclareReductionDecl and checks its correctness.
   void CompleteOMPDeclareReductionDecl(OMPDeclareReductionDecl *D,
                                        ArrayRef<QualType> Types,
                                        ArrayRef<SourceRange> TyRanges,
                                        ArrayRef<Expr *> Combiners,
                                        ArrayRef<Expr *> Inits);
 
-  /// \brief Called on start of new data sharing attribute block.
-  void StartOpenMPDSABlock(OpenMPDirectiveKind K,
-                           const DeclarationNameInfo &DirName,
-                           Scope *CurScope);
-  /// \brief Called on end of data sharing attribute block.
-  void EndOpenMPDSABlock(Stmt *CurDirective);
   StmtResult ActOnOpenMPExecutableDirective(OpenMPDirectiveKind Kind,
                                             const DeclarationNameInfo &DirName,
                                             ArrayRef<OMPClause *> Clauses,
                                             Stmt *AStmt,
                                             SourceLocation StartLoc,
-                                            SourceLocation EndLoc);
+                                            SourceLocation EndLoc,
+                                            OpenMPDirectiveKind ConstructType);
   /// \brief Called on well-formed '\#pragma omp parallel' after parsing
   /// of the  associated statement.
   StmtResult ActOnOpenMPParallelDirective(ArrayRef<OMPClause *> Clauses,
@@ -7258,6 +7337,20 @@ public:
                                      Stmt *AStmt,
                                      SourceLocation StartLoc,
                                      SourceLocation EndLoc);
+  /// \brief Called on well-formed '\#pragma omp parallel for' after parsing
+  /// of the  associated statement.
+  StmtResult ActOnOpenMPParallelForDirective(OpenMPDirectiveKind Kind,
+                                             ArrayRef<OMPClause *> Clauses,
+                                             Stmt *AStmt,
+                                             SourceLocation StartLoc,
+                                             SourceLocation EndLoc);
+  /// \brief Called on well-formed '\#pragma omp parallel for simd' after parsing
+  /// of the  associated statement.
+  StmtResult ActOnOpenMPParallelForSimdDirective(OpenMPDirectiveKind Kind,
+                                                 ArrayRef<OMPClause *> Clauses,
+                                                 Stmt *AStmt,
+                                                 SourceLocation StartLoc,
+                                                 SourceLocation EndLoc);
   /// \brief Called on well-formed '\#pragma omp simd' after parsing
   /// of the associated statement.
   StmtResult ActOnOpenMPSimdDirective(OpenMPDirectiveKind Kind,
@@ -7280,6 +7373,13 @@ public:
                                           Stmt *AStmt,
                                           SourceLocation StartLoc,
                                           SourceLocation EndLoc);
+  /// \brief Called on well-formed '\#pragma omp parallel sections' after parsing
+  /// of the  associated statement.
+  StmtResult ActOnOpenMPParallelSectionsDirective(OpenMPDirectiveKind Kind,
+                                                  ArrayRef<OMPClause *> Clauses,
+                                                  Stmt *AStmt,
+                                                  SourceLocation StartLoc,
+                                                  SourceLocation EndLoc);
   /// \brief Called on well-formed '\#pragma omp section' after parsing
   /// of the  associated statement.
   StmtResult ActOnOpenMPSectionDirective(Stmt *AStmt,
@@ -7341,6 +7441,19 @@ public:
   StmtResult ActOnOpenMPOrderedDirective(Stmt *AStmt,
                                          SourceLocation StartLoc,
                                          SourceLocation EndLoc);
+  /// \brief Called on well-formed '\#pragma omp cancel' after parsing
+  /// of the  associated statement.
+  StmtResult ActOnOpenMPCancelDirective(ArrayRef<OMPClause *> Clauses,
+                                        SourceLocation StartLoc,
+                                        SourceLocation EndLoc,
+                                        OpenMPDirectiveKind ConstructType);
+
+  /// \brief Called on well-formed '\#pragma omp cancellation point' after
+  /// parsing of the  associated statement.
+  StmtResult ActOnOpenMPCancellationPointDirective(
+                                            SourceLocation StartLoc,
+                                            SourceLocation EndLoc,
+                                            OpenMPDirectiveKind ConstructType);
 
   /// \brief Called on well-formed 'final' clause.
   OMPClause *ActOnOpenMPFinalClause(Expr *Condition, SourceLocation StartLoc,
@@ -7395,6 +7508,26 @@ public:
                                       CXXScopeSpec &SS,
                                       const UnqualifiedId &OpName,
                                       SourceLocation OpLoc);
+
+  /// \brief Helper to build DeclRefExpr for declarative clause.
+  Expr *ActOnOpenMPParameterInDeclarativeVarListClause(
+                    SourceLocation Loc,
+                    ParmVarDecl *Param);
+  /// \brief Helper to find paremeter with given name in function.
+  Expr *FindOpenMPDeclarativeClauseParameter(
+                    StringRef Name,
+                    SourceLocation Loc,
+                    Decl *FuncDecl);
+  /// \brief Helper for all declarative clauses with varlists
+  ///        (i.e. for declarative form of linear, aligned and uniform).
+  OMPClause *ActOnOpenMPDeclarativeVarListClause(
+                OpenMPClauseKind CKind,
+                ArrayRef<DeclarationNameInfo> NameInfos,
+                SourceLocation StartLoc,
+                SourceLocation EndLoc,
+                Expr *TailExpr,
+                SourceLocation TailLoc,
+                Decl *FuncDecl);
 
   /// \brief Called on well-formed 'private' clause.
   OMPClause *ActOnOpenMPPrivateClause(ArrayRef<Expr *> VarList,
@@ -7515,6 +7648,26 @@ public:
                                       Expr *Alignment,
                                       SourceLocation AlignmentLoc);
 
+  /// \brief Called on well-formed 'linear' clause (declarative form).
+  OMPClause *ActOnOpenMPDeclarativeLinearClause(
+                                     ArrayRef<Expr *> VarList,
+                                     SourceLocation StartLoc,
+                                     SourceLocation EndLoc,
+                                     Expr *Step,
+                                     SourceLocation StepLoc);
+  /// \brief Called on well-formed 'aligned' clause (declarative form).
+  OMPClause *ActOnOpenMPDeclarativeAlignedClause(
+                                      ArrayRef<Expr *> VarList,
+                                      SourceLocation StartLoc,
+                                      SourceLocation EndLoc,
+                                      Expr *Alignment,
+                                      SourceLocation AlignmentLoc);
+  /// \brief Called on well-formed 'uniform' clause (declarative form).
+  OMPClause *ActOnOpenMPDeclarativeUniformClause(
+                                      ArrayRef<Expr *> VarList,
+                                      SourceLocation StartLoc,
+                                      SourceLocation EndLoc);
+
   OMPClause *ActOnOpenMPSingleExprWithTypeClause(OpenMPClauseKind Kind,
                                                  unsigned Argument,
                                                  SourceLocation ArgumentLoc,
@@ -7536,6 +7689,13 @@ public:
                                            SourceLocation StartLoc,
                                            SourceLocation LParenLoc,
                                            SourceLocation EndLoc);
+  /// \brief Called on well-formed 'depend' clause.
+  OMPClause *ActOnOpenMPDependClause(ArrayRef<Expr *> VarList,
+                                     SourceLocation StartLoc,
+                                     SourceLocation LParenLoc,
+                                     SourceLocation EndLoc,
+                                     OpenMPDependClauseType Ty,
+                                     SourceLocation TyLoc);
 
   /// \brief Marks all decls as used in associated captured statement.
   void MarkOpenMPClauses(ArrayRef<OMPClause *> Clauses);
@@ -8270,9 +8430,12 @@ private:
 
   ExprResult CheckBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
 
+  bool CheckARMBuiltinExclusiveCall(unsigned BuiltinID, CallExpr *TheCall,
+                                    unsigned MaxWidth);
   bool CheckNeonBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
-  bool CheckARMBuiltinExclusiveCall(unsigned BuiltinID, CallExpr *TheCall);
   bool CheckARMBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
+
+  bool CheckARM64BuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
   bool CheckAArch64BuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
   bool CheckMipsBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
   bool CheckX86BuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);

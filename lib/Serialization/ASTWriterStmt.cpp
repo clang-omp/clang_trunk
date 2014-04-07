@@ -71,9 +71,8 @@ void ASTStmtWriter::VisitNullStmt(NullStmt *S) {
 void ASTStmtWriter::VisitCompoundStmt(CompoundStmt *S) {
   VisitStmt(S);
   Record.push_back(S->size());
-  for (CompoundStmt::body_iterator CS = S->body_begin(), CSEnd = S->body_end();
-       CS != CSEnd; ++CS)
-    Writer.AddStmt(*CS);
+  for (auto *CS : S->body())
+    Writer.AddStmt(CS);
   Writer.AddSourceLocation(S->getLBracLoc(), Record);
   Writer.AddSourceLocation(S->getRBracLoc(), Record);
   Code = serialization::STMT_COMPOUND;
@@ -300,24 +299,20 @@ void ASTStmtWriter::VisitCapturedStmt(CapturedStmt *S) {
   Writer.AddDeclRef(S->getCapturedRecordDecl(), Record);
 
   // Capture inits
-  for (CapturedStmt::capture_init_iterator I = S->capture_init_begin(),
-                                           E = S->capture_init_end();
-       I != E; ++I)
-    Writer.AddStmt(*I);
+  for (auto *I : S->capture_inits())
+    Writer.AddStmt(I);
 
   // Body
   Writer.AddStmt(S->getCapturedStmt());
 
   // Captures
-  for (CapturedStmt::capture_iterator I = S->capture_begin(),
-                                      E = S->capture_end();
-       I != E; ++I) {
-    if (I->capturesThis())
+  for (const auto &I : S->captures()) {
+    if (I.capturesThis())
       Writer.AddDeclRef(0, Record);
     else
-      Writer.AddDeclRef(I->getCapturedVar(), Record);
-    Record.push_back(I->getCaptureKind());
-    Writer.AddSourceLocation(I->getLocation(), Record);
+      Writer.AddDeclRef(I.getCapturedVar(), Record);
+    Record.push_back(I.getCaptureKind());
+    Writer.AddSourceLocation(I.getLocation(), Record);
   }
 
   Code = serialization::STMT_CAPTURED;
@@ -513,6 +508,14 @@ void ASTStmtWriter::VisitArraySubscriptExpr(ArraySubscriptExpr *E) {
   Writer.AddStmt(E->getRHS());
   Writer.AddSourceLocation(E->getRBracketLoc(), Record);
   Code = serialization::EXPR_ARRAY_SUBSCRIPT;
+}
+
+void ASTStmtWriter::VisitCEANIndexExpr(CEANIndexExpr *E) {
+  VisitExpr(E);
+  Writer.AddStmt(E->getLowerBound());
+  Writer.AddSourceLocation(E->getColonLoc(), Record);
+  Writer.AddStmt(E->getLength());
+  Code = serialization::EXPR_CEAN_INDEX;
 }
 
 void ASTStmtWriter::VisitCallExpr(CallExpr *E) {
@@ -1658,194 +1661,183 @@ void ASTStmtWriter::VisitSEHTryStmt(SEHTryStmt *S) {
 // OpenMP Clauses.
 //===----------------------------------------------------------------------===//
 
-namespace clang {
-class OMPClauseWriter : public OMPClauseVisitor<OMPClauseWriter> {
-  ASTStmtWriter *Writer;
-  ASTWriter::RecordData &Record;
-public:
-  OMPClauseWriter(ASTStmtWriter *W, ASTWriter::RecordData &Record)
-    : Writer(W), Record(Record) { }
-#define OPENMP_CLAUSE(Name, Class)    \
-  void Visit##Class(Class *S);
-#include "clang/Basic/OpenMPKinds.def"
-  void writeClause(OMPClause *C);
-};
-}
-
 void OMPClauseWriter::writeClause(OMPClause *C) {
   Record.push_back(C->getClauseKind());
   Visit(C);
-  Writer->Writer.AddSourceLocation(C->getLocStart(), Record);
-  Writer->Writer.AddSourceLocation(C->getLocEnd(), Record);
+  Writer.AddSourceLocation(C->getLocStart(), Record);
+  Writer.AddSourceLocation(C->getLocEnd(), Record);
 }
 
 void OMPClauseWriter::VisitOMPIfClause(OMPIfClause *C) {
-  Writer->Writer.AddStmt(C->getCondition());
-  Writer->Writer.AddSourceLocation(C->getLParenLoc(), Record);
+  Writer.AddStmt(C->getCondition());
+  Writer.AddSourceLocation(C->getLParenLoc(), Record);
 }
 
 void OMPClauseWriter::VisitOMPFinalClause(OMPFinalClause *C) {
-  Writer->Writer.AddStmt(C->getCondition());
+  Writer.AddStmt(C->getCondition());
 }
 
 void OMPClauseWriter::VisitOMPCollapseClause(OMPCollapseClause *C) {
-  Writer->Writer.AddStmt(C->getNumForLoops());
+  Writer.AddStmt(C->getNumForLoops());
 }
 
 void OMPClauseWriter::VisitOMPNumThreadsClause(OMPNumThreadsClause *C) {
-  Writer->Writer.AddStmt(C->getNumThreads());
-  Writer->Writer.AddSourceLocation(C->getLParenLoc(), Record);
+  Writer.AddStmt(C->getNumThreads());
+  Writer.AddSourceLocation(C->getLParenLoc(), Record);
+}
+
+void OMPClauseWriter::VisitOMPSafelenClause(OMPSafelenClause *C) {
+  Writer.AddStmt(C->getSafelen());
+  Writer.AddSourceLocation(C->getLParenLoc(), Record);
 }
 
 void OMPClauseWriter::VisitOMPDefaultClause(OMPDefaultClause *C) {
   Record.push_back(C->getDefaultKind());
-  Writer->Writer.AddSourceLocation(C->getDefaultKindKwLoc(), Record);
+  Writer.AddSourceLocation(C->getDefaultKindKwLoc(), Record);
 }
 
 void OMPClauseWriter::VisitOMPProcBindClause(OMPProcBindClause *C) {
   Record.push_back(C->getThreadAffinity());
-  Writer->Writer.AddSourceLocation(C->getThreadAffinityLoc(), Record);
+  Writer.AddSourceLocation(C->getThreadAffinityLoc(), Record);
 }
 
 void OMPClauseWriter::VisitOMPScheduleClause(OMPScheduleClause *C) {
   Record.push_back(C->getScheduleKind());
-  Writer->Writer.AddSourceLocation(C->getScheduleKindLoc(), Record);
-  Writer->Writer.AddStmt(C->getChunkSize());
+  Writer.AddSourceLocation(C->getScheduleKindLoc(), Record);
+  Writer.AddStmt(C->getChunkSize());
 }
 
 void OMPClauseWriter::VisitOMPDistScheduleClause(OMPDistScheduleClause *C) {
   Record.push_back(C->getScheduleKind());
-  Writer->Writer.AddSourceLocation(C->getScheduleKindLoc(), Record);
-  Writer->Writer.AddStmt(C->getChunkSize());
+  Writer.AddSourceLocation(C->getScheduleKindLoc(), Record);
+  Writer.AddStmt(C->getChunkSize());
 }
 
 void OMPClauseWriter::VisitOMPPrivateClause(OMPPrivateClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPPrivateClause>::varlist_iterator I = C->varlist_begin(),
-                                                      E = C->varlist_end();
+  for (OMPPrivateClause::varlist_iterator I = C->varlist_begin(),
+                                          E = C->varlist_end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getDefaultInits().begin(),
                                   E = C->getDefaultInits().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
 }
 
 void OMPClauseWriter::VisitOMPFirstPrivateClause(OMPFirstPrivateClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPFirstPrivateClause>::varlist_iterator
-                                                   I = C->varlist_begin(),
-                                                   E = C->varlist_end();
+  for (OMPFirstPrivateClause::varlist_iterator I = C->varlist_begin(),
+                                               E = C->varlist_end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getPseudoVars().begin(),
                                   E = C->getPseudoVars().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getInits().begin(),
                                   E = C->getInits().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
 }
 
 void OMPClauseWriter::VisitOMPLastPrivateClause(OMPLastPrivateClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPLastPrivateClause>::varlist_iterator
-                                                      I = C->varlist_begin(),
-                                                      E = C->varlist_end();
+  for (OMPLastPrivateClause::varlist_iterator I = C->varlist_begin(),
+                                              E = C->varlist_end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getPseudoVars1().begin(),
                                   E = C->getPseudoVars1().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getPseudoVars2().begin(),
                                   E = C->getPseudoVars2().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getDefaultInits().begin(),
                                   E = C->getDefaultInits().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getAssignments().begin(),
                                   E = C->getAssignments().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
 }
 
 void OMPClauseWriter::VisitOMPSharedClause(OMPSharedClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPSharedClause>::varlist_iterator I = C->varlist_begin(),
-                                                     E = C->varlist_end();
+  for (OMPSharedClause::varlist_iterator I = C->varlist_begin(),
+                                         E = C->varlist_end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
 }
 
 void OMPClauseWriter::VisitOMPCopyinClause(OMPCopyinClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPCopyinClause>::varlist_iterator I = C->varlist_begin(),
-                                                     E = C->varlist_end();
+  for (OMPCopyinClause::varlist_iterator I = C->varlist_begin(),
+                                         E = C->varlist_end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getPseudoVars1().begin(),
                                   E = C->getPseudoVars1().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getPseudoVars2().begin(),
                                   E = C->getPseudoVars2().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getAssignments().begin(),
                                   E = C->getAssignments().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
 }
 
 void OMPClauseWriter::VisitOMPCopyPrivateClause(OMPCopyPrivateClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPCopyPrivateClause>::varlist_iterator I = C->varlist_begin(),
-                                                     E = C->varlist_end();
+  for (OMPCopyPrivateClause::varlist_iterator I = C->varlist_begin(),
+                                              E = C->varlist_end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getPseudoVars1().begin(),
                                   E = C->getPseudoVars1().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getPseudoVars2().begin(),
                                   E = C->getPseudoVars2().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getAssignments().begin(),
                                   E = C->getAssignments().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
 }
 
 void OMPClauseWriter::VisitOMPReductionClause(OMPReductionClause *C) {
   Record.push_back(C->varlist_size());
   Record.push_back(C->getOperator());
-  Writer->Writer.AddNestedNameSpecifierLoc(C->getSpec(), Record);
-  Writer->Writer.AddDeclarationNameInfo(C->getOpName(), Record);
-  for (OMPVarList<OMPReductionClause>::varlist_iterator I = C->varlist_begin(),
-                                                        E = C->varlist_end();
+  Writer.AddNestedNameSpecifierLoc(C->getSpec(), Record);
+  Writer.AddDeclarationNameInfo(C->getOpName(), Record);
+  for (OMPReductionClause::varlist_iterator I = C->varlist_begin(),
+                                            E = C->varlist_end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getOpExprs().begin(),
                                   E = C->getOpExprs().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getHelperParameters1st().begin(),
                                   E = C->getHelperParameters1st().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getHelperParameters2nd().begin(),
                                   E = C->getHelperParameters2nd().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
   for (ArrayRef<Expr *>::iterator I = C->getDefaultInits().begin(),
                                   E = C->getDefaultInits().end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
 }
 
 void OMPClauseWriter::VisitOMPOrderedClause(OMPOrderedClause *C) { }
@@ -1872,52 +1864,62 @@ void OMPClauseWriter::VisitOMPNotInBranchClause(OMPNotInBranchClause *C) { }
 
 void OMPClauseWriter::VisitOMPFlushClause(OMPFlushClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPFlushClause>::varlist_iterator I = C->varlist_begin(),
-                                                    E = C->varlist_end();
+  for (OMPFlushClause::varlist_iterator I = C->varlist_begin(),
+                                        E = C->varlist_end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
+    Writer.AddStmt(*I);
 }
 
 void OMPClauseWriter::VisitOMPUniformClause(OMPUniformClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPUniformClause>::varlist_iterator I = C->varlist_begin(),
-                                                      E = C->varlist_end();
+  for (OMPUniformClause::varlist_iterator I = C->varlist_begin(),
+                                          E = C->varlist_end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
-}
-
-void OMPClauseWriter::VisitOMPSafelenClause(OMPSafelenClause *C) {
-  Writer->Writer.AddStmt(C->getSafelen());
+    Writer.AddStmt(*I);
 }
 
 void OMPClauseWriter::VisitOMPSimdlenClause(OMPSimdlenClause *C) {
-  Writer->Writer.AddStmt(C->getSimdlen());
+  Writer.AddStmt(C->getSimdlen());
 }
 
 void OMPClauseWriter::VisitOMPNumTeamsClause(OMPNumTeamsClause *C) {
-  Writer->Writer.AddStmt(C->getNumTeams());
+  Writer.AddStmt(C->getNumTeams());
 }
 
 void OMPClauseWriter::VisitOMPThreadLimitClause(OMPThreadLimitClause *C) {
-  Writer->Writer.AddStmt(C->getThreadLimit());
+  Writer.AddStmt(C->getThreadLimit());
 }
 
 void OMPClauseWriter::VisitOMPLinearClause(OMPLinearClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPLinearClause>::varlist_iterator I = C->varlist_begin(),
-                                                     E = C->varlist_end();
+  for (OMPLinearClause::varlist_iterator I = C->varlist_begin(),
+                                         E = C->varlist_end();
        I != E; ++I)
-    Writer->Writer.AddStmt(*I);
-  Writer->Writer.AddStmt(C->getStep());
+    Writer.AddStmt(*I);
+  Writer.AddStmt(C->getStep());
 }
 
 void OMPClauseWriter::VisitOMPAlignedClause(OMPAlignedClause *C) {
   Record.push_back(C->varlist_size());
-  for (OMPVarList<OMPAlignedClause>::varlist_iterator I = C->varlist_begin(),
-                                                      E = C->varlist_end();
+  for (OMPAlignedClause::varlist_iterator I = C->varlist_begin(),
+                                          E = C->varlist_end();
         I != E; ++I)
-    Writer->Writer.AddStmt(*I);
-  Writer->Writer.AddStmt(C->getAlignment());
+    Writer.AddStmt(*I);
+  Writer.AddStmt(C->getAlignment());
+}
+
+void OMPClauseWriter::VisitOMPDependClause(OMPDependClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.push_back(C->getType());
+  Writer.AddSourceLocation(C->getTypeLoc(), Record);
+  for (OMPDependClause::varlist_iterator I = C->varlist_begin(),
+                                         E = C->varlist_end();
+       I != E; ++I)
+    Writer.AddStmt(*I);
+  for (unsigned i = 0, e = C->varlist_size(); i != e; ++i)
+    Writer.AddStmt(C->getBegins(i));
+  for (unsigned i = 0, e = C->varlist_size(); i != e; ++i)
+    Writer.AddStmt(C->getSizeInBytes(i));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1926,7 +1928,7 @@ void OMPClauseWriter::VisitOMPAlignedClause(OMPAlignedClause *C) {
 void ASTStmtWriter::VisitOMPExecutableDirective(OMPExecutableDirective *E) {
   Writer.AddSourceLocation(E->getLocStart(), Record);
   Writer.AddSourceLocation(E->getLocEnd(), Record);
-  OMPClauseWriter ClauseWriter(this, Record);
+  OMPClauseWriter ClauseWriter(Writer, Record);
   for (unsigned i = 0, N = E->getNumClauses(); i < N; ++i) {
     ClauseWriter.writeClause(E->getClause(i));
   }
@@ -1953,6 +1955,34 @@ void ASTStmtWriter::VisitOMPForDirective(OMPForDirective *D) {
     Writer.AddStmt(D->getCounters()[i]);
   }
   Code = serialization::STMT_OMP_FOR_DIRECTIVE;
+}
+
+void ASTStmtWriter::VisitOMPParallelForDirective(OMPParallelForDirective *D) {
+  VisitStmt(D);
+  Record.push_back(D->getNumClauses());
+  Record.push_back(D->getCollapsedNumber());
+  VisitOMPExecutableDirective(D);
+  Writer.AddStmt(D->getNewIterVar());
+  Writer.AddStmt(D->getNewIterEnd());
+  Writer.AddStmt(D->getInit());
+  for (unsigned i = 0, N = D->getCollapsedNumber(); i < N; ++i) {
+    Writer.AddStmt(D->getCounters()[i]);
+  }
+  Code = serialization::STMT_OMP_PARALLEL_FOR_DIRECTIVE;
+}
+
+void ASTStmtWriter::VisitOMPParallelForSimdDirective(OMPParallelForSimdDirective *D) {
+  VisitStmt(D);
+  Record.push_back(D->getNumClauses());
+  Record.push_back(D->getCollapsedNumber());
+  VisitOMPExecutableDirective(D);
+  Writer.AddStmt(D->getNewIterVar());
+  Writer.AddStmt(D->getNewIterEnd());
+  Writer.AddStmt(D->getInit());
+  for (unsigned i = 0, N = D->getCollapsedNumber(); i < N; ++i) {
+    Writer.AddStmt(D->getCounters()[i]);
+  }
+  Code = serialization::STMT_OMP_PARALLEL_FOR_SIMD_DIRECTIVE;
 }
 
 void ASTStmtWriter::VisitOMPSimdDirective(OMPSimdDirective *D) {
@@ -1988,6 +2018,13 @@ void ASTStmtWriter::VisitOMPSectionsDirective(OMPSectionsDirective *D) {
   Record.push_back(D->getNumClauses());
   VisitOMPExecutableDirective(D);
   Code = serialization::STMT_OMP_SECTIONS_DIRECTIVE;
+}
+
+void ASTStmtWriter::VisitOMPParallelSectionsDirective(OMPParallelSectionsDirective *D) {
+  VisitStmt(D);
+  Record.push_back(D->getNumClauses());
+  VisitOMPExecutableDirective(D);
+  Code = serialization::STMT_OMP_PARALLEL_SECTIONS_DIRECTIVE;
 }
 
 void ASTStmtWriter::VisitOMPSectionDirective(OMPSectionDirective *D) {
@@ -2079,6 +2116,22 @@ void ASTStmtWriter::VisitOMPOrderedDirective(OMPOrderedDirective *D) {
   Record.push_back(D->getNumClauses());
   VisitOMPExecutableDirective(D);
   Code = serialization::STMT_OMP_ORDERED_DIRECTIVE;
+}
+
+void ASTStmtWriter::VisitOMPCancelDirective(OMPCancelDirective *D) {
+  VisitStmt(D);
+  Record.push_back(D->getNumClauses());
+  Record.push_back(D->getConstructType());
+  VisitOMPExecutableDirective(D);
+  Code = serialization::STMT_OMP_CANCEL_DIRECTIVE;
+}
+
+void ASTStmtWriter::VisitOMPCancellationPointDirective(
+                                    OMPCancellationPointDirective *D) {
+  VisitStmt(D);
+  Record.push_back(D->getConstructType());
+  VisitOMPExecutableDirective(D);
+  Code = serialization::STMT_OMP_CANCELLATION_POINT_DIRECTIVE;
 }
 
 //===----------------------------------------------------------------------===//

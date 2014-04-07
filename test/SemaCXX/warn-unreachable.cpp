@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 %s -fcxx-exceptions -fexceptions -fsyntax-only -verify -fblocks -Wunreachable-code -Wno-unused-value
+// RUN: %clang_cc1 %s -fcxx-exceptions -fexceptions -fsyntax-only -verify -fblocks -std=c++11 -Wunreachable-code-aggressive -Wno-unused-value
 
 int &halt() __attribute__((noreturn));
 int &live();
@@ -142,7 +142,7 @@ typedef basic_string<char> string;
 
 std::string testStr() {
   raze();
-  return ""; // no-warning
+  return ""; // expected-warning {{'return' will never be executed}}
 }
 
 std::string testStrWarn(const char *s) {
@@ -152,7 +152,7 @@ std::string testStrWarn(const char *s) {
 
 bool testBool() {
   raze();
-  return true; // no-warning
+  return true; // expected-warning {{'return' will never be executed}}
 }
 
 static const bool ConditionVar = 1;
@@ -197,5 +197,133 @@ int test_arithmetic() {
   if (8 -1)
     return 1;
   return 2; // expected-warning {{never be executed}}
+}
+
+int test_treat_const_bool_local_as_config_value() {
+  const bool controlValue = false;
+  if (!controlValue)
+    return 1;
+  test_treat_const_bool_local_as_config_value(); // no-warning
+  return 0;
+}
+
+int test_treat_non_const_bool_local_as_non_config_value() {
+  bool controlValue = false;
+  if (!controlValue)
+    return 1;
+  // There is no warning here because 'controlValue' isn't really
+  // a control value at all.  The CFG will not treat this
+  // branch as unreachable.
+  test_treat_non_const_bool_local_as_non_config_value(); // no-warning
+  return 0;
+}
+
+void test_do_while(int x) {
+  // Handle trivial expressions with
+  // implicit casts to bool.
+  do {
+    break;
+  } while (0); // no-warning
+}
+
+class Frobozz {
+public:
+  Frobozz(int x);
+  ~Frobozz();
+};
+
+Frobozz test_return_object(int flag) {
+  return Frobozz(flag);
+  return Frobozz(42);  // expected-warning {{'return' will never be executed}}
+}
+
+Frobozz test_return_object_control_flow(int flag) {
+  return Frobozz(flag);
+  return Frobozz(flag ? 42 : 24); // expected-warning {{code will never be executed}}
+}
+
+void somethingToCall();
+
+static constexpr bool isConstExprConfigValue() { return true; }
+
+int test_const_expr_config_value() {
+ if (isConstExprConfigValue()) {
+   somethingToCall();
+   return 0;
+ }
+ somethingToCall(); // no-warning
+ return 1;
+}
+int test_const_expr_config_value_2() {
+ if (!isConstExprConfigValue()) {
+   somethingToCall(); // no-warning
+   return 0;
+ }
+ somethingToCall();
+ return 1;
+}
+
+class Frodo {
+public:
+  static const bool aHobbit = true;
+};
+
+void test_static_class_var() {
+  if (Frodo::aHobbit)
+    somethingToCall();
+  else
+    somethingToCall(); // no-warning
+}
+
+void test_static_class_var(Frodo &F) {
+  if (F.aHobbit)
+    somethingToCall();
+  else
+    somethingToCall(); // no-warning
+}
+
+void test_unreachable_for_null_increment() {
+  for (unsigned i = 0; i < 10 ; ) // no-warning
+    break;
+}
+
+void test_unreachable_forrange_increment() {
+  int x[10] = { 0 };
+  for (auto i : x) { // expected-warning {{loop will run at most once (loop increment never executed)}}
+    break;
+  }
+}
+
+void calledFun() {}
+
+// Test "silencing" with parentheses.
+void test_with_paren_silencing(int x) {
+  if (false) calledFun(); // expected-warning {{will never be executed}} expected-note {{silence by adding parentheses to mark code as explicitly dead}}
+  if ((false)) calledFun(); // no-warning
+
+  if (true) // expected-note {{silence by adding parentheses to mark code as explicitly dead}}
+    calledFun();
+  else
+    calledFun(); // expected-warning {{will never be executed}}
+
+  if ((true))
+    calledFun();
+  else
+    calledFun(); // no-warning
+  
+  if (!true) // expected-note {{silence by adding parentheses to mark code as explicitly dead}}
+    calledFun(); // expected-warning {{code will never be executed}}
+  else
+    calledFun();
+  
+  if ((!true))
+    calledFun(); // no-warning
+  else
+    calledFun();
+  
+  if (!(true))
+    calledFun(); // no-warning
+  else
+    calledFun();
 }
 

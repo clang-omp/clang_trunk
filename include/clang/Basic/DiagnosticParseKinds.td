@@ -224,6 +224,8 @@ def err_expected_selector_for_method : Error<
 def err_expected_property_name : Error<"expected property name">;
 
 def err_unexpected_at : Error<"unexpected '@' in program">;
+def err_atimport : Error<
+"use of '@import' when modules are disabled, add -fmodules">;
 
 def err_invalid_reference_qualifier_application : Error<
   "'%0' qualifier may not be applied to a reference">;
@@ -533,8 +535,6 @@ def err_l_square_l_square_not_attribute : Error<
   "introducing an attribute">;
 def err_ms_declspec_type : Error<
   "__declspec attributes must be an identifier or string literal">;
-def warn_ms_declspec_unknown : Warning<
-  "unknown __declspec attribute %0 ignored">, InGroup<UnknownAttributes>;
 def err_ms_property_no_getter_or_putter : Error<
   "property does not specify a getter or a putter">;
 def err_ms_property_unknown_accessor : Error<
@@ -725,7 +725,8 @@ def warn_cxx98_compat_lambda : Warning<
   "lambda expressions are incompatible with C++98">,
   InGroup<CXX98Compat>, DefaultIgnore;
 def err_lambda_missing_parens : Error<
-  "lambda requires '()' before %select{'mutable'|return type}0">;
+  "lambda requires '()' before %select{'mutable'|return type|"
+  "attribute specifier}0">;
 
 // Availability attribute
 def err_expected_version : Error<
@@ -847,33 +848,37 @@ def err_seh___finally_block : Error<
 // OpenMP support.
 let CategoryName = "OpenMP Parse Issue" in {
 
-def warn_pragma_omp_ignored : Warning <
+def warn_pragma_omp_ignored : Warning<
   "unexpected '#pragma omp ...' in program">, InGroup<SourceUsesOpenMP>, DefaultIgnore;
-def warn_omp_extra_tokens_at_eol : Warning <
+def warn_omp_extra_tokens_at_eol : Warning<
   "extra tokens at the end of '#pragma omp %0' are ignored">,
   InGroup<ExtraTokens>;
-def err_omp_unknown_directive : Error <
+def err_omp_unknown_directive : Error<
   "expected an OpenMP directive">;
-def err_omp_unexpected_directive : Error <
+def err_omp_unexpected_directive : Error<
   "unexpected OpenMP directive '#pragma omp %0'">;
-def err_omp_expected_var : Error <
+def err_omp_expected_var : Error<
   "expected '#pragma omp %0' argument to be a variable name">;
-def err_omp_expected_punc : Error <
-  "expected ',' or ')' in '#pragma omp %0'">;
-def err_omp_unknown_clause : Error <
+def err_omp_expected_punc : Error<
+  "expected ',' or ')' in %select{'#pragma omp %1'|'%1' clause}0">;
+def err_omp_unknown_clause : Error<
   "expected OpenMP clause for directive '#pragma omp %0' or end of directive">;
-def err_omp_unexpected_clause : Error <
+def err_omp_unexpected_clause : Error<
   "unexpected OpenMP clause '%0' in directive '#pragma omp %1'">;
-def err_omp_more_one_clause : Error <
+def err_omp_more_one_clause : Error<
   "directive '#pragma omp %0' cannot contain more than one '%1' clause">;
-def err_omp_expected_colon : Error <
+def err_omp_expected_colon : Error<
   "expected ':' in '%0' clause">;
-def err_omp_unknown_reduction_op : Error <
+def err_omp_unknown_reduction_op : Error<
   "expected reduction identifier">;
-def err_omp_immediate_directive : Error <
+def err_omp_immediate_directive : Error<
   "'#pragma omp %0' cannot be immediate substatement">;
-def err_omp_expected_reduction_identifier : Error <
+def err_omp_expected_reduction_identifier : Error<
   "expected identifier or one of the following operators: '+', '-', '*', '&', '|', '^', '&&' and '||'">;
+def err_omp_unknown_dependence_type : Error<
+  "expected dependence type 'in', 'out' or 'inout'">;
+def err_omp_expected_cancel_construct_type : Error <
+  "expected 'parallel', 'sections', 'for' or 'taskgroup' construct type">;
 } // end of Parse Issue category.
 
 let CategoryName = "Modules Issue" in {

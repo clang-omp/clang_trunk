@@ -175,13 +175,19 @@ def MSDependentExistsStmt : Stmt;
 // OpenCL Extensions.
 def AsTypeExpr : DStmt<Expr>;
 
+// Extended array notation index for OpenMP.
+def CEANIndexExpr : DStmt<Expr>;
+
 // OpenMP Directives.
 def OMPExecutableDirective : Stmt<1>;
 def OMPParallelDirective : DStmt<OMPExecutableDirective>;
+def OMPParallelForDirective : DStmt<OMPExecutableDirective>;
+def OMPParallelForSimdDirective : DStmt<OMPExecutableDirective>;
 def OMPForDirective : DStmt<OMPExecutableDirective>;
 def OMPSimdDirective : DStmt<OMPExecutableDirective>;
 def OMPForSimdDirective : DStmt<OMPExecutableDirective>;
 def OMPSectionsDirective : DStmt<OMPExecutableDirective>;
+def OMPParallelSectionsDirective : DStmt<OMPExecutableDirective>;
 def OMPSectionDirective : DStmt<OMPExecutableDirective>;
 def OMPSingleDirective : DStmt<OMPExecutableDirective>;
 def OMPTaskDirective : DStmt<OMPExecutableDirective>;
@@ -194,4 +200,5 @@ def OMPTaskgroupDirective : DStmt<OMPExecutableDirective>;
 def OMPAtomicDirective : DStmt<OMPExecutableDirective>;
 def OMPFlushDirective : DStmt<OMPExecutableDirective>;
 def OMPOrderedDirective : DStmt<OMPExecutableDirective>;
-
+def OMPCancelDirective : DStmt<OMPExecutableDirective>;
+def OMPCancellationPointDirective : DStmt<OMPExecutableDirective>;

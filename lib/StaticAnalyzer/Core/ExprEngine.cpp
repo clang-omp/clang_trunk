@@ -730,10 +730,13 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
     case Stmt::WhileStmtClass:
     case Expr::MSDependentExistsStmtClass:
     case Stmt::OMPParallelDirectiveClass:
+    case Stmt::OMPParallelForDirectiveClass:
+    case Stmt::OMPParallelForSimdDirectiveClass:
     case Stmt::OMPForDirectiveClass:
     case Stmt::OMPSimdDirectiveClass:
     case Stmt::OMPForSimdDirectiveClass:
     case Stmt::OMPSectionsDirectiveClass:
+    case Stmt::OMPParallelSectionsDirectiveClass:
     case Stmt::OMPSectionDirectiveClass:
     case Stmt::OMPSingleDirectiveClass:
     case Stmt::OMPTaskDirectiveClass:
@@ -746,6 +749,8 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
     case Stmt::OMPAtomicDirectiveClass:
     case Stmt::OMPFlushDirectiveClass:
     case Stmt::OMPOrderedDirectiveClass:
+    case Stmt::OMPCancelDirectiveClass:
+    case Stmt::OMPCancellationPointDirectiveClass:
     case Stmt::CapturedStmtClass:
       llvm_unreachable("Stmt should not be in analyzer evaluation loop");
 
@@ -793,7 +798,8 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
     case Stmt::OpaqueValueExprClass:
     case Stmt::AsTypeExprClass:
     case Stmt::AtomicExprClass:
-      // Fall through.
+    case Stmt::CEANIndexExprClass:
+    // Fall through.
 
     // Cases we intentionally don't evaluate, since they don't need
     // to be explicitly evaluated.
@@ -1847,7 +1853,6 @@ void ExprEngine::VisitMemberExpr(const MemberExpr *M, ExplodedNode *Pred,
             dyn_cast<ImplicitCastExpr>((*I)->getParentMap().getParent(M));
           if (!PE || PE->getCastKind() != CK_ArrayToPointerDecay) {
             llvm_unreachable("should always be wrapped in ArrayToPointerDecay");
-            L = UnknownVal();
           }
         }
 
@@ -1878,7 +1883,7 @@ public:
   CollectReachableSymbolsCallback(ProgramStateRef State) {}
   const InvalidatedSymbols &getSymbols() const { return Symbols; }
 
-  bool VisitSymbol(SymbolRef Sym) {
+  bool VisitSymbol(SymbolRef Sym) override {
     Symbols.insert(Sym);
     return true;
   }

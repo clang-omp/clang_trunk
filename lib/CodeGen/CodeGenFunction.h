@@ -134,13 +134,20 @@ public:
   LoopInfoStack LoopStack;
   CGBuilderTy Builder;
 
+  /// CGBuilder insert helper. This function is called after an instruction is
+  /// created using Builder.
+  void InsertHelper(llvm::Instruction *I,
+                    const llvm::Twine &Name,
+                    llvm::BasicBlock *BB,
+                    llvm::BasicBlock::iterator InsertPt) const;
+
   /// CurFuncDecl - Holds the Decl for the current outermost
   /// non-closure context.
   const Decl *CurFuncDecl;
   /// CurCodeDecl - This is the inner-most code context, which includes blocks.
   const Decl *CurCodeDecl;
   /// Root CodeGenFunction for OpenMP context in which current CodeGenFunction
-  /// was created ().
+  /// was created.
   CodeGenFunction *OpenMPRoot;
   const CGFunctionInfo *CurFnInfo;
   QualType FnRetTy;
@@ -163,6 +170,7 @@ public:
   /// AllocaInsertPoint - This is an instruction in the entry block before which
   /// we prefer to insert allocas.
   llvm::AssertingVH<llvm::Instruction> AllocaInsertPt;
+  llvm::AssertingVH<llvm::Instruction> FirstprivateInsertPt;
 
   /// \brief API for captured statement code generation.
   class CGCapturedStmtInfo {
@@ -207,6 +215,11 @@ public:
     /// \brief Get the name of the capture helper.
     virtual StringRef getHelperName() const { return "__captured_stmt"; }
 
+    static bool classof(const CGCapturedStmtInfo *) { return true; }
+
+    virtual void addCachedVar(const VarDecl *VD, llvm::Value *Addr) { }
+    virtual llvm::Value *getCachedVar(const VarDecl *VD) { return 0; }
+
   private:
     /// \brief The kind of captured statement being generated.
     CapturedRegionKind Kind;
@@ -232,7 +245,16 @@ public:
       : CGCapturedStmtInfo(S, K)/*, CGM(CGM)*/ { setContextValue(Context); }
 
     virtual ~CGOpenMPCapturedStmtInfo() { };
+
+    virtual void addCachedVar(const VarDecl *VD, llvm::Value *Addr) { CachedVars[VD] = Addr; }
+    virtual llvm::Value *getCachedVar(const VarDecl *VD) { return CachedVars[VD]; }
+  private:
+
+    /// \brief Keep the map between VarDecl and FieldDecl.
+    llvm::SmallDenseMap<const VarDecl *, llvm::Value *> CachedVars;
+
   };
+
   CGCapturedStmtInfo *CapturedStmtInfo;
 
   class CGSIMDForStmtInfo; // Defined below, after simd wrappers.
@@ -320,6 +342,7 @@ public:
       virtual Stmt *extractLoopBody(Stmt *S) const override;
       virtual bool isOmp() const override { return true; }
       virtual const Stmt *getStmt() const override { return SimdOmp; }
+      llvm::ConstantInt *emitClauseTail(CodeGenFunction *CGF, Expr *E) const;
       virtual ~CGPragmaOmpSimd() override { }
 
     private:
@@ -332,9 +355,10 @@ public:
   /// (CGPragmaSimdWrapper) for addressing any differences between them.
   class CGSIMDForStmtInfo : public CGCapturedStmtInfo {
   public:
-    CGSIMDForStmtInfo(const CGPragmaSimdWrapper &Wr, llvm::MDNode *LoopID)
+    CGSIMDForStmtInfo(const CGPragmaSimdWrapper &Wr, llvm::MDNode *LoopID,
+                      bool LoopParallel)
       : CGCapturedStmtInfo(*(Wr.getAssociatedStmt()), CR_SIMDFor),
-        Wrapper(Wr), LoopID(LoopID) { }
+        Wrapper(Wr), LoopID(LoopID), LoopParallel(LoopParallel) { }
 
     virtual StringRef getHelperName() const { return "__simd_for_helper"; }
 
@@ -343,6 +367,7 @@ public:
     }
 
     llvm::MDNode *getLoopID() const { return LoopID; }
+    bool getLoopParallel() const { return LoopParallel; }
 
 
     bool isOmp() const { return Wrapper.isOmp(); }
@@ -363,6 +388,8 @@ public:
     const CGPragmaSimdWrapper &Wrapper;
     /// \brief The loop id metadata.
     llvm::MDNode *LoopID;
+    /// \brief Is loop parallel.
+    bool LoopParallel;
 
   };
   /// BoundsChecking - Emit run-time bounds checks. Higher values mean
@@ -1028,17 +1055,19 @@ public:
   /// is cleared completely and then restored to original state upon
   /// destruction.
   class LocalVarsDeclGuard {
-  private:
     CodeGenFunction &CGF;
     DeclMapTy LocalDeclMap;
-  public:
-    LocalVarsDeclGuard(CodeGenFunction &CGF, bool Empty = false)
-      : CGF(CGF), LocalDeclMap(CGF.LocalDeclMap) {
-        if (Empty) CGF.LocalDeclMap.clear();
-      }
-    ~LocalVarsDeclGuard() { CGF.LocalDeclMap = LocalDeclMap; }
+    public:
+      LocalVarsDeclGuard(CodeGenFunction &CGF, bool Empty = false)
+        : CGF(CGF), LocalDeclMap() {
+          if (Empty) {
+            LocalDeclMap.swap(CGF.LocalDeclMap);
+          } else {
+            LocalDeclMap.copyFrom(CGF.LocalDeclMap);
+          }
+        }
+      ~LocalVarsDeclGuard() { CGF.LocalDeclMap.swap(LocalDeclMap); }
   };
-
   /// A scope within which we are constructing the fields of an object which
   /// might use a CXXDefaultInitExpr. This stashes away a 'this' value to use
   /// if we need to evaluate a CXXDefaultInitExpr within the evaluation.
@@ -2039,6 +2068,7 @@ public:
   void EmitCXXForRangeStmt(const CXXForRangeStmt &S);
 
   LValue InitCapturedStruct(const CapturedStmt &S);
+  void InitOpenMPFunction(llvm::Value *Context, const CapturedStmt &S);
   llvm::Function *EmitCapturedStmt(const CapturedStmt &S, CapturedRegionKind K);
   llvm::Function *GenerateCapturedStmtFunction(const CapturedDecl *CD,
                                                const RecordDecl *RD,
@@ -2053,19 +2083,19 @@ public:
   void EmitSIMDForHelperBody(const Stmt *S);
 
   llvm::Value *GenerateCapturedStmtArgument(const CapturedStmt &S);
-  void EmitCapturedStmtInlined(const CapturedStmt &S, CapturedRegionKind K,
-                               llvm::Value *Arg,
-                               SourceLocation Loc);
   LValue GetCapturedField(const VarDecl *VD);
   void EmitUniversalStore(llvm::Value *Dst, llvm::Value *Src, QualType ExprTy);
   void EmitUniversalStore(LValue Dst, llvm::Value *Src, QualType ExprTy);
 public:
   void EmitOMPParallelDirective(const OMPParallelDirective &S);
+  void EmitOMPParallelForDirective(const OMPParallelForDirective &S);
+  void EmitOMPParallelForSimdDirective(const OMPParallelForSimdDirective &S);
   void EmitOMPForDirective(const OMPForDirective &S);
   void EmitOMPSimdDirective(const OMPSimdDirective &S);
   void EmitOMPForSimdDirective(const OMPForSimdDirective &S);
   void EmitOMPTaskDirective(const OMPTaskDirective &S);
   void EmitOMPSectionsDirective(const OMPSectionsDirective &S);
+  void EmitOMPParallelSectionsDirective(const OMPParallelSectionsDirective &S);
   void EmitOMPSectionDirective(const OMPSectionDirective &S);
   void EmitInitOMPClause(const OMPClause &C,
                          const OMPExecutableDirective &S);
@@ -2127,6 +2157,9 @@ public:
   void EmitOMPTaskyieldDirective(const OMPTaskyieldDirective &S);
   void EmitOMPTaskwaitDirective(const OMPTaskwaitDirective &S);
   void EmitOMPFlushDirective(const OMPFlushDirective &S);
+  void EmitOMPCancelDirective(const OMPCancelDirective &S);
+  void EmitOMPCancellationPointDirective(
+                             const OMPCancellationPointDirective &S);
   void EmitOMPAtomicDirective(const OMPAtomicDirective &S);
   void EmitOMPTaskgroupDirective(const OMPTaskgroupDirective &S);
   void EmitOMPMasterDirective(const OMPMasterDirective &S);
@@ -2150,6 +2183,15 @@ public:
     llvm::Value *Src);
   void EmitOMPDirectiveWithLoop(
     OpenMPDirectiveKind DKind,
+    OpenMPDirectiveKind SKind,
+    const OMPExecutableDirective &S);
+  void EmitOMPSectionsDirective(
+    OpenMPDirectiveKind DKind,
+    OpenMPDirectiveKind SKind,
+    const OMPExecutableDirective &S);
+  void EmitOMPDirectiveWithParallel(
+    OpenMPDirectiveKind DKind,
+    OpenMPDirectiveKind SKind,
     const OMPExecutableDirective &S);
 
   //===--------------------------------------------------------------------===//
@@ -2479,6 +2521,20 @@ public:
                                    bool negateForRightShift);
   llvm::Value *EmitNeonRShiftImm(llvm::Value *Vec, llvm::Value *Amt,
                                  llvm::Type *Ty, bool usgn, const char *name);
+  llvm::Value *EmitConcatVectors(llvm::Value *Lo, llvm::Value *Hi,
+                                 llvm::Type *ArgTy);
+  llvm::Value *EmitExtractHigh(llvm::Value *In, llvm::Type *ResTy);
+  // Helper functions for EmitARM64BuiltinExpr.
+  llvm::Value *vectorWrapScalar8(llvm::Value *Op);
+  llvm::Value *vectorWrapScalar16(llvm::Value *Op);
+  llvm::Value *emitVectorWrappedScalar8Intrinsic(
+      unsigned Int, SmallVectorImpl<llvm::Value *> &Ops, const char *Name);
+  llvm::Value *emitVectorWrappedScalar16Intrinsic(
+      unsigned Int, SmallVectorImpl<llvm::Value *> &Ops, const char *Name);
+  llvm::Value *EmitARM64BuiltinExpr(unsigned BuiltinID, const CallExpr *E);
+  llvm::Value *EmitNeon64Call(llvm::Function *F,
+                              llvm::SmallVectorImpl<llvm::Value *> &O,
+                              const char *name);
 
   llvm::Value *BuildVector(ArrayRef<llvm::Value*> Ops);
   llvm::Value *EmitX86BuiltinExpr(unsigned BuiltinID, const CallExpr *E);
@@ -2615,9 +2671,9 @@ public:
 
   /// CreateStaticVarDecl - Create a zero-initialized LLVM global for
   /// a static local variable.
-  llvm::GlobalVariable *CreateStaticVarDecl(const VarDecl &D,
-                                            const char *Separator,
-                                       llvm::GlobalValue::LinkageTypes Linkage);
+  llvm::Constant *CreateStaticVarDecl(const VarDecl &D,
+                                      const char *Separator,
+                                      llvm::GlobalValue::LinkageTypes Linkage);
 
   /// AddInitializerToStaticVarDecl - Add the initializer for 'D' to the
   /// global variable that has already been created for it.  If the initializer

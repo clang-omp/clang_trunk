@@ -34,9 +34,19 @@ struct LoopAttributes {
   explicit LoopAttributes(bool IsParallel = false);
   void Clear();
 
-  /// Toggle llvm.loop.parallel metadata generation.
+  /// llvm.loop.parallel metadata generation for loads and stores.
   bool IsParallel;
-  /// VectorizerWidth
+
+  /// llvm.vectorizer.enable value:
+  enum LVEnableState {
+    LVEC_UNSPECIFIED,
+    LVEC_ENABLE,
+    LVEC_DISABLE
+  };
+
+  LVEnableState VectorizerEnable;
+
+  /// llvm.vectorizer.width value
   unsigned VectorizerWidth;
 };
 
@@ -67,7 +77,7 @@ private:
   LoopAttributes Attrs;
 };
 
-/// LoopInfoStack - A stack of loop information corresponding to loop 
+/// LoopInfoStack - A stack of loop information corresponding to loop
 /// nesting levels. This stack can be used to prepare attributes which are
 /// applied when a loop is emitted.
 class LoopInfoStack {
@@ -82,7 +92,7 @@ public:
 
   /// Extend the code region as part of a parallel loop which might be inside
   /// another llvm function.
-  void Push(llvm::MDNode *LoopID);
+  void Push(llvm::MDNode *LoopID, bool IsParallel);
 
   /// End the current loop.
   void Pop();
@@ -90,11 +100,23 @@ public:
   /// Return the top loop id metadata.
   llvm::MDNode *GetCurLoopID() const { return GetInfo().GetLoopID(); }
 
+  /// Return true if the top loop is parallel.
+  bool GetCurLoopParallel() const {
+    return HasInfo() ?
+           GetInfo().GetAttributes().IsParallel : false;
+  }
+
   /// Function called by the CodeGenFunction when an instruction is created.
   void InsertHelper(llvm::Instruction *I) const;
 
   /// Set the next pushed loop as parallel.
-  void SetParallel() { StagedAttrs.IsParallel = true; }
+  void SetParallel(bool Enable = true) { StagedAttrs.IsParallel = Enable; }
+
+  /// Set the next pushed loop 'vectorizer.enable'
+  void SetVectorizerEnable(bool Enable = true) {
+    StagedAttrs.VectorizerEnable = Enable ? LoopAttributes::LVEC_ENABLE :
+                                            LoopAttributes::LVEC_DISABLE;
+  }
 
   /// Set the vectorizer width for the next loop pushed.
   void SetVectorizerWidth(unsigned W) { StagedAttrs.VectorizerWidth = W; }
@@ -111,9 +133,9 @@ private:
   /// Return the LoopInfo for the current loop. HasInfo should be called first
   /// to ensure LoopInfo is present.
   const LoopInfo &GetInfo() const { return Active.back(); }
-
   /// The set of attributes that will be applied to the next pushed loop.
   LoopAttributes StagedAttrs;
+  /// Stack of active loops.
   llvm::SmallVector<LoopInfo, 4> Active;
   // 'Aligned' information.
   llvm::DenseMap<const llvm::Value *, int> Aligneds;

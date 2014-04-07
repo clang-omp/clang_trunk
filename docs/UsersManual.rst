@@ -700,17 +700,18 @@ the pragma onwards within the same file.
 
   char b = 'ab'; // no warning
 
-The :option:`-isystem-prefix` and :option:`-ino-system-prefix` command-line
-arguments can be used to override whether subsets of an include path are
-treated as system headers. When the name in a ``#include`` directive is
-found within a header search path and starts with a system prefix, the
+The :option:`--system-header-prefix=` and :option:`--no-system-header-prefix=`
+command-line arguments can be used to override whether subsets of an include
+path are treated as system headers. When the name in a ``#include`` directive
+is found within a header search path and starts with a system prefix, the
 header is treated as a system header. The last prefix on the
 command-line which matches the specified header name takes precedence.
 For instance:
 
 .. code-block:: console
 
-  $ clang -Ifoo -isystem bar -isystem-prefix x/ -ino-system-prefix x/y/
+  $ clang -Ifoo -isystem bar --system-header-prefix=x/ \
+      --no-system-header-prefix=x/y/
 
 Here, ``#include "x/a.h"`` is treated as including a system header, even
 if the header is found in ``foo``, and ``#include "x/y/b.h"`` is treated
@@ -968,11 +969,16 @@ are listed below.
    Extra features of MemorySanitizer (require explicit
    ``-fsanitize=memory``):
 
-   -  ``-fsanitize-memory-track-origins``: Enables origin tracking in
+   -  ``-fsanitize-memory-track-origins[=level]``: Enables origin tracking in
       MemorySanitizer. Adds a second section to MemorySanitizer
       reports pointing to the heap or stack allocation the
       uninitialized bits came from. Slows down execution by additional
       1.5x-2x.
+
+      Possible values for level are 0 (off), 1 (default), 2. Level 2 adds more
+      sections to MemorySanitizer reports describing the order of memory stores
+      the uninitialized value went through. Beware, this mode may use a lot of
+      extra memory.
 
    Extra features of UndefinedBehaviorSanitizer:
 
@@ -998,18 +1004,6 @@ are listed below.
    ``-fsanitize=thread``, and ``-fsanitize=memory`` checkers in the same
    program. The ``-fsanitize=undefined`` checks can be combined with other
    sanitizers.
-
-**-f[no-]address-sanitizer**
-   Deprecated synonym for :ref:`-f[no-]sanitize=address
-   <opt_fsanitize_address>`.
-**-f[no-]thread-sanitizer**
-   Deprecated synonym for :ref:`-f[no-]sanitize=thread
-   <opt_fsanitize_thread>`.
-
-.. option:: -fcatch-undefined-behavior
-
-   Deprecated synonym for :ref:`-fsanitize=undefined
-   <opt_fsanitize_undefined>`.
 
 .. option:: -fno-assume-sane-operator-new
 

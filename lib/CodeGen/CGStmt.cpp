@@ -139,9 +139,12 @@ void CodeGenFunction::EmitStmt(const Stmt *S) {
   case Stmt::SwitchStmtClass:   EmitSwitchStmt(cast<SwitchStmt>(*S));     break;
   case Stmt::GCCAsmStmtClass:   // Intentional fall-through.
   case Stmt::MSAsmStmtClass:    EmitAsmStmt(cast<AsmStmt>(*S));           break;
-  case Stmt::CapturedStmtClass:
-    EmitCapturedStmt(cast<CapturedStmt>(*S), CR_Default);
+  case Stmt::CapturedStmtClass: {
+    const CapturedStmt *CS = cast<CapturedStmt>(S);
+    EmitCapturedStmt(*CS, CS->getCapturedRegionKind());
+    }
     break;
+
   // "One-call" OMP Directives
   case Stmt::OMPBarrierDirectiveClass:
     EmitOMPBarrierDirective(cast<OMPBarrierDirective>(*S));
@@ -176,6 +179,12 @@ void CodeGenFunction::EmitStmt(const Stmt *S) {
   case Stmt::OMPParallelDirectiveClass:
     EmitOMPParallelDirective(cast<OMPParallelDirective>(*S));
     break;
+  case Stmt::OMPParallelForDirectiveClass:
+    EmitOMPParallelForDirective(cast<OMPParallelForDirective>(*S));
+    break;
+  case Stmt::OMPParallelForSimdDirectiveClass:
+    EmitOMPParallelForSimdDirective(cast<OMPParallelForSimdDirective>(*S));
+    break;
   case Stmt::OMPSimdDirectiveClass:
     EmitOMPSimdDirective(cast<OMPSimdDirective>(*S));
     break;
@@ -191,11 +200,20 @@ void CodeGenFunction::EmitStmt(const Stmt *S) {
   case Stmt::OMPSectionsDirectiveClass:
     EmitOMPSectionsDirective(cast<OMPSectionsDirective>(*S));
     break;
+  case Stmt::OMPParallelSectionsDirectiveClass:
+    EmitOMPParallelSectionsDirective(cast<OMPParallelSectionsDirective>(*S));
+    break;
   case Stmt::OMPSectionDirectiveClass:
     EmitOMPSectionDirective(cast<OMPSectionDirective>(*S));
     break;
   case Stmt::OMPTaskgroupDirectiveClass:
     EmitOMPTaskgroupDirective(cast<OMPTaskgroupDirective>(*S));
+    break;
+  case Stmt::OMPCancelDirectiveClass:
+    EmitOMPCancelDirective(cast<OMPCancelDirective>(*S));
+    break;
+  case Stmt::OMPCancellationPointDirectiveClass:
+    EmitOMPCancellationPointDirective(cast<OMPCancellationPointDirective>(*S));
     break;
   case Stmt::ObjCAtTryStmtClass:
     EmitObjCAtTryStmt(cast<ObjCAtTryStmt>(*S));
@@ -903,7 +921,7 @@ void CodeGenFunction::EmitReturnStmt(const ReturnStmt &S) {
     // that the cleanup code should not destroy the variable.
     if (llvm::Value *NRVOFlag = NRVOFlags[S.getNRVOCandidate()])
       Builder.CreateStore(Builder.getTrue(), NRVOFlag);
-  } else if (!ReturnValue) {
+  } else if (!ReturnValue || (RV && RV->getType()->isVoidType())) {
     // Make sure not to return anything, but evaluate the expression
     // for side effects.
     if (RV)
@@ -951,9 +969,8 @@ void CodeGenFunction::EmitDeclStmt(const DeclStmt &S) {
   if (HaveInsertPoint())
     EmitStopPoint(&S);
 
-  for (DeclStmt::const_decl_iterator I = S.decl_begin(), E = S.decl_end();
-       I != E; ++I)
-    EmitDecl(**I);
+  for (const auto *I : S.decls())
+    EmitDecl(*I);
 }
 
 void CodeGenFunction::EmitBreakStmt(const BreakStmt &S) {
@@ -2070,13 +2087,14 @@ llvm::Function *CodeGenFunction::EmitSimdFunction(CGPragmaSimdWrapper &W) {
   CapturedDecl *CD = const_cast<CapturedDecl *>(CS.getCapturedDecl());
   const RecordDecl *RD = CS.getCapturedRecordDecl();
 
-  CGSIMDForStmtInfo CSInfo(W, LoopStack.GetCurLoopID());
+  CGSIMDForStmtInfo CSInfo(W, LoopStack.GetCurLoopID(),
+                              LoopStack.GetCurLoopParallel());
   CodeGenFunction CGF(CGM, true);
   CGF.CapturedStmtInfo = &CSInfo;
 
   CGF.disableExceptions();
-  llvm::Function *BodyFunction =
-    CGF.GenerateCapturedStmtFunction(CD, RD, CS.getLocStart());
+  llvm::Function *BodyFunction = CGF.GenerateCapturedStmtFunction(
+                                         CD, RD, CS.getLocStart());
   CGF.enableExceptions();
 
   // Always inline this function back to the call site.
@@ -2244,7 +2262,7 @@ void CodeGenFunction::EmitSIMDForHelperBody(const Stmt *S) {
   CGSIMDForStmtInfo *Info = cast<CGSIMDForStmtInfo>(CapturedStmtInfo);
 
   // Mark the loop body as an extended region of this SIMD loop.
-  LoopStack.Push(Info->getLoopID());
+  LoopStack.Push(Info->getLoopID(), Info->getLoopParallel());
   {
     RunCleanupsScope Scope(*this);
 
@@ -2321,36 +2339,37 @@ CodeGenFunction::GenerateCapturedStmtArgument(const CapturedStmt &S) {
   return CapStruct.getAddress();
 }
 
-void CodeGenFunction::EmitCapturedStmtInlined(const CapturedStmt &S,
-                                              CapturedRegionKind K,
-                                              llvm::Value *Arg,
-                                              SourceLocation Loc) {
-  const CapturedDecl *CD = S.getCapturedDecl();
-  const RecordDecl *RD = S.getCapturedRecordDecl();
-  assert(CD->hasBody() && "missing CapturedDecl body");
+void CodeGenFunction::InitOpenMPFunction(llvm::Value *Context,
+                                         const CapturedStmt &S) {
+  CapturedStmtInfo =
+      new CGOpenMPCapturedStmtInfo(Context, S, CGM, S.getCapturedRegionKind());
 
-  for (RecordDecl::field_iterator I = RD->field_begin(),
-                                  E = RD->field_end();
-       I != E; ++I) {
-    if ((*I)->getType()->isVariablyModifiedType()) {
-      EmitVariablyModifiedType((*I)->getType());
+  const RecordDecl *RD = S.getCapturedRecordDecl();
+
+  QualType TagType = getContext().getTagDeclType(RD);
+  LValue Base = MakeNaturalAlignAddrLValue(Context, TagType);
+  RecordDecl::field_iterator CurField = RD->field_begin();
+  CapturedStmt::const_capture_iterator C = S.capture_begin();
+  for (CapturedStmt::capture_init_iterator I = S.capture_init_begin(),
+                                           E = S.capture_init_end();
+       I != E; ++I, ++C, ++CurField) {
+    QualType QTy = (*CurField)->getType();
+    if (QTy->isVariablyModifiedType()) {
+      EmitVariablyModifiedType(QTy);
+    }
+    if (C->capturesVariable()) {
+      const VarDecl *VD = C->getCapturedVar();
+      LValue LV = EmitLValueForField(Base, CapturedStmtInfo->lookup(VD));
+      CapturedStmtInfo->addCachedVar(VD, LV.getAddress());
     }
   }
 
-  // Set the context parameter in CapturedStmtInfo.
-  if (CapturedStmtInfo) {
-    CapturedStmtInfo->setContextValue(Arg);
-
-    // If 'this' is captured, load it into CXXThisValue.
-    if (CapturedStmtInfo->isCXXThisExprCaptured()) {
-      ASTContext &Ctx = getContext();
-      FieldDecl *FD = CapturedStmtInfo->getThisFieldDecl();
-      LValue LV = MakeNaturalAlignAddrLValue(CapturedStmtInfo->getContextValue(),
-                                             Ctx.getTagDeclType(RD));
-      LValue ThisLValue = EmitLValueForField(LV, FD);
-
-      CXXThisValue = EmitLoadOfLValue(ThisLValue, Loc).getScalarVal();
-    }
-    CapturedStmtInfo->EmitBody(*this, CD->getBody());
+  // If 'this' is captured, load it into CXXThisValue.
+  if (CapturedStmtInfo->isCXXThisExprCaptured()) {
+    FieldDecl *FD = CapturedStmtInfo->getThisFieldDecl();
+    LValue LV = MakeNaturalAlignAddrLValue(CapturedStmtInfo->getContextValue(),
+                                           getContext().getTagDeclType(RD));
+    LValue ThisLValue = EmitLValueForField(LV, FD);
+    CXXThisValue = EmitLoadOfLValue(ThisLValue, FD->getLocStart()).getScalarVal();
   }
 }

@@ -12,6 +12,7 @@
 #include "clang/Sema/SemaInternal.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/ASTMutationListener.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclVisitor.h"
 #include "clang/AST/DependentDiagnostic.h"
@@ -1487,6 +1488,14 @@ Decl *TemplateDeclInstantiator::VisitFunctionDecl(FunctionDecl *D,
     PrincipalDecl->setNonMemberOperator();
 
   assert(!D->isDefaulted() && "only methods should be defaulted");
+  if (FunctionTemplate) {
+    OMPDeclareSimdDecl *DSimd = SemaRef.OMPDSimdMap[FunctionTemplate];
+    if (DSimd) {
+      OMPDeclareSimdDecl *TD = cast<OMPDeclareSimdDecl>(
+        TouchOMPDeclareSimdDecl(DSimd, Function, DC));
+      SemaRef.PendingOMP[Function] = TD;
+    }
+  }
   return Function;
 }
 
@@ -1757,7 +1766,20 @@ TemplateDeclInstantiator::VisitCXXMethodDecl(CXXMethodDecl *D,
   } else if (!IsClassScopeSpecialization) {
     Owner->addDecl(Method);
   }
-
+  // Check for #omp declare simd in old record and add it into new record
+  // with our new method.
+  CXXRecordDecl *Parent = D->getParent();
+  for (DeclContext::decl_iterator DI = Parent->decls_begin(),
+                                  DE = Parent->decls_end();
+                                  DI != DE; ++DI) {
+    if (OMPDeclareSimdDecl *DSimd =
+        dyn_cast_or_null<OMPDeclareSimdDecl>(*DI)) {
+      if (dyn_cast_or_null<FunctionDecl>(DSimd->getFunction()) == D) {
+        TouchOMPDeclareSimdDecl(DSimd, Method,
+          SemaRef.CurContext);
+      }
+    }
+  }
   return Method;
 }
 
@@ -2168,7 +2190,7 @@ Decl *TemplateDeclInstantiator::VisitUsingDecl(UsingDecl *D) {
   }
 
   if (!NewUD->isInvalidDecl() &&
-      SemaRef.CheckUsingDeclQualifier(D->getUsingLoc(), SS,
+      SemaRef.CheckUsingDeclQualifier(D->getUsingLoc(), SS, NameInfo,
                                       D->getLocation()))
     NewUD->setInvalidDecl();
 
@@ -2189,9 +2211,7 @@ Decl *TemplateDeclInstantiator::VisitUsingDecl(UsingDecl *D) {
   bool isFunctionScope = Owner->isFunctionOrMethod();
 
   // Process the shadow decls.
-  for (UsingDecl::shadow_iterator I = D->shadow_begin(), E = D->shadow_end();
-         I != E; ++I) {
-    UsingShadowDecl *Shadow = *I;
+  for (auto *Shadow : D->shadows()) {
     NamedDecl *InstTarget =
         cast_or_null<NamedDecl>(SemaRef.FindInstantiatedDecl(
             Shadow->getLocation(), Shadow->getTargetDecl(), TemplateArgs));
@@ -2307,10 +2327,8 @@ Decl *TemplateDeclInstantiator::VisitClassScopeFunctionSpecializationDecl(
 Decl *TemplateDeclInstantiator::VisitOMPThreadPrivateDecl(
                                      OMPThreadPrivateDecl *D) {
   SmallVector<Expr *, 5> Vars;
-  for (ArrayRef<Expr *>::iterator I = D->varlist_begin(),
-                                  E = D->varlist_end();
-       I != E; ++I) {
-    Expr *Var = SemaRef.SubstExpr(*I, TemplateArgs).take();
+  for (auto *I : D->varlists()) {
+    Expr *Var = SemaRef.SubstExpr(I, TemplateArgs).take();
     assert(isa<DeclRefExpr>(Var) && "threadprivate arg is not a DeclRefExpr");
     Vars.push_back(Var);
   }
@@ -2578,6 +2596,112 @@ Decl *TemplateDeclInstantiator::VisitFriendTemplateDecl(FriendTemplateDecl *D) {
 Decl *TemplateDeclInstantiator::VisitDecl(Decl *D) {
   llvm_unreachable("Unexpected decl");
 }
+
+Decl *TemplateDeclInstantiator::VisitOMPDeclareSimdDecl(
+                                     OMPDeclareSimdDecl *D) {
+  return TouchOMPDeclareSimdDecl(D, D->getFunction(), Owner);
+}
+
+void TemplateDeclInstantiator::TouchOMPVarlist(
+                                     llvm::MutableArrayRef<clang::Expr*> VL,
+                                     SmallVector<Expr *, 4> &NewVL,
+                                     Decl *FuncDecl) {
+  for (llvm::MutableArrayRef<clang::Expr*>::iterator I = VL.begin(),
+                                                     E = VL.end();
+                                                     I != E; ++I) {
+    const DeclRefExpr *DRE = dyn_cast_or_null<DeclRefExpr>(*I);
+    assert(DRE);
+    DeclarationNameInfo DNI = DRE->getNameInfo();
+    Expr *NewV = SemaRef.FindOpenMPDeclarativeClauseParameter(
+                           DNI.getAsString(),
+                           DNI.getLoc(),
+                           FuncDecl);
+    assert(NewV);
+    NewVL.push_back(NewV);
+  }
+}
+
+Decl *TemplateDeclInstantiator::TouchOMPDeclareSimdDecl(
+                                     OMPDeclareSimdDecl *D,
+                                     Decl *NewFunc,
+                                     DeclContext *DC) {
+  SmallVector<SourceRange, 4> SrcRanges;
+  SmallVector<unsigned, 4> BeginIdx;
+  SmallVector<unsigned, 4> EndIdx;
+  // Perform AOS->SOA (will be done backward in CheckOMPDeclareSimdDecl).
+  for (ArrayRef<OMPDeclareSimdDecl::SimdVariant>::iterator
+      I = D->simd_variants_begin(),
+      E = D->simd_variants_end();
+      I != E; ++I) {
+    SrcRanges.push_back(I->SrcRange);
+    BeginIdx.push_back(I->BeginIdx);
+    EndIdx.push_back(I->EndIdx);
+  }
+  // Substitute the necessary stuff into the clauses.
+  SmallVector<OMPClause *, 4> CL;
+  for (OMPDeclareSimdDecl::clauses_iterator
+      J = D->clauses_begin(),
+      F = D->clauses_end();
+      J != F; ++J) {
+    if (OMPLinearClause *C = dyn_cast_or_null<OMPLinearClause>(*J)) {
+      Expr *Step = C->getStep();
+      Step = SemaRef.SubstExpr(Step, TemplateArgs).take();
+      SmallVector<Expr *, 4> NewVars;
+      TouchOMPVarlist(C->getVars(), NewVars, NewFunc);
+      OMPClause *NC = SemaRef.ActOnOpenMPDeclarativeLinearClause(
+          NewVars,
+          C->getLocStart(),
+          C->getLocEnd(),
+          Step,
+          C->getStepLoc());
+      CL.push_back(NC);
+    }
+    else if (OMPAlignedClause *C = dyn_cast_or_null<OMPAlignedClause>(*J)) {
+      Expr *Alignment = C->getAlignment();
+      Alignment = SemaRef.SubstExpr(Alignment, TemplateArgs).take();
+      SmallVector<Expr *, 4> NewVars;
+      TouchOMPVarlist(C->getVars(), NewVars, NewFunc);
+      OMPClause *NC = SemaRef.ActOnOpenMPDeclarativeAlignedClause(
+        NewVars,
+        C->getLocStart(),
+        C->getLocEnd(),
+        Alignment,
+        C->getAlignmentLoc());
+      CL.push_back(NC);
+    }
+    else if (OMPUniformClause *C = dyn_cast_or_null<OMPUniformClause>(*J)) {
+      SmallVector<Expr *, 4> NewVars;
+      TouchOMPVarlist(C->getVars(), NewVars, NewFunc);
+      OMPClause *NC = SemaRef.ActOnOpenMPDeclarativeUniformClause(
+        NewVars,
+        C->getLocStart(),
+        C->getLocEnd());
+      CL.push_back(NC);
+    }
+    else if (OMPSimdlenClause *C = dyn_cast_or_null<OMPSimdlenClause>(*J)) {
+      Expr *Length = C->getSimdlen();
+      Length = SemaRef.SubstExpr(Length, TemplateArgs).take();
+      OMPClause *NC = SemaRef.ActOnOpenMPSimdlenClause(
+          Length,
+          C->getLocStart(),
+          SourceLocation(),
+          C->getLocEnd());
+      CL.push_back(NC);
+    }
+    else {
+      // May push NULL here -- CheckOMPDeclareSimdDecl will clean up.
+      CL.push_back(*J);
+    }
+  }
+
+  OMPDeclareSimdDecl *TD =
+    SemaRef.CheckOMPDeclareSimdDecl(D->getLocation(), NewFunc,
+              SrcRanges, BeginIdx, EndIdx, CL, DC);
+  TD->setAccess(AS_public);
+  DC->addDecl(TD);
+  return TD;
+}
+
 
 Decl *TemplateDeclInstantiator::VisitOMPDeclareReductionDecl(
                                      OMPDeclareReductionDecl *D) {
@@ -3093,6 +3217,14 @@ static void addInstantiatedParametersToScope(Sema &S, FunctionDecl *Function,
       // Simple case: not a parameter pack.
       assert(FParamIdx < Function->getNumParams());
       ParmVarDecl *FunctionParam = Function->getParamDecl(FParamIdx);
+      // If the parameter's type is not dependent, update it to match the type
+      // in the pattern. They can differ in top-level cv-qualifiers, and we want
+      // the pattern's type here. If the type is dependent, they can't differ,
+      // per core issue 1668.
+      // FIXME: Updating the type to work around this is at best fragile.
+      if (!PatternDecl->getType()->isDependentType())
+        FunctionParam->setType(PatternParam->getType());
+
       FunctionParam->setDeclName(PatternParam->getDeclName());
       Scope.InstantiatedLocal(PatternParam, FunctionParam);
       ++FParamIdx;
@@ -3107,6 +3239,9 @@ static void addInstantiatedParametersToScope(Sema &S, FunctionDecl *Function,
            "should only be called when all template arguments are known");
     for (unsigned Arg = 0; Arg < *NumArgumentsInExpansion; ++Arg) {
       ParmVarDecl *FunctionParam = Function->getParamDecl(FParamIdx);
+      if (!PatternDecl->getType()->isDependentType())
+        FunctionParam->setType(PatternParam->getType());
+
       FunctionParam->setDeclName(PatternParam->getDeclName());
       Scope.InstantiatedLocalPackArg(PatternParam, FunctionParam);
       ++FParamIdx;
@@ -3226,19 +3361,13 @@ static void InstantiateExceptionSpec(Sema &SemaRef, FunctionDecl *New,
     }
   }
 
-  // Rebuild the function type
-  const FunctionProtoType *NewProto
-    = New->getType()->getAs<FunctionProtoType>();
-  assert(NewProto && "Template instantiation without function prototype?");
-
-  FunctionProtoType::ExtProtoInfo EPI = NewProto->getExtProtoInfo();
+  FunctionProtoType::ExtProtoInfo EPI;
   EPI.ExceptionSpecType = Proto->getExceptionSpecType();
   EPI.NumExceptions = Exceptions.size();
   EPI.Exceptions = Exceptions.data();
   EPI.NoexceptExpr = NoexceptExpr;
 
-  New->setType(SemaRef.Context.getFunctionType(NewProto->getReturnType(),
-                                               NewProto->getParamTypes(), EPI));
+  SemaRef.UpdateExceptionSpec(New, EPI);
 }
 
 void Sema::InstantiateExceptionSpec(SourceLocation PointOfInstantiation,
@@ -3252,10 +3381,9 @@ void Sema::InstantiateExceptionSpec(SourceLocation PointOfInstantiation,
   if (Inst.isInvalid()) {
     // We hit the instantiation depth limit. Clear the exception specification
     // so that our callers don't have to cope with EST_Uninstantiated.
-    FunctionProtoType::ExtProtoInfo EPI = Proto->getExtProtoInfo();
+    FunctionProtoType::ExtProtoInfo EPI;
     EPI.ExceptionSpecType = EST_None;
-    Decl->setType(Context.getFunctionType(Proto->getReturnType(),
-                                          Proto->getParamTypes(), EPI));
+    UpdateExceptionSpec(Decl, EPI);
     return;
   }
 
@@ -3541,11 +3669,20 @@ void Sema::InstantiateFunctionDefinition(SourceLocation PointOfInstantiation,
 
     PerformDependentDiagnostics(PatternDecl, TemplateArgs);
 
+    if (auto *Listener = getASTMutationListener())
+      Listener->FunctionDefinitionInstantiated(Function);
+
     savedContext.pop();
   }
 
   DeclGroupRef DG(Function);
   Consumer.HandleTopLevelDecl(DG);
+
+  PendingOMPInstMap::iterator IOMP = PendingOMP.find(Function);
+  if (IOMP != PendingOMP.end()) {
+    DeclGroupRef DGOMP(IOMP->second);
+    Consumer.HandleTopLevelDecl(DGOMP);
+  }
 
   // This class may have local implicit instantiations that need to be
   // instantiation within this scope.
@@ -3691,9 +3828,6 @@ void Sema::BuildVariableInstantiation(
 
   InstantiateAttrs(TemplateArgs, OldVar, NewVar, LateAttrs, StartingScope);
 
-  if (NewVar->hasAttrs())
-    CheckAlignasUnderalignment(NewVar);
-
   LookupResult Previous(
       *this, NewVar->getDeclName(), NewVar->getLocation(),
       NewVar->isLocalExternDecl() ? Sema::LookupRedeclarationWithLinkage
@@ -3735,8 +3869,11 @@ void Sema::BuildVariableInstantiation(
   Context.setStaticLocalNumber(NewVar, Context.getStaticLocalNumber(OldVar));
 
   // Delay instantiation of the initializer for variable templates until a
-  // definition of the variable is needed.
-  if (!isa<VarTemplateSpecializationDecl>(NewVar) && !InstantiatingVarTemplate)
+  // definition of the variable is needed. We need it right away if the type
+  // contains 'auto'.
+  if ((!isa<VarTemplateSpecializationDecl>(NewVar) &&
+       !InstantiatingVarTemplate) ||
+      NewVar->getType()->isUndeducedType())
     InstantiateVariableInitializer(NewVar, OldVar, TemplateArgs);
 
   // Diagnose unused local variables with dependent types, where the diagnostic
@@ -4096,11 +4233,7 @@ Sema::InstantiateMemInitializers(CXXConstructorDecl *New,
   bool AnyErrors = Tmpl->isInvalidDecl();
 
   // Instantiate all the initializers.
-  for (CXXConstructorDecl::init_const_iterator Inits = Tmpl->init_begin(),
-                                            InitsEnd = Tmpl->init_end();
-       Inits != InitsEnd; ++Inits) {
-    CXXCtorInitializer *Init = *Inits;
-
+  for (const auto *Init : Tmpl->inits()) {
     // Only instantiate written initializers, let Sema re-construct implicit
     // ones.
     if (!Init->isWritten())
@@ -4697,14 +4830,6 @@ NamedDecl *Sema::FindInstantiatedDecl(SourceLocation Loc, NamedDecl *D,
 /// \brief Performs template instantiation for all implicit template
 /// instantiations we have seen until this point.
 void Sema::PerformPendingInstantiations(bool LocalOnly) {
-  // Load pending instantiations from the external source.
-  if (!LocalOnly && ExternalSource) {
-    SmallVector<PendingImplicitInstantiation, 4> Pending;
-    ExternalSource->ReadPendingInstantiations(Pending);
-    PendingInstantiations.insert(PendingInstantiations.begin(),
-                                 Pending.begin(), Pending.end());
-  }
-
   while (!PendingLocalImplicitInstantiations.empty() ||
          (!LocalOnly && !PendingInstantiations.empty())) {
     PendingImplicitInstantiation Inst;

@@ -83,6 +83,7 @@ namespace {
     void VisitUsingDecl(UsingDecl *D);
     void VisitUsingShadowDecl(UsingShadowDecl *D);
     void VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D);
+    void VisitOMPDeclareSimdDecl(OMPDeclareSimdDecl *D);
     void VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D);
 
     void PrintTemplateParameters(const TemplateParameterList *Params,
@@ -286,6 +287,18 @@ void DeclPrinter::VisitDeclContext(DeclContext *DC, bool Indent) {
     const char *Terminator = 0;
     if (isa<OMPThreadPrivateDecl>(*D) || isa<OMPDeclareReductionDecl>(*D))
       Terminator = 0;
+    else if (isa<OMPDeclareSimdDecl>(*D)) {
+      if (FunctionDecl *Func = dyn_cast_or_null<FunctionDecl>(
+            cast<OMPDeclareSimdDecl>(*D)->getFunction())) {
+        if (Func->isThisDeclarationADefinition())
+          Terminator = 0;
+        else
+          Terminator = ";";
+      }
+      else {
+        Terminator = 0;
+      }
+    }
     else if (isa<FunctionDecl>(*D) &&
              cast<FunctionDecl>(*D)->isThisDeclarationADefinition())
       Terminator = 0;
@@ -491,10 +504,7 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
 
     if (CDecl) {
       bool HasInitializerList = false;
-      for (CXXConstructorDecl::init_const_iterator B = CDecl->init_begin(),
-           E = CDecl->init_end();
-           B != E; ++B) {
-        CXXCtorInitializer *BMInitializer = (*B);
+      for (const auto *BMInitializer : CDecl->inits()) {
         if (BMInitializer->isInClassMemberInitializer())
           continue;
 
@@ -889,10 +899,9 @@ void DeclPrinter::VisitTemplateDecl(const TemplateDecl *D) {
 void DeclPrinter::VisitFunctionTemplateDecl(FunctionTemplateDecl *D) {
   if (PrintInstantiation) {
     TemplateParameterList *Params = D->getTemplateParameters();
-    for (FunctionTemplateDecl::spec_iterator I = D->spec_begin(), E = D->spec_end();
-         I != E; ++I) {
-      PrintTemplateParameters(Params, (*I)->getTemplateSpecializationArgs());
-      Visit(*I);
+    for (auto *I : D->specializations()) {
+      PrintTemplateParameters(Params, I->getTemplateSpecializationArgs());
+      Visit(I);
     }
   }
 
@@ -902,10 +911,9 @@ void DeclPrinter::VisitFunctionTemplateDecl(FunctionTemplateDecl *D) {
 void DeclPrinter::VisitClassTemplateDecl(ClassTemplateDecl *D) {
   if (PrintInstantiation) {
     TemplateParameterList *Params = D->getTemplateParameters();
-    for (ClassTemplateDecl::spec_iterator I = D->spec_begin(), E = D->spec_end();
-         I != E; ++I) {
-      PrintTemplateParameters(Params, &(*I)->getTemplateArgs());
-      Visit(*I);
+    for (auto *I : D->specializations()) {
+      PrintTemplateParameters(Params, &I->getTemplateArgs());
+      Visit(I);
       Out << '\n';
     }
   }
@@ -965,10 +973,9 @@ void DeclPrinter::VisitObjCImplementationDecl(ObjCImplementationDecl *OID) {
   if (OID->ivar_size() > 0) {
     Out << "{\n";
     Indentation += Policy.Indentation;
-    for (ObjCImplementationDecl::ivar_iterator I = OID->ivar_begin(),
-         E = OID->ivar_end(); I != E; ++I) {
+    for (const auto *I : OID->ivars()) {
       Indent() << I->getASTContext().getUnqualifiedObjCPointerType(I->getType()).
-                    getAsString(Policy) << ' ' << **I << ";\n";
+                    getAsString(Policy) << ' ' << *I << ";\n";
     }
     Indentation -= Policy.Indentation;
     Out << "}\n";
@@ -1004,10 +1011,10 @@ void DeclPrinter::VisitObjCInterfaceDecl(ObjCInterfaceDecl *OID) {
     Out << "{\n";
     eolnOut = true;
     Indentation += Policy.Indentation;
-    for (ObjCInterfaceDecl::ivar_iterator I = OID->ivar_begin(),
-         E = OID->ivar_end(); I != E; ++I) {
-      Indent() << I->getASTContext().getUnqualifiedObjCPointerType(I->getType()).
-                    getAsString(Policy) << ' ' << **I << ";\n";
+    for (const auto *I : OID->ivars()) {
+      Indent() << I->getASTContext()
+                      .getUnqualifiedObjCPointerType(I->getType())
+                      .getAsString(Policy) << ' ' << *I << ";\n";
     }
     Indentation -= Policy.Indentation;
     Out << "}\n";
@@ -1056,11 +1063,9 @@ void DeclPrinter::VisitObjCCategoryDecl(ObjCCategoryDecl *PID) {
   if (PID->ivar_size() > 0) {
     Out << "{\n";
     Indentation += Policy.Indentation;
-    for (ObjCCategoryDecl::ivar_iterator I = PID->ivar_begin(),
-         E = PID->ivar_end(); I != E; ++I) {
+    for (const auto *I : PID->ivars())
       Indent() << I->getASTContext().getUnqualifiedObjCPointerType(I->getType()).
-                    getAsString(Policy) << ' ' << **I << ";\n";
-    }
+                    getAsString(Policy) << ' ' << *I << ";\n";
     Indentation -= Policy.Indentation;
     Out << "}\n";
   }
@@ -1200,6 +1205,29 @@ void DeclPrinter::VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D) {
     Out << ")";
   }
 }
+
+void DeclPrinter::VisitOMPDeclareSimdDecl(OMPDeclareSimdDecl *D) {
+  for (OMPDeclareSimdDecl::simd_variants_iterator
+        I = D->simd_variants_begin(),
+        E = D->simd_variants_end();
+        I != E; ++I) {
+    Out << "#pragma omp declare simd";
+    for (unsigned J = I->BeginIdx, F = I->EndIdx; J != F; ++J) {
+      Out << " ";
+      if (*(D->clauses_begin() + J) &&
+        !(*(D->clauses_begin() + J))->isImplicit()) {
+        const OMPClause *CurCL = cast_or_null<OMPClause>(
+                                   *(D->clauses_begin() + J));
+        CurCL->printPretty(Out, 0, Policy, Indentation);
+      }
+    }
+    Out << "\n";
+  }
+  Decl *FuncDecl = D->getFunction();
+  assert(FuncDecl && "Pragma has no function declaration (omp declare simd)");
+  Visit(FuncDecl);
+}
+
 
 void DeclPrinter::VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D) {
   if (!D->isInvalidDecl() && !D->datalist_empty()) {

@@ -13,6 +13,7 @@
 
 #include "clang/AST/Decl.h"
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/ASTLambda.h"
 #include "clang/AST/ASTMutationListener.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/DeclCXX.h"
@@ -208,11 +209,8 @@ static Optional<Visibility> getVisibilityOf(const NamedDecl *D,
   // If we're on Mac OS X, an 'availability' for Mac OS X attribute
   // implies visibility(default).
   if (D->getASTContext().getTargetInfo().getTriple().isOSDarwin()) {
-    for (specific_attr_iterator<AvailabilityAttr> 
-              A = D->specific_attr_begin<AvailabilityAttr>(),
-           AEnd = D->specific_attr_end<AvailabilityAttr>();
-         A != AEnd; ++A)
-      if ((*A)->getPlatform()->getName().equals("macosx"))
+    for (const auto *A : D->specific_attrs<AvailabilityAttr>())
+      if (A->getPlatform()->getName().equals("macosx"))
         return DefaultVisibility;
   }
 
@@ -1307,12 +1305,12 @@ void NamedDecl::printQualifiedName(raw_ostream &OS,
                                                             P);
     } else if (const NamespaceDecl *ND = dyn_cast<NamespaceDecl>(*I)) {
       if (ND->isAnonymousNamespace())
-        OS << "<anonymous namespace>";
+        OS << "(anonymous namespace)";
       else
         OS << *ND;
     } else if (const RecordDecl *RD = dyn_cast<RecordDecl>(*I)) {
       if (!RD->getIdentifier())
-        OS << "<anonymous " << RD->getKindName() << '>';
+        OS << "(anonymous " << RD->getKindName() << ')';
       else
         OS << *RD;
     } else if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(*I)) {
@@ -1345,7 +1343,7 @@ void NamedDecl::printQualifiedName(raw_ostream &OS,
   if (getDeclName())
     OS << *this;
   else
-    OS << "<anonymous>";
+    OS << "(anonymous)";
 }
 
 void NamedDecl::getNameForDiagnostic(raw_ostream &OS,
@@ -1388,6 +1386,7 @@ bool NamedDecl::declarationReplaces(NamedDecl *OldD) const {
   if (isa<OMPDeclareReductionDecl>(this))
     return false;
 
+  // FIXME: Is this correct if one of the decls comes from an inline namespace?
   if (isa<ObjCInterfaceDecl>(this) && isa<ObjCCompatibleAliasDecl>(OldD))
     return true;
 
@@ -1414,14 +1413,19 @@ bool NamedDecl::declarationReplaces(NamedDecl *OldD) const {
 
   // A typedef of an Objective-C class type can replace an Objective-C class
   // declaration or definition, and vice versa.
+  // FIXME: Is this correct if one of the decls comes from an inline namespace?
   if ((isa<TypedefNameDecl>(this) && isa<ObjCInterfaceDecl>(OldD)) ||
       (isa<ObjCInterfaceDecl>(this) && isa<TypedefNameDecl>(OldD)))
     return true;
-  
+
   // For non-function declarations, if the declarations are of the
-  // same kind then this must be a redeclaration, or semantic analysis
-  // would not have given us the new declaration.
-  return this->getKind() == OldD->getKind();
+  // same kind and have the same parent then this must be a redeclaration,
+  // or semantic analysis would not have given us the new declaration.
+  // Note that inline namespaces can give us two declarations with the same
+  // name and kind in the same scope but different contexts.
+  return this->getKind() == OldD->getKind() &&
+         this->getDeclContext()->getRedeclContext()->Equals(
+             OldD->getDeclContext()->getRedeclContext());
 }
 
 bool NamedDecl::hasLinkage() const {
@@ -1620,8 +1624,10 @@ VarDecl::VarDecl(Kind DK, DeclContext *DC, SourceLocation StartLoc,
                  SourceLocation IdLoc, IdentifierInfo *Id, QualType T,
                  TypeSourceInfo *TInfo, StorageClass SC)
     : DeclaratorDecl(DK, DC, IdLoc, Id, T, TInfo, StartLoc), Init() {
-  assert(sizeof(VarDeclBitfields) <= sizeof(unsigned));
-  assert(sizeof(ParmVarDeclBitfields) <= sizeof(unsigned));
+  static_assert(sizeof(VarDeclBitfields) <= sizeof(unsigned),
+                "VarDeclBitfields too large!");
+  static_assert(sizeof(ParmVarDeclBitfields) <= sizeof(unsigned),
+                "ParmVarDeclBitfields too large!");
   AllBits = 0;
   VarDeclBits.SClass = SC;
   // Everything else is implicitly initialized to false.
@@ -2533,36 +2539,47 @@ void FunctionDecl::setDeclsInPrototypeScope(ArrayRef<NamedDecl *> NewDecls) {
 /// getMinRequiredArguments - Returns the minimum number of arguments
 /// needed to call this function. This may be fewer than the number of
 /// function parameters, if some of the parameters have default
-/// arguments (in C++) or the last parameter is a parameter pack.
+/// arguments (in C++) or are parameter packs (C++11).
 unsigned FunctionDecl::getMinRequiredArguments() const {
   if (!getASTContext().getLangOpts().CPlusPlus)
     return getNumParams();
-  
-  unsigned NumRequiredArgs = getNumParams();  
-  
-  // If the last parameter is a parameter pack, we don't need an argument for 
-  // it.
-  if (NumRequiredArgs > 0 &&
-      getParamDecl(NumRequiredArgs - 1)->isParameterPack())
-    --NumRequiredArgs;
-      
-  // If this parameter has a default argument, we don't need an argument for
-  // it.
-  while (NumRequiredArgs > 0 &&
-         getParamDecl(NumRequiredArgs-1)->hasDefaultArg())
-    --NumRequiredArgs;
 
-  // We might have parameter packs before the end. These can't be deduced,
-  // but they can still handle multiple arguments.
-  unsigned ArgIdx = NumRequiredArgs;
-  while (ArgIdx > 0) {
-    if (getParamDecl(ArgIdx - 1)->isParameterPack())
-      NumRequiredArgs = ArgIdx;
-    
-    --ArgIdx;
-  }
-  
+  unsigned NumRequiredArgs = 0;
+  for (auto *Param : params())
+    if (!Param->isParameterPack() && !Param->hasDefaultArg())
+      ++NumRequiredArgs;
   return NumRequiredArgs;
+}
+
+/// \brief The combination of the extern and inline keywords under MSVC forces
+/// the function to be required.
+///
+/// Note: This function assumes that we will only get called when isInlined()
+/// would return true for this FunctionDecl.
+bool FunctionDecl::isMSExternInline() const {
+  assert(isInlined() && "expected to get called on an inlined function!");
+
+  const ASTContext &Context = getASTContext();
+  if (!Context.getLangOpts().MSVCCompat)
+    return false;
+
+  for (const FunctionDecl *FD = this; FD; FD = FD->getPreviousDecl())
+    if (FD->getStorageClass() == SC_Extern)
+      return true;
+
+  return false;
+}
+
+static bool redeclForcesDefMSVC(const FunctionDecl *Redecl) {
+  if (Redecl->getStorageClass() != SC_Extern)
+    return false;
+
+  for (const FunctionDecl *FD = Redecl->getPreviousDecl(); FD;
+       FD = FD->getPreviousDecl())
+    if (FD->getStorageClass() == SC_Extern)
+      return false;
+
+  return true;
 }
 
 static bool RedeclForcesDefC99(const FunctionDecl *Redecl) {
@@ -2584,7 +2601,7 @@ static bool RedeclForcesDefC99(const FunctionDecl *Redecl) {
 /// \brief For a function declaration in C or C++, determine whether this
 /// declaration causes the definition to be externally visible.
 ///
-/// Specifically, this determines if adding the current declaration to the set
+/// For instance, this determines if adding the current declaration to the set
 /// of redeclarations of the given functions causes
 /// isInlineDefinitionExternallyVisible to change from false to true.
 bool FunctionDecl::doesDeclarationForceExternallyVisibleDefinition() const {
@@ -2592,6 +2609,13 @@ bool FunctionDecl::doesDeclarationForceExternallyVisibleDefinition() const {
          "Must have a declaration without a body.");
 
   ASTContext &Context = getASTContext();
+
+  if (Context.getLangOpts().MSVCCompat) {
+    const FunctionDecl *Definition;
+    if (hasBody(Definition) && Definition->isInlined() &&
+        redeclForcesDefMSVC(this))
+      return true;
+  }
 
   if (Context.getLangOpts().GNUInline || hasAttr<GNUInlineAttr>()) {
     // With GNU inlining, a declaration with 'inline' but not 'extern', forces
@@ -2811,14 +2835,34 @@ FunctionDecl *FunctionDecl::getTemplateInstantiationPattern() const {
   // Handle class scope explicit specialization special case.
   if (getTemplateSpecializationKind() == TSK_ExplicitSpecialization)
     return getClassScopeSpecializationPattern();
+  
+  // If this is a generic lambda call operator specialization, its 
+  // instantiation pattern is always its primary template's pattern
+  // even if its primary template was instantiated from another 
+  // member template (which happens with nested generic lambdas).
+  // Since a lambda's call operator's body is transformed eagerly, 
+  // we don't have to go hunting for a prototype definition template 
+  // (i.e. instantiated-from-member-template) to use as an instantiation 
+  // pattern.
 
+  if (isGenericLambdaCallOperatorSpecialization(
+          dyn_cast<CXXMethodDecl>(this))) {
+    assert(getPrimaryTemplate() && "A generic lambda specialization must be "
+                                   "generated from a primary call operator "
+                                   "template");
+    assert(getPrimaryTemplate()->getTemplatedDecl()->getBody() &&
+           "A generic lambda call operator template must always have a body - "
+           "even if instantiated from a prototype (i.e. as written) member "
+           "template");
+    return getPrimaryTemplate()->getTemplatedDecl();
+  }
+  
   if (FunctionTemplateDecl *Primary = getPrimaryTemplate()) {
     while (Primary->getInstantiatedFromMemberTemplate()) {
       // If we have hit a point where the user provided a specialization of
       // this template, we're done looking.
       if (Primary->isMemberSpecialization())
         break;
-      
       Primary = Primary->getInstantiatedFromMemberTemplate();
     }
     
@@ -3459,10 +3503,9 @@ void BlockDecl::setCaptures(ASTContext &Context,
 }
 
 bool BlockDecl::capturesVariable(const VarDecl *variable) const {
-  for (capture_const_iterator
-         i = capture_begin(), e = capture_end(); i != e; ++i)
+  for (const auto &I : captures())
     // Only auto vars can be captured, so no redeclaration worries.
-    if (i->getVariable() == variable)
+    if (I.getVariable() == variable)
       return true;
 
   return false;

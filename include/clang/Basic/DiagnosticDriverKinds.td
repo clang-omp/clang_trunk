@@ -136,8 +136,6 @@ def warn_drv_unused_sanitizer : Warning<"'%0' is ignored in absence of '%1'">,
   InGroup<UnusedSanitizeArgument>;
 def warn_drv_clang_unsupported : Warning<
   "the clang compiler does not support '%0'">;
-def warn_drv_deprecated_arg : Warning<
-  "argument '%0' is deprecated, use '%1' instead">, InGroup<Deprecated>;
 def warn_drv_assuming_mfloat_abi_is : Warning<
   "unknown platform, assuming -mfloat-abi=%0">;
 def warn_ignoring_ftabstop_value : Warning<
@@ -154,8 +152,8 @@ def warn_drv_pch_not_first_include : Warning<
   "precompiled header '%0' was ignored because '%1' is not first '-include'">;
 def warn_missing_sysroot : Warning<"no such sysroot directory: '%0'">,
   InGroup<DiagGroup<"missing-sysroot">>;
-def warn_missing_debug_compression : Warning<"DWARF compression is not implemented">,
-  InGroup<DiagGroup<"missing-debug-compression">>;
+def warn_debug_compression_unavailable : Warning<"cannot compress debug sections (zlib not installed)">,
+  InGroup<DiagGroup<"debug-compression-unavailable">>;
 
 def note_drv_command_failed_diag_msg : Note<
   "diagnostic msg: %0">;

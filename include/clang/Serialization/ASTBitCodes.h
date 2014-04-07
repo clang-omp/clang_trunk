@@ -213,9 +213,6 @@ namespace clang {
       /// types and decls used within the AST file.
       DECLTYPES_BLOCK_ID,
 
-      /// \brief The block containing DECL_UPDATES records.
-      DECL_UPDATES_BLOCK_ID,
-      
       /// \brief The block containing the detailed preprocessing record.
       PREPROCESSOR_DETAIL_BLOCK_ID,
       
@@ -1069,6 +1066,8 @@ namespace clang {
       DECL_OMP_THREADPRIVATE,
       /// \brief An OMPDeclareReductionDecl record.
       DECL_OMP_DECLAREREDUCTION,
+      /// \brief An OMPDeclareSimdDecl record.
+      DECL_OMP_DECLARESIMD,
       /// \brief An EmptyDecl record.
       DECL_EMPTY
     };
@@ -1154,6 +1153,8 @@ namespace clang {
       EXPR_SIZEOF_ALIGN_OF,
       /// \brief An ArraySubscriptExpr record.
       EXPR_ARRAY_SUBSCRIPT,
+      /// \brief A CEAN index expr.
+      EXPR_CEAN_INDEX,
       /// \brief A CallExpr record.
       EXPR_CALL,
       /// \brief A MemberExpr record.
@@ -1351,6 +1352,11 @@ namespace clang {
       STMT_OMP_ATOMIC_DIRECTIVE,
       STMT_OMP_FLUSH_DIRECTIVE,
       STMT_OMP_ORDERED_DIRECTIVE,
+      STMT_OMP_PARALLEL_FOR_DIRECTIVE,
+      STMT_OMP_PARALLEL_FOR_SIMD_DIRECTIVE,
+      STMT_OMP_PARALLEL_SECTIONS_DIRECTIVE,
+      STMT_OMP_CANCEL_DIRECTIVE,
+      STMT_OMP_CANCELLATION_POINT_DIRECTIVE,
 
       // ARC
       EXPR_OBJC_BRIDGED_CAST,     // ObjCBridgedCastExpr

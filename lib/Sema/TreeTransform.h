@@ -952,9 +952,8 @@ public:
           break;
         }
         default:
-          // FIXME: Would be nice to highlight just the source range.
           SemaRef.Diag(IdLoc, diag::err_not_tag_in_scope)
-            << Kind << Id << DC;
+              << Kind << Id << DC << QualifierLoc.getSourceRange();
           break;
       }
       return QualType();
@@ -1296,9 +1295,11 @@ public:
                                            ArrayRef<OMPClause *> Clauses,
                                            Stmt *AStmt,
                                            SourceLocation StartLoc,
-                                           SourceLocation EndLoc) {
+                                           SourceLocation EndLoc,
+                                           OpenMPDirectiveKind ConstructType) {
     return getSema().ActOnOpenMPExecutableDirective(Kind, DirName, Clauses,
-                                                    AStmt, StartLoc, EndLoc);
+                                                    AStmt, StartLoc, EndLoc,
+                                                    ConstructType);
   }
 
   /// \brief Build a new OpenMP 'if' clause.
@@ -1688,6 +1689,20 @@ public:
                                               EndLoc, Alignment, AlignmentLoc);
   }
 
+  /// \brief Build a new OpenMP 'depend' clause.
+  ///
+  /// By default, performs semantic analysis to build the new statement.
+  /// Subclasses may override this routine to provide different behavior.
+  OMPClause *RebuildOMPDependClause(ArrayRef<Expr *> VarList,
+                                    SourceLocation StartLoc,
+                                    SourceLocation LParenLoc,
+                                    SourceLocation EndLoc,
+                                    OpenMPDependClauseType Ty,
+                                    SourceLocation TyLoc) {
+    return getSema().ActOnOpenMPDependClause(VarList, StartLoc, LParenLoc,
+                                             EndLoc, Ty, TyLoc);
+  }
+
   /// \brief Rebuild the operand to an Objective-C \@synchronized statement.
   ///
   /// By default, performs semantic analysis to build the new statement.
@@ -1948,6 +1963,17 @@ public:
     return getSema().ActOnArraySubscriptExpr(/*Scope=*/0, LHS,
                                              LBracketLoc, RHS,
                                              RBracketLoc);
+  }
+
+  /// \brief Build a new CEAN index expression.
+  ///
+  /// By default, performs semantic analysis to build the new expression.
+  /// Subclasses may override this routine to provide different behavior.
+  ExprResult RebuildCEANIndexExpr(Expr *Base, Expr *LowerBound,
+                                  SourceLocation ColonLoc,
+                                  Expr *Length) {
+    return getSema().ActOnCEANIndexExpr(0, Base, LowerBound, ColonLoc,
+                                        Length);
   }
 
   /// \brief Build a new call expression.
@@ -5589,13 +5615,12 @@ TreeTransform<Derived>::TransformCompoundStmt(CompoundStmt *S,
   bool SubStmtInvalid = false;
   bool SubStmtChanged = false;
   SmallVector<Stmt*, 8> Statements;
-  for (CompoundStmt::body_iterator B = S->body_begin(), BEnd = S->body_end();
-       B != BEnd; ++B) {
-    StmtResult Result = getDerived().TransformStmt(*B);
+  for (auto *B : S->body()) {
+    StmtResult Result = getDerived().TransformStmt(B);
     if (Result.isInvalid()) {
       // Immediately fail if this was a DeclStmt, since it's very
       // likely that this will cause problems for future statements.
-      if (isa<DeclStmt>(*B))
+      if (isa<DeclStmt>(B))
         return StmtError();
 
       // Otherwise, just keep processing substatements and fail later.
@@ -5603,7 +5628,7 @@ TreeTransform<Derived>::TransformCompoundStmt(CompoundStmt *S,
       continue;
     }
 
-    SubStmtChanged = SubStmtChanged || Result.get() != *B;
+    SubStmtChanged = SubStmtChanged || Result.get() != B;
     Statements.push_back(Result.takeAs<Stmt>());
   }
 
@@ -6000,14 +6025,12 @@ StmtResult
 TreeTransform<Derived>::TransformDeclStmt(DeclStmt *S) {
   bool DeclChanged = false;
   SmallVector<Decl *, 4> Decls;
-  for (DeclStmt::decl_iterator D = S->decl_begin(), DEnd = S->decl_end();
-       D != DEnd; ++D) {
-    Decl *Transformed = getDerived().TransformDefinition((*D)->getLocation(),
-                                                         *D);
+  for (auto *D : S->decls()) {
+    Decl *Transformed = getDerived().TransformDefinition(D->getLocation(), D);
     if (!Transformed)
       return StmtError();
 
-    if (Transformed != *D)
+    if (Transformed != D)
       DeclChanged = true;
 
     Decls.push_back(Transformed);
@@ -6613,13 +6636,21 @@ TreeTransform<Derived>::TransformOMPExecutableDirective(
     DirName = cast<OMPCriticalDirective>(D)->getDirectiveName();
     DirName = getDerived().TransformDeclarationNameInfo(DirName);
   }
+  OpenMPDirectiveKind ConstructType = OMPD_unknown;
+  if (D->getDirectiveKind() == OMPD_cancel) {
+    ConstructType = cast<OMPCancelDirective>(D)->getConstructType();
+  } else if (D->getDirectiveKind() == OMPD_cancellation_point) {
+    ConstructType =
+      cast<OMPCancellationPointDirective>(D)->getConstructType();
+  }
 
   return getDerived().RebuildOMPExecutableDirective(D->getDirectiveKind(),
                                                     DirName,
                                                     TClauses,
                                                     AStmt,
                                                     D->getLocStart(),
-                                                    D->getLocEnd());
+                                                    D->getLocEnd(),
+                                                    ConstructType);
 }
 
 template<typename Derived>
@@ -6634,11 +6665,63 @@ TreeTransform<Derived>::TransformOMPParallelDirective(OMPParallelDirective *D) {
 
 template<typename Derived>
 StmtResult
+TreeTransform<Derived>::TransformOMPParallelForDirective(OMPParallelForDirective *D) {
+  DeclarationNameInfo DirName;
+  getDerived().getSema().StartOpenMPDSABlock(OMPD_parallel_for, DirName, 0);
+  StmtResult Res = getDerived().TransformOMPExecutableDirective(D);
+  getDerived().getSema().EndOpenMPDSABlock(Res.get());
+  return Res;
+}
+
+template<typename Derived>
+StmtResult
+TreeTransform<Derived>::TransformOMPParallelForSimdDirective(OMPParallelForSimdDirective *D) {
+  DeclarationNameInfo DirName;
+  getDerived().getSema().StartOpenMPDSABlock(OMPD_parallel_for_simd, DirName, 0);
+  StmtResult Res = getDerived().TransformOMPExecutableDirective(D);
+  getDerived().getSema().EndOpenMPDSABlock(Res.get());
+  return Res;
+}
+
+template<typename Derived>
+StmtResult
+TreeTransform<Derived>::TransformOMPParallelSectionsDirective(OMPParallelSectionsDirective *D) {
+  DeclarationNameInfo DirName;
+  getDerived().getSema().StartOpenMPDSABlock(OMPD_parallel_sections, DirName, 0);
+  StmtResult Res = getDerived().TransformOMPExecutableDirective(D);
+  getDerived().getSema().EndOpenMPDSABlock(Res.get());
+  return Res;
+}
+
+template<typename Derived>
+StmtResult
 TreeTransform<Derived>::TransformOMPForDirective(OMPForDirective *D) {
   DeclarationNameInfo DirName;
   getDerived().getSema().StartOpenMPDSABlock(OMPD_for, DirName, 0);
   StmtResult Res = getDerived().TransformOMPExecutableDirective(D);
   getDerived().getSema().EndOpenMPDSABlock(D);
+  return Res;
+}
+
+template<typename Derived>
+StmtResult
+TreeTransform<Derived>::TransformOMPCancelDirective(OMPCancelDirective *D) {
+  DeclarationNameInfo DirName;
+  getDerived().getSema().StartOpenMPDSABlock(OMPD_cancel, DirName, 0);
+  StmtResult Res = getDerived().TransformOMPExecutableDirective(D);
+  getDerived().getSema().EndOpenMPDSABlock(Res.get());
+  return Res;
+}
+
+template<typename Derived>
+StmtResult
+TreeTransform<Derived>::TransformOMPCancellationPointDirective(
+                                       OMPCancellationPointDirective *D) {
+  DeclarationNameInfo DirName;
+  getDerived().getSema().StartOpenMPDSABlock(OMPD_cancellation_point, DirName,
+                                             0);
+  StmtResult Res = getDerived().TransformOMPExecutableDirective(D);
+  getDerived().getSema().EndOpenMPDSABlock(Res.get());
   return Res;
 }
 
@@ -6662,6 +6745,16 @@ TreeTransform<Derived>::TransformOMPNumThreadsClause(OMPNumThreadsClause *C) {
                                                  C->getLocStart(),
                                                  C->getLParenLoc(),
                                                  C->getLocEnd());
+}
+
+template <typename Derived>
+OMPClause *
+TreeTransform<Derived>::TransformOMPSafelenClause(OMPSafelenClause *C) {
+  ExprResult E = getDerived().TransformExpr(C->getSafelen());
+  if (E.isInvalid())
+    return 0;
+  return getDerived().RebuildOMPSafelenClause(
+      E.take(), C->getLocStart(), C->getLParenLoc(), C->getLocEnd());
 }
 
 template<typename Derived>
@@ -6911,8 +7004,8 @@ OMPClause *
 TreeTransform<Derived>::TransformOMPPrivateClause(OMPPrivateClause *C) {
   llvm::SmallVector<Expr *, 5> Vars;
   Vars.reserve(C->varlist_size());
-  for (OMPVarList<OMPPrivateClause>::varlist_iterator I = C->varlist_begin(),
-                                                      E = C->varlist_end();
+  for (OMPPrivateClause::varlist_iterator I = C->varlist_begin(),
+                                          E = C->varlist_end();
        I != E; ++I) {
     ExprResult EVar = getDerived().TransformExpr(cast<Expr>(*I));
     if (EVar.isInvalid())
@@ -6931,9 +7024,8 @@ TreeTransform<Derived>::TransformOMPFirstPrivateClause(
                                       OMPFirstPrivateClause *C) {
   llvm::SmallVector<Expr *, 5> Vars;
   Vars.reserve(C->varlist_size());
-  for (OMPVarList<OMPFirstPrivateClause>::varlist_iterator
-                                                        I = C->varlist_begin(),
-                                                        E = C->varlist_end();
+  for (OMPFirstPrivateClause::varlist_iterator I = C->varlist_begin(),
+                                               E = C->varlist_end();
        I != E; ++I) {
     ExprResult EVar = getDerived().TransformExpr(cast<Expr>(*I));
     if (EVar.isInvalid())
@@ -6951,8 +7043,8 @@ OMPClause *
 TreeTransform<Derived>::TransformOMPSharedClause(OMPSharedClause *C) {
   llvm::SmallVector<Expr *, 5> Vars;
   Vars.reserve(C->varlist_size());
-  for (OMPVarList<OMPSharedClause>::varlist_iterator I = C->varlist_begin(),
-                                                     E = C->varlist_end();
+  for (OMPSharedClause::varlist_iterator I = C->varlist_begin(),
+                                         E = C->varlist_end();
        I != E; ++I) {
     ExprResult EVar = getDerived().TransformExpr(cast<Expr>(*I));
     if (EVar.isInvalid())
@@ -6970,8 +7062,8 @@ OMPClause *
 TreeTransform<Derived>::TransformOMPCopyinClause(OMPCopyinClause *C) {
   llvm::SmallVector<Expr *, 5> Vars;
   Vars.reserve(C->varlist_size());
-  for (OMPVarList<OMPCopyinClause>::varlist_iterator I = C->varlist_begin(),
-                                                     E = C->varlist_end();
+  for (OMPCopyinClause::varlist_iterator I = C->varlist_begin(),
+                                         E = C->varlist_end();
        I != E; ++I) {
     ExprResult EVar = getDerived().TransformExpr(cast<Expr>(*I));
     if (EVar.isInvalid())
@@ -6989,8 +7081,8 @@ OMPClause *
 TreeTransform<Derived>::TransformOMPCopyPrivateClause(OMPCopyPrivateClause *C) {
   llvm::SmallVector<Expr *, 5> Vars;
   Vars.reserve(C->varlist_size());
-  for (OMPVarList<OMPCopyPrivateClause>::varlist_iterator I = C->varlist_begin(),
-                                                     E = C->varlist_end();
+  for (OMPCopyPrivateClause::varlist_iterator I = C->varlist_begin(),
+                                              E = C->varlist_end();
        I != E; ++I) {
     ExprResult EVar = getDerived().TransformExpr(cast<Expr>(*I));
     if (EVar.isInvalid())
@@ -7008,8 +7100,7 @@ OMPClause *
 TreeTransform<Derived>::TransformOMPLastPrivateClause(OMPLastPrivateClause *C) {
   llvm::SmallVector<Expr *, 5> Vars;
   Vars.reserve(C->varlist_size());
-  for (OMPVarList<OMPLastPrivateClause>::varlist_iterator
-                                              I = C->varlist_begin(),
+  for (OMPLastPrivateClause::varlist_iterator I = C->varlist_begin(),
                                               E = C->varlist_end();
        I != E; ++I) {
     ExprResult EVar = getDerived().TransformExpr(cast<Expr>(*I));
@@ -7028,8 +7119,8 @@ OMPClause *
 TreeTransform<Derived>::TransformOMPReductionClause(OMPReductionClause *C) {
   llvm::SmallVector<Expr *, 5> Vars;
   Vars.reserve(C->varlist_size());
-  for (OMPVarList<OMPReductionClause>::varlist_iterator I = C->varlist_begin(),
-                                                        E = C->varlist_end();
+  for (OMPReductionClause::varlist_iterator I = C->varlist_begin(),
+                                            E = C->varlist_end();
        I != E; ++I) {
     ExprResult EVar = getDerived().TransformExpr(cast<Expr>(*I));
     if (EVar.isInvalid())
@@ -7121,8 +7212,8 @@ OMPClause *
 TreeTransform<Derived>::TransformOMPFlushClause(OMPFlushClause *C) {
   llvm::SmallVector<Expr *, 5> Vars;
   Vars.reserve(C->varlist_size());
-  for (OMPVarList<OMPFlushClause>::varlist_iterator I = C->varlist_begin(),
-                                                    E = C->varlist_end();
+  for (OMPFlushClause::varlist_iterator I = C->varlist_begin(),
+                                        E = C->varlist_end();
        I != E; ++I) {
     ExprResult EVar = getDerived().TransformExpr(cast<Expr>(*I));
     if (EVar.isInvalid())
@@ -7139,8 +7230,8 @@ OMPClause *
 TreeTransform<Derived>::TransformOMPUniformClause(OMPUniformClause *C) {
   llvm::SmallVector<Expr *, 5> Vars;
   Vars.reserve(C->varlist_size());
-  for (OMPVarList<OMPUniformClause>::varlist_iterator I = C->varlist_begin(),
-                                                      E = C->varlist_end();
+  for (OMPUniformClause::varlist_iterator I = C->varlist_begin(),
+                                          E = C->varlist_end();
        I != E; ++I) {
     ExprResult EVar = getDerived().TransformExpr(cast<Expr>(*I));
     if (EVar.isInvalid())
@@ -7150,21 +7241,6 @@ TreeTransform<Derived>::TransformOMPUniformClause(OMPUniformClause *C) {
   return getDerived().RebuildOMPUniformClause(Vars, C->getLocStart(),
                                                     C->getLParenLoc(),
                                                     C->getLocEnd());
-}
-
-template<typename Derived>
-OMPClause *
-TreeTransform<Derived>::TransformOMPSafelenClause(OMPSafelenClause *C) {
-  // Transform length expression.
-  ExprResult E = getDerived().TransformExpr(C->getSafelen());
-
-  if (E.isInvalid())
-    return 0;
-
-  return getDerived().RebuildOMPSafelenClause(E.take(),
-                                              C->getLocStart(),
-                                              C->getLParenLoc(),
-                                              C->getLocEnd());
 }
 
 template<typename Derived>
@@ -7222,8 +7298,8 @@ TreeTransform<Derived>::TransformOMPLinearClause(OMPLinearClause *C) {
 
   llvm::SmallVector<Expr *, 5> Vars;
   Vars.reserve(C->varlist_size());
-  for (OMPVarList<OMPLinearClause>::varlist_iterator I = C->varlist_begin(),
-                                                     E = C->varlist_end();
+  for (OMPLinearClause::varlist_iterator I = C->varlist_begin(),
+                                         E = C->varlist_end();
        I != E; ++I) {
     ExprResult EVar = getDerived().TransformExpr(cast<Expr>(*I));
     if (EVar.isInvalid())
@@ -7248,8 +7324,8 @@ TreeTransform<Derived>::TransformOMPAlignedClause(OMPAlignedClause *C) {
 
   llvm::SmallVector<Expr *, 5> Vars;
   Vars.reserve(C->varlist_size());
-  for (OMPVarList<OMPAlignedClause>::varlist_iterator I = C->varlist_begin(),
-                                                      E = C->varlist_end();
+  for (OMPAlignedClause::varlist_iterator I = C->varlist_begin(),
+                                          E = C->varlist_end();
        I != E; ++I) {
     ExprResult EVar = getDerived().TransformExpr(cast<Expr>(*I));
     if (EVar.isInvalid())
@@ -7262,6 +7338,27 @@ TreeTransform<Derived>::TransformOMPAlignedClause(OMPAlignedClause *C) {
                                               C->getLocEnd(),
                                               E.take(),
                                               C->getAlignmentLoc());
+}
+
+template<typename Derived>
+OMPClause *
+TreeTransform<Derived>::TransformOMPDependClause(OMPDependClause *C) {
+  llvm::SmallVector<Expr *, 16> Vars;
+  Vars.reserve(C->varlist_size());
+  for (OMPDependClause::varlist_iterator I = C->varlist_begin(),
+                                         E = C->varlist_end();
+       I != E; ++I) {
+    ExprResult EVar = getDerived().TransformExpr(cast<Expr>(*I));
+    if (EVar.isInvalid())
+      return 0;
+    Vars.push_back(EVar.take());
+  }
+  return getDerived().RebuildOMPDependClause(Vars,
+                                             C->getLocStart(),
+                                             C->getLParenLoc(),
+                                             C->getLocEnd(),
+                                             C->getType(),
+                                             C->getTypeLoc());
 }
 
 //===----------------------------------------------------------------------===//
@@ -7598,6 +7695,31 @@ TreeTransform<Derived>::TransformArraySubscriptExpr(ArraySubscriptExpr *E) {
                                            /*FIXME:*/E->getLHS()->getLocStart(),
                                                 RHS.get(),
                                                 E->getRBracketLoc());
+}
+
+template<typename Derived>
+ExprResult
+TreeTransform<Derived>::TransformCEANIndexExpr(CEANIndexExpr *E) {
+  ExprResult Base = getDerived().TransformExpr(E->getBase());
+  if (Base.isInvalid())
+    return ExprError();
+  ExprResult LowerBound = getDerived().TransformExpr(E->getLowerBound());
+  if (LowerBound.isInvalid())
+    return ExprError();
+  ExprResult Length = getDerived().TransformExpr(E->getLength());
+  if (Length.isInvalid())
+    return ExprError();
+
+  if (!getDerived().AlwaysRebuild() &&
+      Base.get() == E->getBase() &&
+      LowerBound.get() == E->getLowerBound() &&
+      Length.get() == E->getLength())
+    return SemaRef.Owned(E);
+
+  return getDerived().RebuildCEANIndexExpr(Base.get(),
+                                           LowerBound.get(),
+                                           E->getColonLoc(),
+                                           Length.get());
 }
 
 template<typename Derived>
@@ -8708,9 +8830,8 @@ TreeTransform<Derived>::TransformUnresolvedLookupExpr(
     // Expand using declarations.
     if (isa<UsingDecl>(InstD)) {
       UsingDecl *UD = cast<UsingDecl>(InstD);
-      for (UsingDecl::shadow_iterator I = UD->shadow_begin(),
-             E = UD->shadow_end(); I != E; ++I)
-        R.addDecl(*I);
+      for (auto *I : UD->shadows())
+        R.addDecl(I);
       continue;
     }
 
@@ -9576,9 +9697,8 @@ TreeTransform<Derived>::TransformUnresolvedMemberExpr(UnresolvedMemberExpr *Old)
     // Expand using declarations.
     if (isa<UsingDecl>(InstD)) {
       UsingDecl *UD = cast<UsingDecl>(InstD);
-      for (UsingDecl::shadow_iterator I = UD->shadow_begin(),
-             E = UD->shadow_end(); I != E; ++I)
-        R.addDecl(*I);
+      for (auto *I : UD->shadows())
+        R.addDecl(I);
       continue;
     }
 
@@ -10206,9 +10326,8 @@ TreeTransform<Derived>::TransformBlockExpr(BlockExpr *E) {
   // In builds with assertions, make sure that we captured everything we
   // captured before.
   if (!SemaRef.getDiagnostics().hasErrorOccurred()) {
-    for (BlockDecl::capture_iterator i = oldBlock->capture_begin(),
-           e = oldBlock->capture_end(); i != e; ++i) {
-      VarDecl *oldCapture = i->getVariable();
+    for (const auto &I : oldBlock->captures()) {
+      VarDecl *oldCapture = I.getVariable();
 
       // Ignore parameter packs.
       if (isa<ParmVarDecl>(oldCapture) &&

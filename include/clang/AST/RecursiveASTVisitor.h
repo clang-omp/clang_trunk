@@ -953,16 +953,12 @@ DEF_TRAVERSE_TYPE(FunctionNoProtoType,
 DEF_TRAVERSE_TYPE(FunctionProtoType, {
   TRY_TO(TraverseType(T->getReturnType()));
 
-  for (FunctionProtoType::param_type_iterator A = T->param_type_begin(),
-                                              AEnd = T->param_type_end();
-       A != AEnd; ++A) {
-    TRY_TO(TraverseType(*A));
+  for (const auto &A : T->param_types()) {
+    TRY_TO(TraverseType(A));
   }
 
-  for (FunctionProtoType::exception_iterator E = T->exception_begin(),
-                                             EEnd = T->exception_end();
-       E != EEnd; ++E) {
-    TRY_TO(TraverseType(*E));
+  for (const auto &E : T->exceptions()) {
+    TRY_TO(TraverseType(E));
   }
 })
 
@@ -1191,10 +1187,8 @@ DEF_TRAVERSE_TYPELOC(FunctionProtoType, {
       }
     }
 
-    for (FunctionProtoType::exception_iterator E = T->exception_begin(),
-                                            EEnd = T->exception_end();
-         E != EEnd; ++E) {
-      TRY_TO(TraverseType(*E));
+    for (const auto &E : T->exceptions()) {
+      TRY_TO(TraverseType(E));
     }
   })
 
@@ -1414,7 +1408,6 @@ DEF_TRAVERSE_DECL(LabelDecl, {
   // There is no code in a LabelDecl.
 })
 
-
 DEF_TRAVERSE_DECL(NamespaceDecl, {
     // Code in an unnamed namespace shows up automatically in
     // decls_begin()/decls_end().  Thus we don't need to recurse on
@@ -1475,11 +1468,13 @@ DEF_TRAVERSE_DECL(UsingDirectiveDecl, {
 DEF_TRAVERSE_DECL(UsingShadowDecl, { })
 
 DEF_TRAVERSE_DECL(OMPThreadPrivateDecl, {
-    for (OMPThreadPrivateDecl::varlist_iterator I = D->varlist_begin(),
-                                                E = D->varlist_end();
-         I != E; ++I) {
-      TRY_TO(TraverseStmt(*I));
+    for (auto *I : D->varlists()) {
+      TRY_TO(TraverseStmt(I));
     }
+  })
+
+DEF_TRAVERSE_DECL(OMPDeclareSimdDecl, {
+    if (D->getFunction()) { TRY_TO(TraverseDecl(D->getFunction())); }
   })
 
 DEF_TRAVERSE_DECL(OMPDeclareReductionDecl, {
@@ -1505,65 +1500,84 @@ bool RecursiveASTVisitor<Derived>::TraverseTemplateParameterListHelper(
   return true;
 }
 
-#define DEF_TRAVERSE_TMPL_INST(TMPLDECLKIND)                                 \
-/* A helper method for traversing the implicit instantiations of a
-   class or variable template. */                                            \
-template<typename Derived>                                                   \
-bool RecursiveASTVisitor<Derived>::TraverseTemplateInstantiations(           \
-    TMPLDECLKIND##TemplateDecl *D) {                                         \
-  TMPLDECLKIND##TemplateDecl::spec_iterator end = D->spec_end();             \
-  for (TMPLDECLKIND##TemplateDecl::spec_iterator it = D->spec_begin();       \
-       it != end; ++it) {                                                    \
-    TMPLDECLKIND##TemplateSpecializationDecl* SD = *it;                      \
-                                                                             \
-    switch (SD->getSpecializationKind()) {                                   \
-    /* Visit the implicit instantiations with the requested pattern. */      \
-    case TSK_Undeclared:                                                     \
-    case TSK_ImplicitInstantiation:                                          \
-      TRY_TO(TraverseDecl(SD));                                              \
-      break;                                                                 \
-                                                                             \
-    /* We don't need to do anything on an explicit instantiation             
-       or explicit specialization because there will be an explicit
-       node for it elsewhere. */                                             \
-    case TSK_ExplicitInstantiationDeclaration:                               \
-    case TSK_ExplicitInstantiationDefinition:                                \
-    case TSK_ExplicitSpecialization:                                         \
-      break;                                                                 \
-    }                                                                        \
-  }                                                                          \
-                                                                             \
-  return true;                                                               \
+template<typename Derived>
+bool RecursiveASTVisitor<Derived>::TraverseTemplateInstantiations(
+    ClassTemplateDecl *D) {
+  for (auto *SD : D->specializations()) {
+    for (auto *RD : SD->redecls()) {
+      // We don't want to visit injected-class-names in this traversal.
+      if (cast<CXXRecordDecl>(RD)->isInjectedClassName())
+        continue;
+
+      switch (cast<ClassTemplateSpecializationDecl>(RD)->
+                  getSpecializationKind()) {
+      // Visit the implicit instantiations with the requested pattern.
+      case TSK_Undeclared:
+      case TSK_ImplicitInstantiation:
+        TRY_TO(TraverseDecl(RD));
+        break;
+
+      // We don't need to do anything on an explicit instantiation
+      // or explicit specialization because there will be an explicit
+      // node for it elsewhere.
+      case TSK_ExplicitInstantiationDeclaration:
+      case TSK_ExplicitInstantiationDefinition:
+      case TSK_ExplicitSpecialization:
+        break;
+      }
+    }
+  }
+
+  return true;
 }
-   
-DEF_TRAVERSE_TMPL_INST(Class)
-DEF_TRAVERSE_TMPL_INST(Var)
+
+template<typename Derived>
+bool RecursiveASTVisitor<Derived>::TraverseTemplateInstantiations(
+    VarTemplateDecl *D) {
+  for (auto *SD : D->specializations()) {
+    for (auto *RD : SD->redecls()) {
+      switch (cast<VarTemplateSpecializationDecl>(RD)->
+                  getSpecializationKind()) {
+      case TSK_Undeclared:
+      case TSK_ImplicitInstantiation:
+        TRY_TO(TraverseDecl(RD));
+        break;
+
+      case TSK_ExplicitInstantiationDeclaration:
+      case TSK_ExplicitInstantiationDefinition:
+      case TSK_ExplicitSpecialization:
+        break;
+      }
+    }
+  }
+
+  return true;
+}
 
 // A helper method for traversing the instantiations of a
 // function while skipping its specializations.
 template<typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseTemplateInstantiations(
     FunctionTemplateDecl *D) {
-  FunctionTemplateDecl::spec_iterator end = D->spec_end();
-  for (FunctionTemplateDecl::spec_iterator it = D->spec_begin(); it != end;
-       ++it) {
-    FunctionDecl* FD = *it;
-    switch (FD->getTemplateSpecializationKind()) {
-    case TSK_Undeclared:
-    case TSK_ImplicitInstantiation:
-      // We don't know what kind of FunctionDecl this is.
-      TRY_TO(TraverseDecl(FD));
-      break;
+  for (auto *FD : D->specializations()) {
+    for (auto *RD : FD->redecls()) {
+      switch (RD->getTemplateSpecializationKind()) {
+      case TSK_Undeclared:
+      case TSK_ImplicitInstantiation:
+        // We don't know what kind of FunctionDecl this is.
+        TRY_TO(TraverseDecl(RD));
+        break;
 
-    // FIXME: For now traverse explicit instantiations here. Change that
-    // once they are represented as dedicated nodes in the AST.
-    case TSK_ExplicitInstantiationDeclaration:
-    case TSK_ExplicitInstantiationDefinition:
-      TRY_TO(TraverseDecl(FD));
-      break;
+      // FIXME: For now traverse explicit instantiations here. Change that
+      // once they are represented as dedicated nodes in the AST.
+      case TSK_ExplicitInstantiationDeclaration:
+      case TSK_ExplicitInstantiationDefinition:
+        TRY_TO(TraverseDecl(RD));
+        break;
 
-    case TSK_ExplicitSpecialization:
-      break;
+      case TSK_ExplicitSpecialization:
+        break;
+      }
     }
   }
 
@@ -1669,10 +1683,8 @@ bool RecursiveASTVisitor<Derived>::TraverseCXXRecordHelper(
   if (!TraverseRecordHelper(D))
     return false;
   if (D->isCompleteDefinition()) {
-    for (CXXRecordDecl::base_class_iterator I = D->bases_begin(),
-                                            E = D->bases_end();
-         I != E; ++I) {
-      TRY_TO(TraverseTypeLoc(I->getTypeSourceInfo()->getTypeLoc()));
+    for (const auto &I : D->bases()) {
+      TRY_TO(TraverseTypeLoc(I.getTypeSourceInfo()->getTypeLoc()));
     }
     // We don't traverse the friends or the conversions, as they are
     // already in decls_begin()/decls_end().
@@ -1838,10 +1850,8 @@ bool RecursiveASTVisitor<Derived>::TraverseFunctionHelper(FunctionDecl *D) {
 
   if (CXXConstructorDecl *Ctor = dyn_cast<CXXConstructorDecl>(D)) {
     // Constructor initializers.
-    for (CXXConstructorDecl::init_iterator I = Ctor->init_begin(),
-                                           E = Ctor->init_end();
-         I != E; ++I) {
-      TRY_TO(TraverseConstructorInitializer(*I));
+    for (auto *I : Ctor->inits()) {
+      TRY_TO(TraverseConstructorInitializer(I));
     }
   }
 
@@ -1970,9 +1980,8 @@ DEF_TRAVERSE_STMT(CXXCatchStmt, {
   })
 
 DEF_TRAVERSE_STMT(DeclStmt, {
-    for (DeclStmt::decl_iterator I = S->decl_begin(), E = S->decl_end();
-         I != E; ++I) {
-      TRY_TO(TraverseDecl(*I));
+    for (auto *I : S->decls()) {
+      TRY_TO(TraverseDecl(I));
     }
     // Suppress the default iteration over children() by
     // returning.  Here's why: A DeclStmt looks like 'type var [=
@@ -2250,6 +2259,7 @@ DEF_TRAVERSE_STMT(CXXMemberCallExpr, { })
 // over the children.
 DEF_TRAVERSE_STMT(AddrLabelExpr, { })
 DEF_TRAVERSE_STMT(ArraySubscriptExpr, { })
+DEF_TRAVERSE_STMT(CEANIndexExpr, { })
 DEF_TRAVERSE_STMT(BlockExpr, {
   TRY_TO(TraverseDecl(S->getBlockDecl()));
   return true; // no child statements to loop through.
@@ -2398,6 +2408,14 @@ DEF_TRAVERSE_STMT(OMPForDirective, {
   return TraverseOMPExecutableDirective(S);
 })
 
+DEF_TRAVERSE_STMT(OMPParallelForDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
+DEF_TRAVERSE_STMT(OMPParallelForSimdDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
 DEF_TRAVERSE_STMT(OMPSimdDirective, {
   return TraverseOMPExecutableDirective(S);
 })
@@ -2407,6 +2425,10 @@ DEF_TRAVERSE_STMT(OMPForSimdDirective, {
 })
 
 DEF_TRAVERSE_STMT(OMPSectionsDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
+DEF_TRAVERSE_STMT(OMPParallelSectionsDirective, {
   return TraverseOMPExecutableDirective(S);
 })
 
@@ -2456,6 +2478,14 @@ DEF_TRAVERSE_STMT(OMPFlushDirective, {
 })
 
 DEF_TRAVERSE_STMT(OMPOrderedDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
+DEF_TRAVERSE_STMT(OMPCancelDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
+DEF_TRAVERSE_STMT(OMPCancellationPointDirective, {
   return TraverseOMPExecutableDirective(S);
 })
 

@@ -34,7 +34,9 @@ using namespace CodeGen;
 
 CodeGenFunction::CodeGenFunction(CodeGenModule &cgm, bool suppressNewContext)
     : CodeGenTypeCache(cgm), CGM(cgm), Target(cgm.getTarget()),
-      Builder(cgm.getModule().getContext()), OpenMPRoot(0), CapturedStmtInfo(0),
+      Builder(cgm.getModule().getContext(), llvm::ConstantFolder(),
+              CGBuilderInserterTy(this)), OpenMPRoot(0),
+      CapturedStmtInfo(0),
       SanitizePerformTypeCheck(CGM.getSanOpts().Null |
                                CGM.getSanOpts().Alignment |
                                CGM.getSanOpts().ObjectSize |
@@ -49,8 +51,8 @@ CodeGenFunction::CodeGenFunction(CodeGenModule &cgm, bool suppressNewContext)
       NumSimpleReturnExprs(0), CXXABIThisDecl(0), CXXABIThisValue(0),
       CXXThisValue(0), CXXDefaultInitExprThis(0),
       CXXStructorImplicitParamDecl(0), CXXStructorImplicitParamValue(0),
-      OutermostConditional(0), CurLexicalScope(0), TerminateLandingPad(0),
-      TerminateHandler(0), TrapBB(0) {
+      OutermostConditional(0), CurLexicalScope(0), ExceptionsDisabled(false),
+      TerminateLandingPad(0), TerminateHandler(0), TrapBB(0) {
   if (!suppressNewContext)
     CGM.getCXXABI().getMangleContext().startNewFunction();
 
@@ -258,6 +260,11 @@ void CodeGenFunction::FinishFunction(SourceLocation EndLoc) {
   llvm::Instruction *Ptr = AllocaInsertPt;
   AllocaInsertPt = 0;
   Ptr->eraseFromParent();
+  if (FirstprivateInsertPt) {
+    Ptr = FirstprivateInsertPt;
+    FirstprivateInsertPt = 0;
+    Ptr->eraseFromParent();
+  }
 
   // If someone took the address of a label but never did an indirect goto, we
   // made a zero entry PHI node, which is illegal, zap it now.
@@ -339,6 +346,8 @@ static void GenOpenCLArgMetadata(const FunctionDecl *FD, llvm::Function *Fn,
   // Each MDNode is a list in the form of "key", N number of values which is
   // the same number of values as their are kernel arguments.
 
+  const PrintingPolicy &Policy = ASTCtx.getPrintingPolicy();
+
   // MDNode for the kernel argument address space qualifiers.
   SmallVector<llvm::Value*, 8> addressQuals;
   addressQuals.push_back(llvm::MDString::get(Context, "kernel_arg_addr_space"));
@@ -372,7 +381,8 @@ static void GenOpenCLArgMetadata(const FunctionDecl *FD, llvm::Function *Fn,
         pointeeTy.getAddressSpace())));
 
       // Get argument type name.
-      std::string typeName = pointeeTy.getUnqualifiedType().getAsString() + "*";
+      std::string typeName =
+          pointeeTy.getUnqualifiedType().getAsString(Policy) + "*";
 
       // Turn "unsigned type" to "utype"
       std::string::size_type pos = typeName.find("unsigned");
@@ -398,7 +408,7 @@ static void GenOpenCLArgMetadata(const FunctionDecl *FD, llvm::Function *Fn,
       addressQuals.push_back(Builder.getInt32(AddrSpc));
 
       // Get argument type name.
-      std::string typeName = ty.getUnqualifiedType().getAsString();
+      std::string typeName = ty.getUnqualifiedType().getAsString(Policy);
 
       // Turn "unsigned type" to "utype"
       std::string::size_type pos = typeName.find("unsigned");
@@ -559,6 +569,7 @@ void CodeGenFunction::StartFunction(GlobalDecl GD,
   // folded.
   llvm::Value *Undef = llvm::UndefValue::get(Int32Ty);
   AllocaInsertPt = new llvm::BitCastInst(Undef, Int32Ty, "", EntryBB);
+  FirstprivateInsertPt = 0;
   if (Builder.isNamePreserving())
     AllocaInsertPt->setName("allocapt");
 
@@ -821,7 +832,7 @@ void CodeGenFunction::GenerateCode(GlobalDecl GD, llvm::Function *Fn,
   if (!CurFn->doesNotThrow())
     TryMarkNoThrow(CurFn);
 
-  PGO.emitWriteoutFunction();
+  PGO.emitInstrumentationData();
   PGO.destroyRegionCounters();
 }
 
@@ -1365,7 +1376,7 @@ CodeGenFunction::getVLASize(const VariableArrayType *type) {
       numElements = vlaSize;
     } else {
       // It's undefined behavior if this wraps around, so mark it that way.
-      // FIXME: Teach -fcatch-undefined-behavior to trap this.
+      // FIXME: Teach -fsanitize=undefined to trap this.
       numElements = Builder.CreateNUWMul(numElements, vlaSize);
     }
   } while ((type = getContext().getAsVariableArrayType(elementType)));
@@ -1494,10 +1505,14 @@ void CodeGenFunction::EmitVariablyModifiedType(QualType type) {
       break;
 
     case Type::Typedef:
+      type = cast<TypedefType>(ty)->desugar();
+      break;
     case Type::Decltype:
+      type = cast<DecltypeType>(ty)->desugar();
+      break;
     case Type::Auto:
-      // Stop walking: nothing to do.
-      return;
+      type = cast<AutoType>(ty)->getDeducedType();
+      break;
 
     case Type::TypeOfExpr:
       // Stop walking: emit typeof expression.
@@ -1508,7 +1523,7 @@ void CodeGenFunction::EmitVariablyModifiedType(QualType type) {
       type = cast<AtomicType>(ty)->getValueType();
       break;
     }
-  } while (type->isVariablyModifiedType());
+  } while (!type.isNull() && type->isVariablyModifiedType());
 }
 
 llvm::Value* CodeGenFunction::EmitVAListRef(const Expr* E) {
@@ -1569,12 +1584,10 @@ void CodeGenFunction::EmitVarAnnotations(const VarDecl *D, llvm::Value *V) {
   assert(D->hasAttr<AnnotateAttr>() && "no annotate attribute");
   // FIXME We create a new bitcast for every annotation because that's what
   // llvm-gcc was doing.
-  for (specific_attr_iterator<AnnotateAttr>
-       ai = D->specific_attr_begin<AnnotateAttr>(),
-       ae = D->specific_attr_end<AnnotateAttr>(); ai != ae; ++ai)
+  for (const auto *I : D->specific_attrs<AnnotateAttr>())
     EmitAnnotationCall(CGM.getIntrinsic(llvm::Intrinsic::var_annotation),
                        Builder.CreateBitCast(V, CGM.Int8PtrTy, V->getName()),
-                       (*ai)->getAnnotation(), D->getLocation());
+                       I->getAnnotation(), D->getLocation());
 }
 
 llvm::Value *CodeGenFunction::EmitFieldAnnotations(const FieldDecl *D,
@@ -1584,15 +1597,13 @@ llvm::Value *CodeGenFunction::EmitFieldAnnotations(const FieldDecl *D,
   llvm::Value *F = CGM.getIntrinsic(llvm::Intrinsic::ptr_annotation,
                                     CGM.Int8PtrTy);
 
-  for (specific_attr_iterator<AnnotateAttr>
-       ai = D->specific_attr_begin<AnnotateAttr>(),
-       ae = D->specific_attr_end<AnnotateAttr>(); ai != ae; ++ai) {
+  for (const auto *I : D->specific_attrs<AnnotateAttr>()) {
     // FIXME Always emit the cast inst so we can differentiate between
     // annotation on the first field of a struct and annotation on the struct
     // itself.
     if (VTy != CGM.Int8PtrTy)
       V = Builder.Insert(new llvm::BitCastInst(V, CGM.Int8PtrTy));
-    V = EmitAnnotationCall(F, V, (*ai)->getAnnotation(), D->getLocation());
+    V = EmitAnnotationCall(F, V, I->getAnnotation(), D->getLocation());
     V = Builder.CreateBitCast(V, VTy);
   }
 
@@ -1600,3 +1611,36 @@ llvm::Value *CodeGenFunction::EmitFieldAnnotations(const FieldDecl *D,
 }
 
 CodeGenFunction::CGCapturedStmtInfo::~CGCapturedStmtInfo() { }
+
+void
+CodeGenFunction::InsertHelper(llvm::Instruction *I,
+                              const llvm::Twine &Name,
+                              llvm::BasicBlock *BB,
+                              llvm::BasicBlock::iterator InsertPt) const {
+  LoopStack.InsertHelper(I);
+}
+
+template <bool PreserveNames>
+void CGBuilderInserter<PreserveNames>::
+  InsertHelper(llvm::Instruction *I,
+               const llvm::Twine &Name,
+               llvm::BasicBlock *BB,
+               llvm::BasicBlock::iterator InsertPt) const {
+  llvm::IRBuilderDefaultInserter<PreserveNames>::InsertHelper(I, Name, BB,
+                                                              InsertPt);
+  if (CGF)
+    CGF->InsertHelper(I, Name, BB, InsertPt);
+}
+#ifdef NDEBUG
+template void CGBuilderInserter<false>::
+  InsertHelper(llvm::Instruction *I,
+               const llvm::Twine &Name,
+               llvm::BasicBlock *BB,
+               llvm::BasicBlock::iterator InsertPt) const;
+#else
+template void CGBuilderInserter<true>::
+  InsertHelper(llvm::Instruction *I,
+               const llvm::Twine &Name,
+               llvm::BasicBlock *BB,
+               llvm::BasicBlock::iterator InsertPt) const;
+#endif

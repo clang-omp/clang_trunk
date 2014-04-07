@@ -3278,7 +3278,7 @@ compareConversionFunctions(Sema &S, FunctionDecl *Function1,
   //   respectively, always prefer the conversion to a function pointer,
   //   because the function pointer is more lightweight and is more likely
   //   to keep code working.
-  CXXConversionDecl *Conv1 = dyn_cast<CXXConversionDecl>(Function1);
+  CXXConversionDecl *Conv1 = dyn_cast_or_null<CXXConversionDecl>(Function1);
   if (!Conv1)
     return ImplicitConversionSequence::Indistinguishable;
 
@@ -5349,7 +5349,7 @@ ExprResult Sema::PerformContextualImplicitConversion(
     TypeDiagnoserPartialDiag(ContextualImplicitConverter &Converter, Expr *From)
         : TypeDiagnoser(Converter.Suppress), Converter(Converter), From(From) {}
 
-    virtual void diagnose(Sema &S, SourceLocation Loc, QualType T) {
+    void diagnose(Sema &S, SourceLocation Loc, QualType T) override {
       Converter.diagnoseIncomplete(S, Loc, T) << From->getSourceRange();
     }
   } IncompleteDiagnoser(Converter, From);

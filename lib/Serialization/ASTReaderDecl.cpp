@@ -35,6 +35,7 @@ using namespace clang::serialization;
 
 namespace clang {
   class ASTDeclReader : public DeclVisitor<ASTDeclReader, void> {
+    friend class OMPClauseReader;
     ASTReader &Reader;
     ModuleFile &F;
     const DeclID ThisDeclID;
@@ -315,6 +316,7 @@ namespace clang {
     void VisitObjCPropertyImplDecl(ObjCPropertyImplDecl *D);
     void VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D);
     void VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D);
+    void VisitOMPDeclareSimdDecl(OMPDeclareSimdDecl *D);
   };
 }
 
@@ -1349,7 +1351,9 @@ void ASTDeclReader::VisitCXXMethodDecl(CXXMethodDecl *D) {
 
 void ASTDeclReader::VisitCXXConstructorDecl(CXXConstructorDecl *D) {
   VisitCXXMethodDecl(D);
-  
+
+  if (auto *CD = ReadDeclAs<CXXConstructorDecl>(Record, Idx))
+    D->setInheritedConstructor(CD);
   D->IsExplicitSpecified = Record[Idx++];
   std::tie(D->CtorInitializers, D->NumCtorInitializers) =
       Reader.ReadCXXCtorInitializers(F, Record, Idx);
@@ -1952,6 +1956,32 @@ void ASTDeclReader::VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D) {
     Data.push_back(OMPDeclareReductionDecl::ReductionData(QTy, SR, E1, E2));
   }
   D->setData(Data);
+}
+
+void ASTDeclReader::VisitOMPDeclareSimdDecl(OMPDeclareSimdDecl *D) {
+  VisitDecl(D);
+  unsigned NumVariants = D->simd_variants_size();
+  unsigned NumClauses  = D->clauses_size();
+  if (NumClauses > 0) {
+    SmallVector<OMPClause *, 8> Clauses;
+    OMPClauseReader ClauseReader(Reader, Reader.getContext(), Record, Idx, F);
+    for (unsigned i = 0; i != NumClauses; ++i) {
+      Clauses.push_back(ClauseReader.readClause());
+    }
+    D->setClauses(Clauses);
+  }
+  if (NumVariants > 0) {
+    SmallVector<OMPDeclareSimdDecl::SimdVariant, 8> SimdVariants;
+    for (unsigned i = 0; i != NumVariants; ++i) {
+      SourceRange SR = Reader.ReadSourceRange(F, Record, Idx);
+      unsigned BeginIdx = Record[Idx++];
+      unsigned EndIdx = Record[Idx++];
+      SimdVariants.push_back(OMPDeclareSimdDecl::SimdVariant(
+                                SR, BeginIdx, EndIdx));
+    }
+    D->setVariants(SimdVariants);
+  }
+  D->setFunction(ReadDeclAs<Decl>(Record, Idx));
 }
 
 //===----------------------------------------------------------------------===//
@@ -2589,6 +2619,13 @@ Decl *ASTReader::ReadDeclRecord(DeclID ID) {
   case DECL_OMP_DECLAREREDUCTION:
     D = OMPDeclareReductionDecl::CreateDeserialized(Context, ID, Record[Idx++]);
     break;
+  case DECL_OMP_DECLARESIMD: {
+    unsigned NumVariants = Record[Idx++];
+    unsigned NumClauses  = Record[Idx++];
+    D = OMPDeclareSimdDecl::CreateDeserialized(
+                              Context, ID, NumVariants, NumClauses);
+    }
+    break;
   case DECL_EMPTY:
     D = EmptyDecl::CreateDeserialized(Context, ID);
     break;
@@ -2629,12 +2666,10 @@ Decl *ASTReader::ReadDeclRecord(DeclID ID) {
       // There are updates. This means the context has external visible
       // storage, even if the original stored version didn't.
       LookupDC->setHasExternalVisibleStorage(true);
-      DeclContextVisibleUpdates &U = I->second;
-      for (DeclContextVisibleUpdates::iterator UI = U.begin(), UE = U.end();
-           UI != UE; ++UI) {
-        DeclContextInfo &Info = UI->second->DeclContextInfos[DC];
+      for (const auto &Update : I->second) {
+        DeclContextInfo &Info = Update.second->DeclContextInfos[DC];
         delete Info.NameLookupTableData;
-        Info.NameLookupTableData = UI->first;
+        Info.NameLookupTableData = Update.first;
       }
       PendingVisibleUpdates.erase(I);
     }
@@ -2666,6 +2701,7 @@ void ASTReader::loadDeclUpdateRecords(serialization::DeclID ID, Decl *D) {
   DeclUpdateOffsetsMap::iterator UpdI = DeclUpdateOffsets.find(ID);
   if (UpdI != DeclUpdateOffsets.end()) {
     FileOffsetsTy &UpdateOffsets = UpdI->second;
+    bool WasInteresting = isConsumerInterestedIn(D, false);
     for (FileOffsetsTy::iterator
          I = UpdateOffsets.begin(), E = UpdateOffsets.end(); I != E; ++I) {
       ModuleFile *F = I->first;
@@ -2678,33 +2714,23 @@ void ASTReader::loadDeclUpdateRecords(serialization::DeclID ID, Decl *D) {
       unsigned RecCode = Cursor.readRecord(Code, Record);
       (void)RecCode;
       assert(RecCode == DECL_UPDATES && "Expected DECL_UPDATES record!");
-      
+
       unsigned Idx = 0;
       ASTDeclReader Reader(*this, *F, ID, 0, Record, Idx);
       Reader.UpdateDecl(D, *F, Record);
+
+      // We might have made this declaration interesting. If so, remember that
+      // we need to hand it off to the consumer.
+      if (!WasInteresting &&
+          isConsumerInterestedIn(D, Reader.hasPendingBody())) {
+        InterestingDecls.push_back(D);
+        WasInteresting = true;
+      }
     }
   }
 }
 
 namespace {
-  struct CompareLocalRedeclarationsInfoToID {
-    bool operator()(const LocalRedeclarationsInfo &X, DeclID Y) {
-      return X.FirstID < Y;
-    }
-
-    bool operator()(DeclID X, const LocalRedeclarationsInfo &Y) {
-      return X < Y.FirstID;
-    }
-
-    bool operator()(const LocalRedeclarationsInfo &X, 
-                    const LocalRedeclarationsInfo &Y) {
-      return X.FirstID < Y.FirstID;
-    }
-    bool operator()(DeclID X, DeclID Y) {
-      return X < Y;
-    }
-  };
-  
   /// \brief Module visitor class that finds all of the redeclarations of a 
   /// 
   class RedeclChainVisitor {
@@ -2748,10 +2774,11 @@ namespace {
       
       // Perform a binary search to find the local redeclarations for this
       // declaration (if any).
+      const LocalRedeclarationsInfo Compare = { ID, 0 };
       const LocalRedeclarationsInfo *Result
         = std::lower_bound(M.RedeclarationsMap,
                            M.RedeclarationsMap + M.LocalNumRedeclarationsInMap, 
-                           ID, CompareLocalRedeclarationsInfoToID());
+                           Compare);
       if (Result == M.RedeclarationsMap + M.LocalNumRedeclarationsInMap ||
           Result->FirstID != ID) {
         // If we have a previously-canonical singleton declaration that was 
@@ -2826,24 +2853,6 @@ void ASTReader::loadPendingDeclChain(serialization::GlobalDeclID ID) {
 }
 
 namespace {
-  struct CompareObjCCategoriesInfo {
-    bool operator()(const ObjCCategoriesInfo &X, DeclID Y) {
-      return X.DefinitionID < Y;
-    }
-    
-    bool operator()(DeclID X, const ObjCCategoriesInfo &Y) {
-      return X < Y.DefinitionID;
-    }
-    
-    bool operator()(const ObjCCategoriesInfo &X, 
-                    const ObjCCategoriesInfo &Y) {
-      return X.DefinitionID < Y.DefinitionID;
-    }
-    bool operator()(DeclID X, DeclID Y) {
-      return X < Y;
-    }
-  };
-
   /// \brief Given an ObjC interface, goes through the modules and links to the
   /// interface all the categories for it.
   class ObjCCategoriesVisitor {
@@ -2905,15 +2914,12 @@ namespace {
         Tail(0) 
     {
       // Populate the name -> category map with the set of known categories.
-      for (ObjCInterfaceDecl::known_categories_iterator
-             Cat = Interface->known_categories_begin(),
-             CatEnd = Interface->known_categories_end();
-           Cat != CatEnd; ++Cat) {
+      for (auto *Cat : Interface->known_categories()) {
         if (Cat->getDeclName())
-          NameCategoryMap[Cat->getDeclName()] = *Cat;
+          NameCategoryMap[Cat->getDeclName()] = Cat;
         
         // Keep track of the tail of the category list.
-        Tail = *Cat;
+        Tail = Cat;
       }
     }
 
@@ -2936,10 +2942,11 @@ namespace {
 
       // Perform a binary search to find the local redeclarations for this
       // declaration (if any).
+      const ObjCCategoriesInfo Compare = { LocalID, 0 };
       const ObjCCategoriesInfo *Result
         = std::lower_bound(M.ObjCCategoriesMap,
                            M.ObjCCategoriesMap + M.LocalNumObjCCategoriesInMap, 
-                           LocalID, CompareObjCCategoriesInfo());
+                           Compare);
       if (Result == M.ObjCCategoriesMap + M.LocalNumObjCCategoriesInMap ||
           Result->DefinitionID != LocalID) {
         // We didn't find anything. If the class definition is in this module
@@ -3003,6 +3010,36 @@ void ASTDeclReader::UpdateDecl(Decl *D, ModuleFile &ModuleFile,
           Reader.ReadSourceLocation(ModuleFile, Record, Idx));
       break;
 
+    case UPD_CXX_INSTANTIATED_FUNCTION_DEFINITION: {
+      FunctionDecl *FD = cast<FunctionDecl>(D);
+      if (Reader.PendingBodies[FD])
+        // FIXME: Maybe check for ODR violations.
+        break;
+
+      if (Record[Idx++])
+        FD->setImplicitlyInline();
+      FD->setInnerLocStart(Reader.ReadSourceLocation(ModuleFile, Record, Idx));
+      if (auto *CD = dyn_cast<CXXConstructorDecl>(FD))
+        std::tie(CD->CtorInitializers, CD->NumCtorInitializers) =
+            Reader.ReadCXXCtorInitializers(ModuleFile, Record, Idx);
+      // Store the offset of the body so we can lazily load it later.
+      Reader.PendingBodies[FD] = GetCurrentCursorOffset();
+      HasPendingBody = true;
+      assert(Idx == Record.size() && "lazy body must be last");
+      break;
+    }
+
+    case UPD_CXX_RESOLVED_EXCEPTION_SPEC: {
+      auto *FD = cast<FunctionDecl>(D);
+      auto *FPT = FD->getType()->castAs<FunctionProtoType>();
+      auto EPI = FPT->getExtProtoInfo();
+      SmallVector<QualType, 8> ExceptionStorage;
+      Reader.readExceptionSpec(ModuleFile, ExceptionStorage, EPI, Record, Idx);
+      FD->setType(Reader.Context.getFunctionType(FPT->getReturnType(),
+                                                 FPT->getParamTypes(), EPI));
+      break;
+    }
+
     case UPD_CXX_DEDUCED_RETURN_TYPE: {
       FunctionDecl *FD = cast<FunctionDecl>(D);
       Reader.Context.adjustDeducedFunctionResultType(
@@ -3016,6 +3053,14 @@ void ASTDeclReader::UpdateDecl(Decl *D, ModuleFile &ModuleFile,
       D->Used = true;
       break;
     }
+
+    case UPD_MANGLING_NUMBER:
+      Reader.Context.setManglingNumber(cast<NamedDecl>(D), Record[Idx++]);
+      break;
+
+    case UPD_STATIC_LOCAL_NUMBER:
+      Reader.Context.setStaticLocalNumber(cast<VarDecl>(D), Record[Idx++]);
+      break;
     }
   }
 }

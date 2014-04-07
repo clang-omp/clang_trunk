@@ -447,13 +447,14 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   Opts.InstrumentFunctions = Args.hasArg(OPT_finstrument_functions);
   Opts.InstrumentForProfiling = Args.hasArg(OPT_pg);
   Opts.EmitOpenCLArgMetadata = Args.hasArg(OPT_cl_kernel_arg_info);
+  Opts.CompressDebugSections = Args.hasArg(OPT_compress_debug_sections);
   Opts.DebugCompilationDir = Args.getLastArgValue(OPT_fdebug_compilation_dir);
   Opts.LinkBitcodeFile = Args.getLastArgValue(OPT_mlink_bitcode_file);
   Opts.SanitizerBlacklistFile = Args.getLastArgValue(OPT_fsanitize_blacklist);
   Opts.SanitizeMemoryTrackOrigins =
-    Args.hasArg(OPT_fsanitize_memory_track_origins);
+      getLastArgIntValue(Args, OPT_fsanitize_memory_track_origins_EQ, 0, Diags);
   Opts.SanitizeUndefinedTrapOnError =
-    Args.hasArg(OPT_fsanitize_undefined_trap_on_error);
+      Args.hasArg(OPT_fsanitize_undefined_trap_on_error);
   Opts.SSPBufferSize =
       getLastArgIntValue(Args, OPT_stack_protector_buffer_size, 8, Diags);
   Opts.StackRealignment = Args.hasArg(OPT_mstackrealign);
@@ -528,6 +529,7 @@ static void ParseDependencyOutputArgs(DependencyOutputOptions &Opts,
   Opts.OutputFile = Args.getLastArgValue(OPT_dependency_file);
   Opts.Targets = Args.getAllArgValues(OPT_MT);
   Opts.IncludeSystemHeaders = Args.hasArg(OPT_sys_header_deps);
+  Opts.IncludeModuleFiles = Args.hasArg(OPT_module_file_deps);
   Opts.UsePhonyTargets = Args.hasArg(OPT_MP);
   Opts.ShowHeaderIncludes = Args.hasArg(OPT_H);
   Opts.HeaderIncludeOutputFile = Args.getLastArgValue(OPT_header_include_file);
@@ -930,6 +932,9 @@ static void ParseHeaderSearchArgs(HeaderSearchOptions &Opts, ArgList &Args) {
       Args.hasArg(OPT_fmodules_validate_once_per_build_session);
   Opts.BuildSessionTimestamp =
       getLastArgUInt64Value(Args, OPT_fbuild_session_timestamp, 0);
+  Opts.ModulesValidateSystemHeaders =
+      Args.hasArg(OPT_fmodules_validate_system_headers);
+
   for (arg_iterator it = Args.filtered_begin(OPT_fmodules_ignore_macro),
                     ie = Args.filtered_end();
        it != ie; ++it) {
@@ -1015,12 +1020,12 @@ static void ParseHeaderSearchArgs(HeaderSearchOptions &Opts, ArgList &Args) {
   }
 
   // Add the path prefixes which are implicitly treated as being system headers.
-  for (arg_iterator I = Args.filtered_begin(OPT_isystem_prefix,
-                                            OPT_ino_system_prefix),
+  for (arg_iterator I = Args.filtered_begin(OPT_system_header_prefix,
+                                            OPT_no_system_header_prefix),
                     E = Args.filtered_end();
        I != E; ++I)
-    Opts.AddSystemHeaderPrefix((*I)->getValue(),
-                               (*I)->getOption().matches(OPT_isystem_prefix));
+    Opts.AddSystemHeaderPrefix(
+        (*I)->getValue(), (*I)->getOption().matches(OPT_system_header_prefix));
 
   for (arg_iterator I = Args.filtered_begin(OPT_ivfsoverlay),
        E = Args.filtered_end(); I != E; ++I)
@@ -1111,6 +1116,9 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
 
   // OpenCL and C++ both have bool, true, false keywords.
   Opts.Bool = Opts.OpenCL || Opts.CPlusPlus;
+
+  // OpenCL has half keyword
+  Opts.Half = Opts.OpenCL;
 
   // C++ has wchar_t keyword.
   Opts.WChar = Opts.CPlusPlus;

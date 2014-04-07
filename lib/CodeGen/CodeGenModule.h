@@ -259,6 +259,25 @@ class CodeGenModule : public CodeGenTypeCache {
   RREntrypoints *RRData;
   PGOProfileData *PGOData;
 
+  struct ElementalVariantInfo {
+    /// \brief The CodeGen infomation of this function.
+    const CGFunctionInfo *FnInfo;
+    /// \brief The elemental function declaration.
+    const FunctionDecl *FD;
+    /// \brief The LLVM function of this declaration.
+    llvm::Function *Fn;
+    /// \brief The metadata describing this elemental function.
+    llvm::MDNode *KernelMD;
+
+    ElementalVariantInfo(const CGFunctionInfo *FnInfo, const FunctionDecl *FD,
+                         llvm::Function *Fn, llvm::MDNode *KernelMD)
+    : FnInfo(FnInfo), FD(FD), Fn(Fn), KernelMD(KernelMD) { }
+  };
+
+  /// ElementalVariantToEmit - This contains all Cilk Plus elemental function
+  /// variants to be emitted.
+  llvm::SmallVector<ElementalVariantInfo, 8> ElementalVariantToEmit;
+
   // WeakRefReferences - A set of references that have only been seen via
   // a weakref so far. This is used to remove the weak of the reference if we
   // ever see a direct reference or a definition.
@@ -283,6 +302,8 @@ class CodeGenModule : public CodeGenTypeCache {
     DeferredDeclsToEmit.push_back(DeferredGlobal(GV, GD));
   }
 
+  /// DeferredOMP -- deferred OpenMP directives (e.g. #omp declare simd).
+  std::vector<const OMPDeclareSimdDecl*> DeferredOMP;
   /// List of alias we have emitted. Used to make sure that what they point to
   /// is defined once we get to the end of the of the translation unit.
   std::vector<GlobalDecl> Aliases;
@@ -319,7 +340,10 @@ class CodeGenModule : public CodeGenTypeCache {
   llvm::StringMap<llvm::Constant*> AnnotationStrings;
 
   llvm::StringMap<llvm::Constant*> CFConstantStringMap;
-  llvm::StringMap<llvm::GlobalVariable*> ConstantStringMap;
+
+  llvm::StringMap<llvm::GlobalVariable *> Constant1ByteStringMap;
+  llvm::StringMap<llvm::GlobalVariable *> Constant2ByteStringMap;
+  llvm::StringMap<llvm::GlobalVariable *> Constant4ByteStringMap;
   llvm::DenseMap<const Decl*, llvm::Constant *> StaticLocalDeclMap;
   llvm::DenseMap<const Decl*, llvm::GlobalVariable*> StaticLocalDeclGuardMap;
   llvm::DenseMap<const Expr*, llvm::Constant *> MaterializedGlobalTemporaryMap;
@@ -469,6 +493,75 @@ public:
     assert(CUDARuntime != 0);
     return *CUDARuntime;
   }
+
+  // A common data structure to represent vector function attributes in
+  // cilk vector functions and 'omp declare simd' functions.
+  struct CilkElementalGroup {
+    typedef SmallVector<QualType, 1> VecLengthForVector;
+    typedef SmallVector<unsigned, 1> VecLengthVector;
+    // Masking: 0-nomask/notinbranch, 1-mask/inbranch
+    typedef SmallVector<unsigned, 2> MaskVector;
+    typedef std::map<std::string, std::pair<int,std::string> > LinearMap;
+    typedef std::map<std::string, unsigned> AlignedMap;
+    typedef std::set<std::string> UniformSet;
+
+    VecLengthVector VecLength;
+    VecLengthForVector VecLengthFor;
+    LinearMap  LinearParms;
+    AlignedMap AlignedParms;
+    UniformSet UniformParms;
+    MaskVector Mask;
+
+    bool getUniformAttr(std::string Name) const {
+      return UniformParms.count(Name) != 0;
+    }
+
+    bool getLinearAttr(std::string Name, std::pair<int,std::string> *out_step) const {
+      const LinearMap::const_iterator it = LinearParms.find(Name);
+      if (it == LinearParms.end()) return false;
+      *out_step = it->second;
+      return true;
+    }
+
+    bool getAlignedAttr(std::string Name, unsigned *out_alignment) const {
+      const AlignedMap::const_iterator I = AlignedParms.find(Name);
+      if (I == AlignedParms.end()) return false;
+      *out_alignment = I->second;
+      return true;
+    }
+
+    void setLinear(std::string Name, std::string Idname, int Step) {
+      LinearParms[Name].first = Step;
+      LinearParms[Name].second = Idname;
+    }
+
+    void setAligned(std::string Name, unsigned Alignment) {
+      AlignedParms[Name] = Alignment;
+    }
+
+    void setUniform(std::string Name) {
+      UniformParms.insert(Name);
+    }
+  };
+
+  typedef llvm::SmallDenseMap<unsigned, CilkElementalGroup, 4> GroupMap;
+
+  // The following is common part for 'cilk vector functions' and
+  // 'omp declare simd' functions metadata generation.
+  //
+  void EmitVectorVariantsMetadata(const CGFunctionInfo &FnInfo,
+                                  const FunctionDecl *FD,
+                                  llvm::Function *Fn,
+                                  GroupMap &Groups);
+
+  /// Add an elemental function metadata node to the named metadata node
+  /// 'cilk.functions'.
+  void EmitCilkElementalMetadata(const CGFunctionInfo &FnInfo,
+                                 const FunctionDecl *FD, llvm::Function *Fn);
+
+  /// Emit all elemental function vector variants in this module.
+  void EmitCilkElementalVariants();
+
 
   ARCEntrypoints &getARCEntrypoints() const {
     assert(getLangOpts().ObjCAutoRefCount && ARCData != 0);
@@ -905,6 +998,10 @@ public:
   /// as a return type.
   bool ReturnTypeUsesSRet(const CGFunctionInfo &FI);
 
+  /// ReturnSlotInterferesWithArgs - Return true iff the given type uses an
+  /// argument slot when 'sret' is used as a return type.
+  bool ReturnSlotInterferesWithArgs(const CGFunctionInfo &FI);
+
   /// ReturnTypeUsesFPRet - Return true iff the given type uses 'fpret' when
   /// used as a return type.
   bool ReturnTypeUsesFPRet(QualType ResultType);
@@ -1014,6 +1111,9 @@ public:
   /// \brief Emit a code for declare reduction variables.
   ///
   void EmitOMPDeclareReduction(const OMPDeclareReductionDecl *D);
+  /// \brief Emit vector variants and metadata for 'omp declare simd'.
+  ///
+  void EmitOMPDeclareSimd(const OMPDeclareSimdDecl *D);
 
   /// \brief Creates a structure with the location info for Intel OpenMP RTL.
   llvm::Value *CreateIntelOpenMPRTLLoc(SourceLocation Loc,
@@ -1066,6 +1166,7 @@ public:
       unsigned     UntiedCounter;
       llvm::Value *UntiedSwitch;
       llvm::BasicBlock *UntiedEnd;
+      CodeGenFunction *ParentCGF;
       bool NoWait;
       bool Mergeable;
       bool Ordered;
@@ -1073,7 +1174,6 @@ public:
       const Expr *ChunkSize;
       bool NewTask;
       bool Untied;
-      bool HasFirstPrivate;
       bool HasLastPrivate;
       llvm::DenseMap<const ValueDecl *, FieldDecl *> TaskFields;
       llvm::Type *TaskPrivateTy;
@@ -1085,9 +1185,11 @@ public:
     typedef llvm::SmallVector<OMPStackElemTy, 16> OMPStackTy;
     OMPStackTy OpenMPStack;
     CodeGenModule &CGM;
+    llvm::Type *KMPDependInfoType;
+    unsigned KMPDependInfoTypeAlign;
   public:
     OpenMPSupportStackTy(CodeGenModule &CGM)
-      : OpenMPThreadPrivate(), OpenMPStack(), CGM(CGM) { }
+      : OpenMPThreadPrivate(), OpenMPStack(), CGM(CGM), KMPDependInfoType(0) { }
     const Expr *hasThreadPrivateVar(const VarDecl *VD) {
       llvm::DenseMap<const Decl *, const Expr *>::iterator I =
                                                   OpenMPThreadPrivate.find(VD);
@@ -1178,8 +1280,6 @@ public:
     void setUntied(bool Flag);
     bool getUntied();
     bool getParentUntied();
-    void setHasFirstPrivate(bool Flag);
-    bool hasFirstPrivate();
     void setHasLastPrivate(bool Flag);
     bool hasLastPrivate();
     llvm::Value *getTaskFlags();
@@ -1191,6 +1291,9 @@ public:
     void getUntiedData(llvm::Value *&UntiedPartIdAddr, llvm::Value *&UntiedSwitch, llvm::BasicBlock *&UntiedEnd, unsigned &UntiedCounter);
     void setParentUntiedData(llvm::Value *UntiedPartIdAddr, llvm::Value *UntiedSwitch, llvm::BasicBlock *UntiedEnd, unsigned UntiedCounter);
     void getParentUntiedData(llvm::Value *&UntiedPartIdAddr, llvm::Value *&UntiedSwitch, llvm::BasicBlock *&UntiedEnd, unsigned &UntiedCounter);
+    void setKMPDependInfoType(llvm::Type *Ty, unsigned Align) { KMPDependInfoType = Ty; KMPDependInfoTypeAlign = Align; }
+    llvm::Type *getKMPDependInfoType() { return KMPDependInfoType; }
+    unsigned getKMPDependInfoTypeAlign() { return KMPDependInfoTypeAlign; }
   };
 
   OpenMPSupportStackTy OpenMPSupport;
