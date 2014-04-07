@@ -179,6 +179,12 @@ void CodeGenFunction::EmitStmt(const Stmt *S) {
   case Stmt::OMPParallelDirectiveClass:
     EmitOMPParallelDirective(cast<OMPParallelDirective>(*S));
     break;
+  case Stmt::OMPParallelForDirectiveClass:
+    EmitOMPParallelForDirective(cast<OMPParallelForDirective>(*S));
+    break;
+  case Stmt::OMPParallelForSimdDirectiveClass:
+    EmitOMPParallelForSimdDirective(cast<OMPParallelForSimdDirective>(*S));
+    break;
   case Stmt::OMPSimdDirectiveClass:
     EmitOMPSimdDirective(cast<OMPSimdDirective>(*S));
     break;
@@ -194,11 +200,20 @@ void CodeGenFunction::EmitStmt(const Stmt *S) {
   case Stmt::OMPSectionsDirectiveClass:
     EmitOMPSectionsDirective(cast<OMPSectionsDirective>(*S));
     break;
+  case Stmt::OMPParallelSectionsDirectiveClass:
+    EmitOMPParallelSectionsDirective(cast<OMPParallelSectionsDirective>(*S));
+    break;
   case Stmt::OMPSectionDirectiveClass:
     EmitOMPSectionDirective(cast<OMPSectionDirective>(*S));
     break;
   case Stmt::OMPTaskgroupDirectiveClass:
     EmitOMPTaskgroupDirective(cast<OMPTaskgroupDirective>(*S));
+    break;
+  case Stmt::OMPCancelDirectiveClass:
+    EmitOMPCancelDirective(cast<OMPCancelDirective>(*S));
+    break;
+  case Stmt::OMPCancellationPointDirectiveClass:
+    EmitOMPCancellationPointDirective(cast<OMPCancellationPointDirective>(*S));
     break;
   case Stmt::ObjCAtTryStmtClass:
     EmitObjCAtTryStmt(cast<ObjCAtTryStmt>(*S));
@@ -2324,13 +2339,12 @@ CodeGenFunction::GenerateCapturedStmtArgument(const CapturedStmt &S) {
   return CapStruct.getAddress();
 }
 
-void CodeGenFunction::EmitCapturedStmtInlined(const CapturedStmt &S,
-                                              CapturedRegionKind K,
-                                              llvm::Value *Arg,
-                                              SourceLocation Loc) {
-  const CapturedDecl *CD = S.getCapturedDecl();
+void CodeGenFunction::InitOpenMPFunction(llvm::Value *Context,
+                                         const CapturedStmt &S) {
+  CapturedStmtInfo =
+      new CGOpenMPCapturedStmtInfo(Context, S, CGM, S.getCapturedRegionKind());
+
   const RecordDecl *RD = S.getCapturedRecordDecl();
-  assert(CD->hasBody() && "missing CapturedDecl body");
 
   for (RecordDecl::field_iterator I = RD->field_begin(),
                                   E = RD->field_end();
@@ -2340,20 +2354,12 @@ void CodeGenFunction::EmitCapturedStmtInlined(const CapturedStmt &S,
     }
   }
 
-  // Set the context parameter in CapturedStmtInfo.
-  if (CapturedStmtInfo) {
-    CapturedStmtInfo->setContextValue(Arg);
-
-    // If 'this' is captured, load it into CXXThisValue.
-    if (CapturedStmtInfo->isCXXThisExprCaptured()) {
-      ASTContext &Ctx = getContext();
-      FieldDecl *FD = CapturedStmtInfo->getThisFieldDecl();
-      LValue LV = MakeNaturalAlignAddrLValue(CapturedStmtInfo->getContextValue(),
-                                             Ctx.getTagDeclType(RD));
-      LValue ThisLValue = EmitLValueForField(LV, FD);
-
-      CXXThisValue = EmitLoadOfLValue(ThisLValue, Loc).getScalarVal();
-    }
-    CapturedStmtInfo->EmitBody(*this, CD->getBody());
+  // If 'this' is captured, load it into CXXThisValue.
+  if (CapturedStmtInfo->isCXXThisExprCaptured()) {
+    FieldDecl *FD = CapturedStmtInfo->getThisFieldDecl();
+    LValue LV = MakeNaturalAlignAddrLValue(CapturedStmtInfo->getContextValue(),
+                                           getContext().getTagDeclType(RD));
+    LValue ThisLValue = EmitLValueForField(LV, FD);
+    CXXThisValue = EmitLoadOfLValue(ThisLValue, FD->getLocStart()).getScalarVal();
   }
 }

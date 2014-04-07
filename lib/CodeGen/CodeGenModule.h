@@ -1174,7 +1174,6 @@ public:
       const Expr *ChunkSize;
       bool NewTask;
       bool Untied;
-      bool HasFirstPrivate;
       bool HasLastPrivate;
       llvm::DenseMap<const ValueDecl *, FieldDecl *> TaskFields;
       llvm::Type *TaskPrivateTy;
@@ -1280,8 +1279,6 @@ public:
     void setUntied(bool Flag);
     bool getUntied();
     bool getParentUntied();
-    void setHasFirstPrivate(bool Flag);
-    bool hasFirstPrivate();
     void setHasLastPrivate(bool Flag);
     bool hasLastPrivate();
     llvm::Value *getTaskFlags();

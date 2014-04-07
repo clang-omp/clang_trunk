@@ -23,14 +23,14 @@ T tmain(T argc, T *argv) {
 // CHECK-NEXT: static int a;
 // CHECK-NEXT: #pragma omp parallel
 // CHECK-NEXT: a = 2;
-// CHECK-NEXT: #pragma omp parallel default(none) private(argc,b) firstprivate(argv) shared(d) if(.omp.if.var.)
+// CHECK-NEXT: #pragma omp parallel default(none) private(argc,b) firstprivate(argv) shared(d) if(argc > 0)
 // CHECK-NEXT: foo()
 // CHECK: template <typename T = float> float tmain(float argc, float *argv) {
 // CHECK-NEXT: float b = argc, c, d, e, f, g;
 // CHECK-NEXT: static float a;
 // CHECK-NEXT: #pragma omp parallel
 // CHECK-NEXT: a = 2;
-// CHECK-NEXT: #pragma omp parallel default(none) private(argc,b) firstprivate(argv) shared(d) if(.omp.if.var.)
+// CHECK-NEXT: #pragma omp parallel default(none) private(argc,b) firstprivate(argv) shared(d) if(argc > 0)
 // CHECK-NEXT: foo()
 // CHECK: template <typename T> T tmain(T argc, T *argv) {
 // CHECK-NEXT: T b = argc, c, d, e, f, g;
@@ -50,7 +50,7 @@ int main (int argc, char **argv) {
   a=2;
 // CHECK-NEXT: a = 2;
 #pragma omp parallel if(a) num_threads(a), default(none), private(argc,b),firstprivate(argv, c),shared(d,f),reduction(+:e) reduction(min : g) proc_bind(master)
-// CHECK: #pragma omp parallel if(.omp.if.var.) num_threads(a) default(none) private(argc,b) firstprivate(argv,c) shared(d,f) reduction(+: e) reduction(min: g) proc_bind(master)
+// CHECK: #pragma omp parallel if(a) num_threads(a) default(none) private(argc,b) firstprivate(argv,c) shared(d,f) reduction(+: e) reduction(min: g) proc_bind(master)
   foo();
 // CHECK-NEXT: foo();
   return tmain(b, &b) + tmain(x, &x);

@@ -2375,6 +2375,14 @@ DEF_TRAVERSE_STMT(OMPForDirective, {
   return TraverseOMPExecutableDirective(S);
 })
 
+DEF_TRAVERSE_STMT(OMPParallelForDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
+DEF_TRAVERSE_STMT(OMPParallelForSimdDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
 DEF_TRAVERSE_STMT(OMPSimdDirective, {
   return TraverseOMPExecutableDirective(S);
 })
@@ -2384,6 +2392,10 @@ DEF_TRAVERSE_STMT(OMPForSimdDirective, {
 })
 
 DEF_TRAVERSE_STMT(OMPSectionsDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
+DEF_TRAVERSE_STMT(OMPParallelSectionsDirective, {
   return TraverseOMPExecutableDirective(S);
 })
 
@@ -2441,6 +2453,14 @@ bool DataRecursiveASTVisitor<Derived>::VisitOMPCopyinClause(OMPCopyinClause *C) 
   VisitOMPClauseList(C);
   return true;
 }
+
+DEF_TRAVERSE_STMT(OMPCancelDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
+DEF_TRAVERSE_STMT(OMPCancellationPointDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
 
 // FIXME: look at the following tricky-seeming exprs to see if we
 // need to recurse on anything.  These are ones that have methods

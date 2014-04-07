@@ -945,6 +945,16 @@ void StmtPrinter::VisitOMPParallelDirective(OMPParallelDirective *Node) {
   VisitOMPExecutableDirective(Node);
 }
 
+void StmtPrinter::VisitOMPParallelForDirective(OMPParallelForDirective *Node) {
+  Indent() << "#pragma omp parallel for ";
+  VisitOMPExecutableDirective(Node);
+}
+
+void StmtPrinter::VisitOMPParallelForSimdDirective(OMPParallelForSimdDirective *Node) {
+  Indent() << "#pragma omp parallel for simd ";
+  VisitOMPExecutableDirective(Node);
+}
+
 void StmtPrinter::VisitOMPForDirective(OMPForDirective *Node) {
   Indent() << "#pragma omp for ";
   VisitOMPExecutableDirective(Node);
@@ -952,6 +962,11 @@ void StmtPrinter::VisitOMPForDirective(OMPForDirective *Node) {
 
 void StmtPrinter::VisitOMPSectionsDirective(OMPSectionsDirective *Node) {
   Indent() << "#pragma omp sections ";
+  VisitOMPExecutableDirective(Node);
+}
+
+void StmtPrinter::VisitOMPParallelSectionsDirective(OMPParallelSectionsDirective *Node) {
+  Indent() << "#pragma omp parallel sections ";
   VisitOMPExecutableDirective(Node);
 }
 
@@ -1027,6 +1042,19 @@ void StmtPrinter::VisitOMPSimdDirective(OMPSimdDirective *Node) {
 
 void StmtPrinter::VisitOMPForSimdDirective(OMPForSimdDirective *Node) {
   Indent() << "#pragma omp for simd ";
+  VisitOMPExecutableDirective(Node);
+}
+
+void StmtPrinter::VisitOMPCancelDirective(OMPCancelDirective *Node) {
+  Indent() << "#pragma omp cancel "
+    << getOpenMPDirectiveName(Node->getConstructType()) << " ";
+  VisitOMPExecutableDirective(Node);
+}
+
+void StmtPrinter::VisitOMPCancellationPointDirective(
+                                OMPCancellationPointDirective *Node) {
+  Indent() << "#pragma omp cancellation point "
+    << getOpenMPDirectiveName(Node->getConstructType());
   VisitOMPExecutableDirective(Node);
 }
 

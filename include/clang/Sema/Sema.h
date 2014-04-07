@@ -7122,7 +7122,6 @@ public:
   
   // OpenMP directives and clauses.
 private:
-  llvm::SmallVector<Stmt *, 4> AdditionalOpenMPStmt;
   void *VarDataSharingAttributesStack;
   /// \brief Initialization of data-sharing attributes stack.
   void InitDataSharingAttributesStack();
@@ -7323,7 +7322,8 @@ public:
                                             ArrayRef<OMPClause *> Clauses,
                                             Stmt *AStmt,
                                             SourceLocation StartLoc,
-                                            SourceLocation EndLoc);
+                                            SourceLocation EndLoc,
+                                            OpenMPDirectiveKind ConstructType);
   /// \brief Called on well-formed '\#pragma omp parallel' after parsing
   /// of the  associated statement.
   StmtResult ActOnOpenMPParallelDirective(ArrayRef<OMPClause *> Clauses,
@@ -7337,6 +7337,20 @@ public:
                                      Stmt *AStmt,
                                      SourceLocation StartLoc,
                                      SourceLocation EndLoc);
+  /// \brief Called on well-formed '\#pragma omp parallel for' after parsing
+  /// of the  associated statement.
+  StmtResult ActOnOpenMPParallelForDirective(OpenMPDirectiveKind Kind,
+                                             ArrayRef<OMPClause *> Clauses,
+                                             Stmt *AStmt,
+                                             SourceLocation StartLoc,
+                                             SourceLocation EndLoc);
+  /// \brief Called on well-formed '\#pragma omp parallel for simd' after parsing
+  /// of the  associated statement.
+  StmtResult ActOnOpenMPParallelForSimdDirective(OpenMPDirectiveKind Kind,
+                                                 ArrayRef<OMPClause *> Clauses,
+                                                 Stmt *AStmt,
+                                                 SourceLocation StartLoc,
+                                                 SourceLocation EndLoc);
   /// \brief Called on well-formed '\#pragma omp simd' after parsing
   /// of the associated statement.
   StmtResult ActOnOpenMPSimdDirective(OpenMPDirectiveKind Kind,
@@ -7359,6 +7373,13 @@ public:
                                           Stmt *AStmt,
                                           SourceLocation StartLoc,
                                           SourceLocation EndLoc);
+  /// \brief Called on well-formed '\#pragma omp parallel sections' after parsing
+  /// of the  associated statement.
+  StmtResult ActOnOpenMPParallelSectionsDirective(OpenMPDirectiveKind Kind,
+                                                  ArrayRef<OMPClause *> Clauses,
+                                                  Stmt *AStmt,
+                                                  SourceLocation StartLoc,
+                                                  SourceLocation EndLoc);
   /// \brief Called on well-formed '\#pragma omp section' after parsing
   /// of the  associated statement.
   StmtResult ActOnOpenMPSectionDirective(Stmt *AStmt,
@@ -7420,6 +7441,19 @@ public:
   StmtResult ActOnOpenMPOrderedDirective(Stmt *AStmt,
                                          SourceLocation StartLoc,
                                          SourceLocation EndLoc);
+  /// \brief Called on well-formed '\#pragma omp cancel' after parsing
+  /// of the  associated statement.
+  StmtResult ActOnOpenMPCancelDirective(ArrayRef<OMPClause *> Clauses,
+                                        SourceLocation StartLoc,
+                                        SourceLocation EndLoc,
+                                        OpenMPDirectiveKind ConstructType);
+
+  /// \brief Called on well-formed '\#pragma omp cancellation point' after
+  /// parsing of the  associated statement.
+  StmtResult ActOnOpenMPCancellationPointDirective(
+                                            SourceLocation StartLoc,
+                                            SourceLocation EndLoc,
+                                            OpenMPDirectiveKind ConstructType);
 
   /// \brief Called on well-formed 'final' clause.
   OMPClause *ActOnOpenMPFinalClause(Expr *Condition, SourceLocation StartLoc,

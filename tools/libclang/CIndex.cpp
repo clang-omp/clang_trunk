@@ -1852,9 +1852,12 @@ public:
   void VisitOMPExecutableDirective(const OMPExecutableDirective *D);
   void VisitOMPParallelDirective(const OMPParallelDirective *D);
   void VisitOMPForDirective(const OMPForDirective *D);
+  void VisitOMPParallelForDirective(const OMPParallelForDirective *D);
+  void VisitOMPParallelForSimdDirective(const OMPParallelForSimdDirective *D);
   void VisitOMPSimdDirective(const OMPSimdDirective *D);
   void VisitOMPForSimdDirective(const OMPForSimdDirective *D);
   void VisitOMPSectionsDirective(const OMPSectionsDirective *D);
+  void VisitOMPParallelSectionsDirective(const OMPParallelSectionsDirective *D);
   void VisitOMPSectionDirective(const OMPSectionDirective *D);
   void VisitOMPSingleDirective(const OMPSingleDirective *D);
   void VisitOMPTaskDirective(const OMPTaskDirective *D);
@@ -1867,6 +1870,9 @@ public:
   void VisitOMPAtomicDirective(const OMPAtomicDirective *D);
   void VisitOMPFlushDirective(const OMPFlushDirective *D);
   void VisitOMPOrderedDirective(const OMPOrderedDirective *D);
+  void VisitOMPCancelDirective(const OMPCancelDirective *D);
+  void VisitOMPCancellationPointDirective(
+                       const OMPCancellationPointDirective *D);
 
 private:
   void AddDeclarationNameInfo(const Stmt *S);
@@ -2335,6 +2341,14 @@ void EnqueueVisitor::VisitOMPForDirective(const OMPForDirective *D) {
   VisitOMPExecutableDirective(D);
 }
 
+void EnqueueVisitor::VisitOMPParallelForDirective(const OMPParallelForDirective *D) {
+  VisitOMPExecutableDirective(D);
+}
+
+void EnqueueVisitor::VisitOMPParallelForSimdDirective(const OMPParallelForSimdDirective *D) {
+  VisitOMPExecutableDirective(D);
+}
+
 void EnqueueVisitor::VisitOMPSimdDirective(const OMPSimdDirective *D) {
   VisitOMPExecutableDirective(D);
 }
@@ -2344,6 +2358,10 @@ void EnqueueVisitor::VisitOMPForSimdDirective(const OMPForSimdDirective *D) {
 }
 
 void EnqueueVisitor::VisitOMPSectionsDirective(const OMPSectionsDirective *D) {
+  VisitOMPExecutableDirective(D);
+}
+
+void EnqueueVisitor::VisitOMPParallelSectionsDirective(const OMPParallelSectionsDirective *D) {
   VisitOMPExecutableDirective(D);
 }
 
@@ -2394,6 +2412,15 @@ void EnqueueVisitor::VisitOMPFlushDirective(const OMPFlushDirective *D) {
 }
 
 void EnqueueVisitor::VisitOMPOrderedDirective(const OMPOrderedDirective *D) {
+  VisitOMPExecutableDirective(D);
+}
+
+void EnqueueVisitor::VisitOMPCancelDirective(const OMPCancelDirective *D) {
+  VisitOMPExecutableDirective(D);
+}
+
+void EnqueueVisitor::VisitOMPCancellationPointDirective(
+                                   const OMPCancellationPointDirective *D) {
   VisitOMPExecutableDirective(D);
 }
 
@@ -4059,12 +4086,18 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
     return cxstring::createRef("OMPParallelDirective");
   case CXCursor_OMPForDirective:
     return cxstring::createRef("OMPForDirective");
+  case CXCursor_OMPParallelForDirective:
+    return cxstring::createRef("OMPParallelForDirective");
+  case CXCursor_OMPParallelForSimdDirective:
+    return cxstring::createRef("OMPParallelForSimdDirective");
   case CXCursor_OMPSimdDirective:
     return cxstring::createRef("OMPSimdDirective");
   case CXCursor_OMPForSimdDirective:
     return cxstring::createRef("OMPForSimdDirective");
   case CXCursor_OMPSectionsDirective:
     return cxstring::createRef("OMPSectionsDirective");
+  case CXCursor_OMPParallelSectionsDirective:
+    return cxstring::createRef("OMPParallelSectionsDirective");
   case CXCursor_OMPSectionDirective:
     return cxstring::createRef("OMPSectionDirective");
   case CXCursor_OMPSingleDirective:
@@ -4089,6 +4122,10 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
     return cxstring::createRef("OMPFlushDirective");
   case CXCursor_OMPOrderedDirective:
     return cxstring::createRef("OMPOrderedDirective");
+  case CXCursor_OMPCancelDirective:
+    return cxstring::createRef("OMPCancelDirective");
+  case CXCursor_OMPCancellationPointDirective:
+    return cxstring::createRef("OMPCancellationPointDirective");
   }
 
   llvm_unreachable("Unhandled CXCursorKind");
