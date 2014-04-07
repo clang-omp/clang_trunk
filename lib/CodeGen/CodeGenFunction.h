@@ -2189,6 +2189,10 @@ public:
     OpenMPDirectiveKind DKind,
     OpenMPDirectiveKind SKind,
     const OMPExecutableDirective &S);
+  void EmitOMPDirectiveWithParallel(
+    OpenMPDirectiveKind DKind,
+    OpenMPDirectiveKind SKind,
+    const OMPExecutableDirective &S);
 
   //===--------------------------------------------------------------------===//
   //                         LValue Expression Emission
