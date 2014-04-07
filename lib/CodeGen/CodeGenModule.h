@@ -1186,9 +1186,10 @@ public:
     typedef llvm::SmallVector<OMPStackElemTy, 16> OMPStackTy;
     OMPStackTy OpenMPStack;
     CodeGenModule &CGM;
+    llvm::Type *KMPDependInfoType;
   public:
     OpenMPSupportStackTy(CodeGenModule &CGM)
-      : OpenMPThreadPrivate(), OpenMPStack(), CGM(CGM) { }
+      : OpenMPThreadPrivate(), OpenMPStack(), CGM(CGM), KMPDependInfoType(0) { }
     const Expr *hasThreadPrivateVar(const VarDecl *VD) {
       llvm::DenseMap<const Decl *, const Expr *>::iterator I =
                                                   OpenMPThreadPrivate.find(VD);
@@ -1292,6 +1293,8 @@ public:
     void getUntiedData(llvm::Value *&UntiedPartIdAddr, llvm::Value *&UntiedSwitch, llvm::BasicBlock *&UntiedEnd, unsigned &UntiedCounter);
     void setParentUntiedData(llvm::Value *UntiedPartIdAddr, llvm::Value *UntiedSwitch, llvm::BasicBlock *UntiedEnd, unsigned UntiedCounter);
     void getParentUntiedData(llvm::Value *&UntiedPartIdAddr, llvm::Value *&UntiedSwitch, llvm::BasicBlock *&UntiedEnd, unsigned &UntiedCounter);
+    void setKMPDependInfoType(llvm::Type *Ty) { KMPDependInfoType = Ty; }
+    llvm::Type *getKMPDependInfoType() { return KMPDependInfoType; }
   };
 
   OpenMPSupportStackTy OpenMPSupport;

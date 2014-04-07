@@ -7012,12 +7012,26 @@ def err_omp_reduction_reference_type : Error<
   "a type name cannot be a reference type">;
 def err_omp_reduction_array_type : Error<
   "a type name cannot be an array type">;
-def err_omp_reduction_redeclared : Error <
+def err_omp_reduction_redeclared : Error<
   "previous declaration with type %0 is found">;
-def err_omp_reduction_non_function_init : Error <
+def err_omp_reduction_non_function_init : Error<
   "expected function call">;
 def err_setjmp_longjmp_in_omp_simd : Error<
   "The simd region cannot contain calls to the longjmp/setjmp functions">;
+def err_cean_not_in_statement : Error<
+  "extended array notation is not allowed">;
+def err_cean_lower_bound_not_integer : Error<
+  "lower bound expression has non-integer type %0">;
+def err_cean_length_not_integer : Error<
+  "length expression has non-integer type %0">;
+def err_cean_no_length_for_non_array : Error<
+  "cannot define default length for non-array type %0">;
+def err_omp_array_section_length_not_greater_zero : Error<
+  "length of the array section must be greater than 0">;
+def err_omp_expected_var_name_or_array_item : Error<
+  "expected variable name or an array item">;
+def err_omp_depend_arg_not_lvalue : Error<
+  "argument expression must be an l-value">;
 } // end of OpenMP category
 
 let CategoryName = "Related Result Type Issue" in {

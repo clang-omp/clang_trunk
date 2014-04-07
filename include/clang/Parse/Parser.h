@@ -57,6 +57,7 @@ class Parser : public CodeCompletionHandler {
   friend class ObjCDeclContextSwitch;
   friend class ParenBraceBracketBalancer;
   friend class BalancedDelimiterTracker;
+  friend class AllowCEANExpressions;
 
   Preprocessor &PP;
 
@@ -223,6 +224,8 @@ class Parser : public CodeCompletionHandler {
   bool ParsingInObjCContainer;
 
   bool SkipFunctionBodies;
+
+  bool IsCEANAllowed;
 
 public:
   Parser(Preprocessor &PP, Sema &Actions, bool SkipFunctionBodies);
