@@ -41,9 +41,8 @@ T tmain(T argc, S **argv) { //expected-note 2 {{declared here}}
   for (int i = ST; i < N; i++) argv[0][i] = argv[0][i] - argv[0][i-ST];
   #pragma omp simd safelen (4)
   for (int i = ST; i < N; i++) argv[0][i] = argv[0][i] - argv[0][i-ST];
-// FIXME: This is not working correctly:
-//  #pragma omp simd safelen (N)
-//  for (T i = ST; i < N; i++) argv[0][i] = argv[0][i] - argv[0][i-ST];
+  #pragma omp simd safelen (N) // expected-error {{expression is not a positive integer value}}
+  for (T i = ST; i < N; i++) argv[0][i] = argv[0][i] - argv[0][i-ST];
   return argc;
 }
 

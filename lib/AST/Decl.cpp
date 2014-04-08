@@ -3598,14 +3598,20 @@ BlockDecl *BlockDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
 
 CapturedDecl *CapturedDecl::Create(ASTContext &C, DeclContext *DC,
                                    unsigned NumParams) {
-  return new (C, DC, NumParams * sizeof(ImplicitParamDecl *))
+  CapturedDecl *CD = new (C, DC, NumParams * sizeof(ImplicitParamDecl *))
       CapturedDecl(DC, NumParams);
+  for (unsigned i = 0; i < NumParams; ++i)
+    CD->setParam(i, 0);
+  return CD;
 }
 
 CapturedDecl *CapturedDecl::CreateDeserialized(ASTContext &C, unsigned ID,
                                                unsigned NumParams) {
-  return new (C, ID, NumParams * sizeof(ImplicitParamDecl *))
+  CapturedDecl *CD = new (C, ID, NumParams * sizeof(ImplicitParamDecl *))
       CapturedDecl(0, NumParams);
+  for (unsigned i = 0; i < NumParams; ++i)
+    CD->setParam(i, 0);
+  return CD;
 }
 
 EnumConstantDecl *EnumConstantDecl::Create(ASTContext &C, EnumDecl *CD,
