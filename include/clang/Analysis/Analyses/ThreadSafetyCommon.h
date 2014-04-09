@@ -22,20 +22,11 @@
 #ifndef LLVM_CLANG_THREAD_SAFETY_COMMON_H
 #define LLVM_CLANG_THREAD_SAFETY_COMMON_H
 
-#include "clang/AST/Attr.h"
-#include "clang/AST/DeclCXX.h"
-#include "clang/AST/ExprCXX.h"
-#include "clang/AST/StmtCXX.h"
 #include "clang/Analysis/Analyses/PostOrderCFGView.h"
 #include "clang/Analysis/Analyses/ThreadSafetyTIL.h"
 #include "clang/Analysis/AnalysisContext.h"
-#include "clang/Analysis/CFG.h"
 #include "clang/Basic/OperatorKinds.h"
-#include "clang/Basic/SourceLocation.h"
-#include "clang/Basic/SourceManager.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
+
 #include <vector>
 
 
@@ -216,15 +207,16 @@ protected:
 
 public:
   SExprBuilder(til::MemRegionRef A, StatementMap *SM = nullptr)
-      : Arena(A), SMap(SM), SelfVar(nullptr) {
+      : Arena(A), SMap(SM), SelfVar(nullptr), CurrentBlock(nullptr) {
     // FIXME: we don't always have a self-variable.
     SelfVar = new (Arena) til::Variable(til::Variable::VK_SFun);
   }
 
 protected:
   til::MemRegionRef Arena;
-  StatementMap *SMap;       // Map from Stmt to TIL Variables
-  til::Variable *SelfVar;   // Variable to use for 'this'
+  StatementMap *SMap;             // Map from Stmt to TIL Variables
+  til::Variable *SelfVar;         // Variable to use for 'this'.  May be null.
+  til::BasicBlock* CurrentBlock;  // Current basic block.  May be null.
 };
 
 
