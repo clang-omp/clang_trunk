@@ -1271,6 +1271,7 @@ MacroInfo *ASTReader::ReadMacroRecord(ModuleFile &F, uint64_t Offset) {
       MacroInfo *MI = PP.AllocateDeserializedMacroInfo(Loc, SubModID);
       MI->setDefinitionEndLoc(ReadSourceLocation(F, Record, NextIndex));
       MI->setIsUsed(Record[NextIndex++]);
+      MI->setUsedForHeaderGuard(Record[NextIndex++]);
 
       if (RecType == PP_MACRO_FUNCTION_LIKE) {
         // Decode function-like macro info.
@@ -2117,7 +2118,7 @@ ASTReader::ReadControlBlock(ModuleFile &F,
       unsigned NumUserInputs = Record[1];
 
       if (!DisableValidation &&
-          (!HSOpts.ModulesValidateOncePerBuildSession ||
+          (ValidateSystemInputs || !HSOpts.ModulesValidateOncePerBuildSession ||
            F.InputFilesValidationTimestamp <= HSOpts.BuildSessionTimestamp)) {
         bool Complain = (ClientLoadCapabilities & ARR_OutOfDate) == 0;
 

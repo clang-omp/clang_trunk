@@ -2651,6 +2651,11 @@ void Parser::ParseCXXMemberSpecification(SourceLocation RecordLoc,
         continue;
       }
 
+      if (Tok.is(tok::annot_pragma_ms_pragma)) {
+        HandlePragmaMSPragma();
+        continue;
+      }
+
       // If we see a namespace here, a close brace was missing somewhere.
       if (Tok.is(tok::kw_namespace)) {
         DiagnoseUnexpectedNamespace(cast<NamedDecl>(TagDecl));

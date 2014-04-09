@@ -1141,6 +1141,9 @@ void StmtPrinter::VisitPredefinedExpr(PredefinedExpr *Node) {
     case PredefinedExpr::FuncDName:
       OS << "__FUNCDNAME__";
       break;
+    case PredefinedExpr::FuncSig:
+      OS << "__FUNCSIG__";
+      break;
     case PredefinedExpr::LFunction:
       OS << "L__FUNCTION__";
       break;

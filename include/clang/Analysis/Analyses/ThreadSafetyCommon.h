@@ -26,20 +26,14 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/StmtCXX.h"
-#include "clang/AST/StmtVisitor.h"
 #include "clang/Analysis/Analyses/PostOrderCFGView.h"
 #include "clang/Analysis/Analyses/ThreadSafetyTIL.h"
 #include "clang/Analysis/AnalysisContext.h"
 #include "clang/Analysis/CFG.h"
-#include "clang/Analysis/CFGStmtMap.h"
 #include "clang/Basic/OperatorKinds.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
-#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/FoldingSet.h"
-#include "llvm/ADT/ImmutableMap.h"
-#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include <vector>
@@ -48,42 +42,38 @@
 namespace clang {
 namespace threadSafety {
 
-
-// Simple Visitor class for traversing a clang CFG.
-class CFGVisitor {
-public:
-  // Enter the CFG for Decl D, and perform any initial setup operations.
-  void enterCFG(CFG *Cfg, const NamedDecl *D, const CFGBlock *First) {}
-
-  // Enter a CFGBlock.
-  void enterCFGBlock(const CFGBlock *B) {}
-
-  // Process an ordinary statement.
-  void handleStatement(const Stmt *S) {}
-
-  // Process a destructor call
-  void handleDestructorCall(const VarDecl *VD, const CXXDestructorDecl *DD) {}
-
-  // Process a successor edge.
-  void handleSuccessor(const CFGBlock *Succ) {}
-
-  // Process a successor back edge to a previously visited block.
-  void handleSuccessorBackEdge(const CFGBlock *Succ) {}
-
-  // Leave a CFGBlock.
-  void exitCFGBlock(const CFGBlock *B) {}
-
-  // Leave the CFG, and perform any final cleanup operations.
-  void exitCFG(const CFGBlock *Last) {}
-};
-
+// CFG traversal uses templates instead of virtual function dispatch. Visitors
+// must implement the following functions:
+//
+// Enter the CFG for Decl D, and perform any initial setup operations.
+// void enterCFG(CFG *Cfg, const NamedDecl *D, const CFGBlock *First) {}
+//
+// Enter a CFGBlock.
+// void enterCFGBlock(const CFGBlock *B) {}
+//
+// Process an ordinary statement.
+// void handleStatement(const Stmt *S) {}
+//
+// Process a destructor call
+// void handleDestructorCall(const VarDecl *VD, const CXXDestructorDecl *DD) {}
+//
+// Process a successor edge.
+// void handleSuccessor(const CFGBlock *Succ) {}
+//
+// Process a successor back edge to a previously visited block.
+// void handleSuccessorBackEdge(const CFGBlock *Succ) {}
+//
+// Leave a CFGBlock.
+// void exitCFGBlock(const CFGBlock *B) {}
+//
+// Leave the CFG, and perform any final cleanup operations.
+// void exitCFG(const CFGBlock *Last) {}
 
 // Walks the clang CFG, and invokes methods on a given CFGVisitor.
 class CFGWalker {
 public:
-  CFGWalker() : CFGraph(0), FDecl(0), ACtx(0), SortedGraph(0) {}
-
-  ~CFGWalker() { }
+  CFGWalker() :
+    CFGraph(nullptr), FDecl(nullptr), ACtx(nullptr), SortedGraph(nullptr) {}
 
   // Initialize the CFGWalker.  This setup only needs to be done once, even
   // if there are multiple passes over the CFG.
@@ -111,22 +101,20 @@ public:
 
     V.enterCFG(CFGraph, FDecl, &CFGraph->getEntry());
 
-    for (const CFGBlock* CurrBlock : *SortedGraph) {
+    for (const auto *CurrBlock : *SortedGraph) {
       VisitedBlocks.insert(CurrBlock);
 
       V.enterCFGBlock(CurrBlock);
 
       // Process statements
-      for (CFGBlock::const_iterator BI = CurrBlock->begin(),
-                                    BE = CurrBlock->end();
-           BI != BE; ++BI) {
-        switch (BI->getKind()) {
+      for (const auto &BI : *CurrBlock) {
+        switch (BI.getKind()) {
         case CFGElement::Statement: {
-          V.handleStatement(BI->castAs<CFGStmt>().getStmt());
+          V.handleStatement(BI.castAs<CFGStmt>().getStmt());
           break;
         }
         case CFGElement::AutomaticObjectDtor: {
-          CFGAutomaticObjDtor AD = BI->castAs<CFGAutomaticObjDtor>();
+          CFGAutomaticObjDtor AD = BI.castAs<CFGAutomaticObjDtor>();
           CXXDestructorDecl *DD = const_cast<CXXDestructorDecl*>(
               AD.getDestructorDecl(ACtx->getASTContext()));
           VarDecl *VD = const_cast<VarDecl*>(AD.getVarDecl());
@@ -142,7 +130,7 @@ public:
       for (CFGBlock::const_succ_iterator SI = CurrBlock->succ_begin(),
                                          SE = CurrBlock->succ_end();
            SI != SE; ++SI) {
-        if (*SI == 0)
+        if (*SI == nullptr)
           continue;
 
         if (VisitedBlocks.alreadySet(*SI)) {
@@ -157,7 +145,7 @@ public:
     V.exitCFG(&CFGraph->getExit());
   }
 
-public:
+public:  // TODO: make these private.
   CFG *CFGraph;
   const NamedDecl *FDecl;
   AnalysisDeclContext *ACtx;
@@ -187,8 +175,9 @@ public:
     CallingContext *Prev;       // The previous context; or 0 if none.
     bool SelfArrow;             // is Self referred to with -> or .?
 
-    CallingContext(const NamedDecl *D = 0, const Expr *S = 0, unsigned N = 0,
-                   const Expr *const *A = 0, CallingContext *P = 0)
+    CallingContext(const NamedDecl *D = nullptr, const Expr *S = nullptr,
+                   unsigned N = 0, const Expr *const *A = nullptr,
+                   CallingContext *P = nullptr)
         : AttrDecl(D), SelfArg(S), NumArgs(N), FunArgs(A), Prev(P),
           SelfArrow(false)
     {}
@@ -202,7 +191,7 @@ public:
   // Dispatches on the type of S.
   til::SExpr *translate(const Stmt *S, CallingContext *Ctx);
 
-
+protected:
   til::SExpr *translateDeclRefExpr(const DeclRefExpr *DRE,
                                    CallingContext *Ctx) ;
   til::SExpr *translateCXXThisExpr(const CXXThisExpr *TE, CallingContext *Ctx);
@@ -225,8 +214,9 @@ public:
       const BinaryConditionalOperator *C, CallingContext *Ctx);
 
 
-  SExprBuilder(til::MemRegionRef A, StatementMap *SM = 0)
-      : Arena(A), SMap(SM), SelfVar(0) {
+public:
+  SExprBuilder(til::MemRegionRef A, StatementMap *SM = nullptr)
+      : Arena(A), SMap(SM), SelfVar(nullptr) {
     // FIXME: we don't always have a self-variable.
     SelfVar = new (Arena) til::Variable(til::Variable::VK_SFun);
   }
