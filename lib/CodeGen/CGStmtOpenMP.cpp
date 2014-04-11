@@ -4199,7 +4199,9 @@ void CodeGenFunction::EmitOMPCancelDirective(const OMPCancelDirective &S) {
     const OMPIfClause *Clause = cast<OMPIfClause>(S.clauses().front());
     llvm::BasicBlock *ThenBB = createBasicBlock("omp.cancel.then");
     llvm::BasicBlock *ElseBB = createBasicBlock("omp.cancel.else");
-    EmitBranchOnBoolExpr(Clause->getCondition(), ThenBB, ElseBB);
+    RegionCounter Cnt = getPGORegionCounter(&S);
+    EmitBranchOnBoolExpr(Clause->getCondition(), ThenBB, ElseBB,
+                         Cnt.getCount());
     EmitBlock(ElseBB);
     EmitCancellationPoint(*this, S.getLocStart(), RealArgs, ExitBB, ContBB);
     EmitBlock(ThenBB);
