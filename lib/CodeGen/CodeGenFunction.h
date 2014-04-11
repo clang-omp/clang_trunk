@@ -1002,6 +1002,7 @@ private:
     JumpDest ContinueBlock;
   };
   SmallVector<BreakContinue, 8> BreakContinueStack;
+  llvm::DenseMap<unsigned, JumpDest> OMPCancelMap;
 
   CodeGenPGO PGO;
 
@@ -2197,6 +2198,9 @@ public:
     OpenMPDirectiveKind DKind,
     OpenMPDirectiveKind SKind,
     const OMPExecutableDirective &S);
+  void EmitOMPBarrier(SourceLocation L, unsigned Flags);
+  void EmitOMPCancelBarrier(SourceLocation L, unsigned Flags,
+                            bool IgnoreResult = false);
 
   //===--------------------------------------------------------------------===//
   //                         LValue Expression Emission
