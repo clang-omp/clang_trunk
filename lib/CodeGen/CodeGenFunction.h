@@ -1339,12 +1339,16 @@ public:
 
   void GenerateCode(GlobalDecl GD, llvm::Function *Fn,
                     const CGFunctionInfo &FnInfo);
+  /// \brief Emit code for the start of a function.
+  /// \param Loc       The location to be associated with the function.
+  /// \param StartLoc  The location of the function body.
   void StartFunction(GlobalDecl GD,
                      QualType RetTy,
                      llvm::Function *Fn,
                      const CGFunctionInfo &FnInfo,
                      const FunctionArgList &Args,
-                     SourceLocation StartLoc);
+                     SourceLocation Loc = SourceLocation(),
+                     SourceLocation StartLoc = SourceLocation());
 
   void EmitConstructorBody(FunctionArgList &Args);
   void EmitDestructorBody(FunctionArgList &Args);

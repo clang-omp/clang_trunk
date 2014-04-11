@@ -15,7 +15,7 @@
 #include "CodeGenFunction.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/StmtVisitor.h"
-#include "llvm/Config/config.h" // for strtoull()/strtoll() define
+#include "llvm/Config/config.h" // for strtoull()/strtoul() define
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/Support/FileSystem.h"
 
@@ -69,7 +69,7 @@ PGOProfileData::PGOProfileData(CodeGenModule &CGM, std::string Path)
 
     // Read the number of counters.
     char *EndPtr;
-    unsigned NumCounters = strtol(++CurPtr, &EndPtr, 10);
+    unsigned NumCounters = strtoul(++CurPtr, &EndPtr, 10);
     if (EndPtr == CurPtr || *EndPtr != '\n' || NumCounters <= 0) {
       ReportBadPGOData(CGM, "pgo data file has unexpected number of counters");
       return;
@@ -77,7 +77,7 @@ PGOProfileData::PGOProfileData(CodeGenModule &CGM, std::string Path)
     CurPtr = EndPtr;
 
     // Read function count.
-    uint64_t Count = strtoll(CurPtr, &EndPtr, 10);
+    uint64_t Count = strtoull(CurPtr, &EndPtr, 10);
     if (EndPtr == CurPtr || *EndPtr != '\n') {
       ReportBadPGOData(CGM, "pgo-data file has bad count value");
       return;
@@ -119,13 +119,13 @@ bool PGOProfileData::getFunctionCounts(StringRef FuncName, uint64_t &FuncHash,
 
   char *EndPtr;
   // Read the function hash.
-  FuncHash = strtoll(++CurPtr, &EndPtr, 10);
+  FuncHash = strtoull(++CurPtr, &EndPtr, 10);
   assert(EndPtr != CurPtr && *EndPtr == '\n' &&
          "pgo-data file has corrupted function hash");
   CurPtr = EndPtr;
 
   // Read the number of counters.
-  unsigned NumCounters = strtol(++CurPtr, &EndPtr, 10);
+  unsigned NumCounters = strtoul(++CurPtr, &EndPtr, 10);
   assert(EndPtr != CurPtr && *EndPtr == '\n' && NumCounters > 0 &&
          "pgo-data file has corrupted number of counters");
   CurPtr = EndPtr;
@@ -134,7 +134,7 @@ bool PGOProfileData::getFunctionCounts(StringRef FuncName, uint64_t &FuncHash,
 
   for (unsigned N = 0; N < NumCounters; ++N) {
     // Read the count value.
-    uint64_t Count = strtoll(CurPtr, &EndPtr, 10);
+    uint64_t Count = strtoull(CurPtr, &EndPtr, 10);
     if (EndPtr == CurPtr || *EndPtr != '\n') {
       ReportBadPGOData(CGM, "pgo-data file has bad count value");
       return true;
@@ -294,9 +294,8 @@ llvm::Function *CodeGenPGO::emitInitialization(CodeGenModule &CGM) {
   if (!CGM.getCodeGenOpts().ProfileInstrGenerate)
     return nullptr;
 
-  // Only need to create this once per module.
-  if (CGM.getModule().getFunction("__llvm_profile_init"))
-    return nullptr;
+  assert(CGM.getModule().getFunction("__llvm_profile_init") == nullptr &&
+         "profile initialization already emitted");
 
   // Get the function to call at initialization.
   llvm::Constant *RegisterF = getRegisterFunc(CGM);
@@ -340,17 +339,17 @@ namespace {
     void VisitStmt(const Stmt *S) { VisitChildren(S); }
 
     /// Assign a counter to track entry to the function body.
-    void VisitFunctionDecl(const FunctionDecl *S) {
-      CounterMap[S->getBody()] = NextCounter++;
-      Visit(S->getBody());
+    void VisitFunctionDecl(const FunctionDecl *D) {
+      CounterMap[D->getBody()] = NextCounter++;
+      Visit(D->getBody());
     }
-    void VisitObjCMethodDecl(const ObjCMethodDecl *S) {
-      CounterMap[S->getBody()] = NextCounter++;
-      Visit(S->getBody());
+    void VisitObjCMethodDecl(const ObjCMethodDecl *D) {
+      CounterMap[D->getBody()] = NextCounter++;
+      Visit(D->getBody());
     }
-    void VisitBlockDecl(const BlockDecl *S) {
-      CounterMap[S->getBody()] = NextCounter++;
-      Visit(S->getBody());
+    void VisitBlockDecl(const BlockDecl *D) {
+      CounterMap[D->getBody()] = NextCounter++;
+      Visit(D->getBody());
     }
     /// Assign a counter to track the block following a label.
     void VisitLabelStmt(const LabelStmt *S) {
@@ -443,7 +442,8 @@ namespace {
     }
     /// Assign a counter for the "true" part of a conditional operator. The
     /// count in the "false" part will be calculated from this counter.
-    void VisitConditionalOperator(const ConditionalOperator *E) {
+    void VisitAbstractConditionalOperator(
+        const AbstractConditionalOperator *E) {
       CounterMap[E] = NextCounter++;
       Visit(E->getCond());
       Visit(E->getTrueExpr());
@@ -503,25 +503,25 @@ namespace {
       }
     }
 
-    void VisitFunctionDecl(const FunctionDecl *S) {
-      RegionCounter Cnt(PGO, S->getBody());
+    void VisitFunctionDecl(const FunctionDecl *D) {
+      RegionCounter Cnt(PGO, D->getBody());
       Cnt.beginRegion();
-      CountMap[S->getBody()] = PGO.getCurrentRegionCount();
-      Visit(S->getBody());
+      CountMap[D->getBody()] = PGO.getCurrentRegionCount();
+      Visit(D->getBody());
     }
 
-    void VisitObjCMethodDecl(const ObjCMethodDecl *S) {
-      RegionCounter Cnt(PGO, S->getBody());
+    void VisitObjCMethodDecl(const ObjCMethodDecl *D) {
+      RegionCounter Cnt(PGO, D->getBody());
       Cnt.beginRegion();
-      CountMap[S->getBody()] = PGO.getCurrentRegionCount();
-      Visit(S->getBody());
+      CountMap[D->getBody()] = PGO.getCurrentRegionCount();
+      Visit(D->getBody());
     }
 
-    void VisitBlockDecl(const BlockDecl *S) {
-      RegionCounter Cnt(PGO, S->getBody());
+    void VisitBlockDecl(const BlockDecl *D) {
+      RegionCounter Cnt(PGO, D->getBody());
       Cnt.beginRegion();
-      CountMap[S->getBody()] = PGO.getCurrentRegionCount();
-      Visit(S->getBody());
+      CountMap[D->getBody()] = PGO.getCurrentRegionCount();
+      Visit(D->getBody());
     }
 
     void VisitReturnStmt(const ReturnStmt *S) {
@@ -769,7 +769,8 @@ namespace {
       Visit(S->getHandlerBlock());
     }
 
-    void VisitConditionalOperator(const ConditionalOperator *E) {
+    void VisitAbstractConditionalOperator(
+        const AbstractConditionalOperator *E) {
       RecordStmtCount(E);
       RegionCounter Cnt(PGO, E);
       Visit(E->getCond());
@@ -815,8 +816,8 @@ namespace {
 }
 
 static void emitRuntimeHook(CodeGenModule &CGM) {
-  LLVM_CONSTEXPR const char *RuntimeVarName = "__llvm_profile_runtime";
-  LLVM_CONSTEXPR const char *RuntimeUserName = "__llvm_profile_runtime_user";
+  const char *const RuntimeVarName = "__llvm_profile_runtime";
+  const char *const RuntimeUserName = "__llvm_profile_runtime_user";
   if (CGM.getModule().getGlobalVariable(RuntimeVarName))
     return;
 
