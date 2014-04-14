@@ -141,8 +141,7 @@ public:
 void EmptySubobjectMap::ComputeEmptySubobjectSizes() {
   // Check the bases.
   for (const auto &I : Class->bases()) {
-    const CXXRecordDecl *BaseDecl =
-      cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl());
+    const CXXRecordDecl *BaseDecl = I.getType()->getAsCXXRecordDecl();
 
     CharUnits EmptySize;
     const ASTRecordLayout &Layout = Context.getASTRecordLayout(BaseDecl);
@@ -168,7 +167,7 @@ void EmptySubobjectMap::ComputeEmptySubobjectSizes() {
       continue;
 
     CharUnits EmptySize;
-    const CXXRecordDecl *MemberDecl = cast<CXXRecordDecl>(RT->getDecl());
+    const CXXRecordDecl *MemberDecl = RT->getAsCXXRecordDecl();
     const ASTRecordLayout &Layout = Context.getASTRecordLayout(MemberDecl);
     if (MemberDecl->isEmpty()) {
       // If the class decl is empty, get its size.
@@ -349,8 +348,7 @@ EmptySubobjectMap::CanPlaceFieldSubobjectAtOffset(const CXXRecordDecl *RD,
     if (I.isVirtual())
       continue;
 
-    const CXXRecordDecl *BaseDecl =
-      cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl());
+    const CXXRecordDecl *BaseDecl = I.getType()->getAsCXXRecordDecl();
 
     CharUnits BaseOffset = Offset + Layout.getBaseClassOffset(BaseDecl);
     if (!CanPlaceFieldSubobjectAtOffset(BaseDecl, Class, BaseOffset))
@@ -360,9 +358,8 @@ EmptySubobjectMap::CanPlaceFieldSubobjectAtOffset(const CXXRecordDecl *RD,
   if (RD == Class) {
     // This is the most derived class, traverse virtual bases as well.
     for (const auto &I : RD->vbases()) {
-      const CXXRecordDecl *VBaseDecl =
-        cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl());
-      
+      const CXXRecordDecl *VBaseDecl = I.getType()->getAsCXXRecordDecl();
+
       CharUnits VBaseOffset = Offset + Layout.getVBaseClassOffset(VBaseDecl);
       if (!CanPlaceFieldSubobjectAtOffset(VBaseDecl, Class, VBaseOffset))
         return false;
@@ -394,10 +391,8 @@ EmptySubobjectMap::CanPlaceFieldSubobjectAtOffset(const FieldDecl *FD,
     return true;
   
   QualType T = FD->getType();
-  if (const RecordType *RT = T->getAs<RecordType>()) {
-    const CXXRecordDecl *RD = cast<CXXRecordDecl>(RT->getDecl());
+  if (const CXXRecordDecl *RD = T->getAsCXXRecordDecl())
     return CanPlaceFieldSubobjectAtOffset(RD, RD, Offset);
-  }
 
   // If we have an array type we need to look at every element.
   if (const ConstantArrayType *AT = Context.getAsConstantArrayType(T)) {
@@ -405,8 +400,8 @@ EmptySubobjectMap::CanPlaceFieldSubobjectAtOffset(const FieldDecl *FD,
     const RecordType *RT = ElemTy->getAs<RecordType>();
     if (!RT)
       return true;
-  
-    const CXXRecordDecl *RD = cast<CXXRecordDecl>(RT->getDecl());
+
+    const CXXRecordDecl *RD = RT->getAsCXXRecordDecl();
     const ASTRecordLayout &Layout = Context.getASTRecordLayout(RD);
 
     uint64_t NumElements = Context.getConstantArrayElementCount(AT);
@@ -459,8 +454,7 @@ void EmptySubobjectMap::UpdateEmptyFieldSubobjects(const CXXRecordDecl *RD,
     if (I.isVirtual())
       continue;
 
-    const CXXRecordDecl *BaseDecl =
-      cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl());
+    const CXXRecordDecl *BaseDecl = I.getType()->getAsCXXRecordDecl();
 
     CharUnits BaseOffset = Offset + Layout.getBaseClassOffset(BaseDecl);
     UpdateEmptyFieldSubobjects(BaseDecl, Class, BaseOffset);
@@ -469,9 +463,8 @@ void EmptySubobjectMap::UpdateEmptyFieldSubobjects(const CXXRecordDecl *RD,
   if (RD == Class) {
     // This is the most derived class, traverse virtual bases as well.
     for (const auto &I : RD->vbases()) {
-      const CXXRecordDecl *VBaseDecl =
-      cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl());
-      
+      const CXXRecordDecl *VBaseDecl = I.getType()->getAsCXXRecordDecl();
+
       CharUnits VBaseOffset = Offset + Layout.getVBaseClassOffset(VBaseDecl);
       UpdateEmptyFieldSubobjects(VBaseDecl, Class, VBaseOffset);
     }
@@ -493,8 +486,7 @@ void EmptySubobjectMap::UpdateEmptyFieldSubobjects(const CXXRecordDecl *RD,
 void EmptySubobjectMap::UpdateEmptyFieldSubobjects(const FieldDecl *FD,
                                                    CharUnits Offset) {
   QualType T = FD->getType();
-  if (const RecordType *RT = T->getAs<RecordType>()) {
-    const CXXRecordDecl *RD = cast<CXXRecordDecl>(RT->getDecl());
+  if (const CXXRecordDecl *RD = T->getAsCXXRecordDecl()) {
     UpdateEmptyFieldSubobjects(RD, RD, Offset);
     return;
   }
@@ -505,8 +497,8 @@ void EmptySubobjectMap::UpdateEmptyFieldSubobjects(const FieldDecl *FD,
     const RecordType *RT = ElemTy->getAs<RecordType>();
     if (!RT)
       return;
-    
-    const CXXRecordDecl *RD = cast<CXXRecordDecl>(RT->getDecl());
+
+    const CXXRecordDecl *RD = RT->getAsCXXRecordDecl();
     const ASTRecordLayout &Layout = Context.getASTRecordLayout(RD);
     
     uint64_t NumElements = Context.getConstantArrayElementCount(AT);
@@ -780,8 +772,7 @@ RecordLayoutBuilder::SelectPrimaryVBase(const CXXRecordDecl *RD) {
     assert(!I.getType()->isDependentType() &&
            "Cannot layout class with dependent bases.");
 
-    const CXXRecordDecl *Base =
-      cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl());
+    const CXXRecordDecl *Base = I.getType()->getAsCXXRecordDecl();
 
     // Check if this is a nearly empty virtual base.
     if (I.isVirtual() && Context.isNearlyEmpty(Base)) {
@@ -822,8 +813,7 @@ void RecordLayoutBuilder::DeterminePrimaryBase(const CXXRecordDecl *RD) {
     if (I.isVirtual())
       continue;
 
-    const CXXRecordDecl *Base =
-      cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl());
+    const CXXRecordDecl *Base = I.getType()->getAsCXXRecordDecl();
 
     if (Base->isDynamicClass()) {
       // We found it.
@@ -911,10 +901,9 @@ RecordLayoutBuilder::ComputeBaseSubobjectInfo(const CXXRecordDecl *RD,
   // Now go through all direct bases.
   for (const auto &I : RD->bases()) {
     bool IsVirtual = I.isVirtual();
-    
-    const CXXRecordDecl *BaseDecl =
-      cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl());
-    
+
+    const CXXRecordDecl *BaseDecl = I.getType()->getAsCXXRecordDecl();
+
     Info->Bases.push_back(ComputeBaseSubobjectInfo(BaseDecl, IsVirtual, Info));
   }
   
@@ -937,9 +926,8 @@ void RecordLayoutBuilder::ComputeBaseSubobjectInfo(const CXXRecordDecl *RD) {
   for (const auto &I : RD->bases()) {
     bool IsVirtual = I.isVirtual();
 
-    const CXXRecordDecl *BaseDecl =
-      cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl());
-    
+    const CXXRecordDecl *BaseDecl = I.getType()->getAsCXXRecordDecl();
+
     // Compute the base subobject info for this base.
     BaseSubobjectInfo *Info = ComputeBaseSubobjectInfo(BaseDecl, IsVirtual, 0);
 
@@ -1315,16 +1303,14 @@ void RecordLayoutBuilder::Layout(const CXXRecordDecl *RD) {
     if (I.isVirtual())
       continue;
 
-    const CXXRecordDecl *BaseDecl =
-      cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl());
+    const CXXRecordDecl *BaseDecl = I.getType()->getAsCXXRecordDecl();
 
     assert(Bases.count(BaseDecl) && "Did not find base offset!");
   }
 
   // And all virtual bases.
   for (const auto &I : RD->vbases()) {
-    const CXXRecordDecl *BaseDecl =
-      cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl());
+    const CXXRecordDecl *BaseDecl = I.getType()->getAsCXXRecordDecl();
 
     assert(VBases.count(BaseDecl) && "Did not find base offset!");
   }
@@ -2305,9 +2291,6 @@ MicrosoftRecordLayoutBuilder::getAdjustedElementInfo(
   if (FD->hasAttr<PackedAttr>())
     Info.Alignment = CharUnits::One();
   Info.Alignment = std::max(Info.Alignment, FieldRequiredAlignment);
-  // TODO: Add a Sema warning that MS ignores bitfield alignment in unions.
-  if (!(FD->isBitField() && IsUnion))
-    Alignment = std::max(Alignment, Info.Alignment);
   return Info;
 }
 
@@ -2486,6 +2469,7 @@ void MicrosoftRecordLayoutBuilder::layoutField(const FieldDecl *FD) {
   }
   LastFieldIsNonZeroWidthBitfield = false;
   ElementInfo Info = getAdjustedElementInfo(FD);
+  Alignment = std::max(Alignment, Info.Alignment);
   if (IsUnion) {
     placeFieldAtOffset(CharUnits::Zero());
     Size = std::max(Size, Info.Size);
@@ -2521,11 +2505,13 @@ void MicrosoftRecordLayoutBuilder::layoutBitField(const FieldDecl *FD) {
   if (IsUnion) {
     placeFieldAtOffset(CharUnits::Zero());
     Size = std::max(Size, Info.Size);
+    // TODO: Add a Sema warning that MS ignores bitfield alignment in unions.
   } else {
     // Allocate a new block of memory and place the bitfield in it.
     CharUnits FieldOffset = Size.RoundUpToAlignment(Info.Alignment);
     placeFieldAtOffset(FieldOffset);
     Size = FieldOffset + Info.Size;
+    Alignment = std::max(Alignment, Info.Alignment);
     RemainingBitsInField = Context.toBits(Info.Size) - Width;
   }
 }
@@ -2545,11 +2531,13 @@ MicrosoftRecordLayoutBuilder::layoutZeroWidthBitField(const FieldDecl *FD) {
   if (IsUnion) {
     placeFieldAtOffset(CharUnits::Zero());
     Size = std::max(Size, Info.Size);
+    // TODO: Add a Sema warning that MS ignores bitfield alignment in unions.
   } else {
     // Round up the current record size to the field's alignment boundary.
     CharUnits FieldOffset = Size.RoundUpToAlignment(Info.Alignment);
     placeFieldAtOffset(FieldOffset);
     Size = FieldOffset;
+    Alignment = std::max(Alignment, Info.Alignment);
   }
 }
 
@@ -2633,11 +2621,8 @@ void MicrosoftRecordLayoutBuilder::layoutVirtualBases(const CXXRecordDecl *RD) {
     // with a zero sized base.  The padding between virtual bases is 4
     // bytes (in both 32 and 64 bits modes) and always involves rounding up to
     // the required alignment, we don't know why.
-    if (PreviousBaseLayout && PreviousBaseLayout->hasZeroSizedSubObject() &&
-        BaseLayout.leadsWithZeroSizedBase())
-      Size = Size.RoundUpToAlignment(VtorDispAlignment) + VtorDispSize;
-    // Insert the vtordisp.
-    if (HasVtordisp)
+    if ((PreviousBaseLayout && PreviousBaseLayout->hasZeroSizedSubObject() &&
+        BaseLayout.leadsWithZeroSizedBase()) || HasVtordisp)
       Size = Size.RoundUpToAlignment(VtorDispAlignment) + VtorDispSize;
     // Insert the virtual base.
     ElementInfo Info = getAdjustedElementInfo(BaseLayout);
@@ -2669,18 +2654,20 @@ void MicrosoftRecordLayoutBuilder::finalizeLayout(const RecordDecl *RD) {
   }
 }
 
-static bool
-RequiresVtordisp(const llvm::SmallPtrSet<const CXXRecordDecl *, 2> &HasVtordisp,
-                 const CXXRecordDecl *RD) {
-  if (HasVtordisp.count(RD))
+// Recursively walks the non-virtual bases of a class and determines if any of
+// them are in the bases with overridden methods set.
+static bool RequiresVtordisp(
+    const llvm::SmallPtrSet<const CXXRecordDecl *, 2> &
+        BasesWithOverriddenMethods,
+    const CXXRecordDecl *RD) {
+  if (BasesWithOverriddenMethods.count(RD))
     return true;
   // If any of a virtual bases non-virtual bases (recursively) requires a
   // vtordisp than so does this virtual base.
   for (const auto &I : RD->bases())
     if (!I.isVirtual() &&
-        RequiresVtordisp(
-            HasVtordisp,
-            cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl())))
+        RequiresVtordisp(BasesWithOverriddenMethods,
+                         I.getType()->getAsCXXRecordDecl()))
       return true;
   return false;
 }
@@ -2688,10 +2675,6 @@ RequiresVtordisp(const llvm::SmallPtrSet<const CXXRecordDecl *, 2> &HasVtordisp,
 llvm::SmallPtrSet<const CXXRecordDecl *, 2>
 MicrosoftRecordLayoutBuilder::computeVtorDispSet(const CXXRecordDecl *RD) {
   llvm::SmallPtrSet<const CXXRecordDecl *, 2> HasVtordispSet;
-
-  // /vd0 or #pragma vtordisp(0): Never use vtordisps when used as a vbase.
-  if (RD->getMSVtorDispMode() == MSVtorDispAttr::Never)
-    return HasVtordispSet;
 
   // /vd2 or #pragma vtordisp(2): Always use vtordisps for virtual bases with
   // vftables.
@@ -2705,56 +2688,53 @@ MicrosoftRecordLayoutBuilder::computeVtorDispSet(const CXXRecordDecl *RD) {
     return HasVtordispSet;
   }
 
+  // If any of our bases need a vtordisp for this type, so do we.  Check our
+  // direct bases for vtordisp requirements.
+  for (const auto &I : RD->bases()) {
+    const CXXRecordDecl *BaseDecl = I.getType()->getAsCXXRecordDecl();
+    const ASTRecordLayout &Layout = Context.getASTRecordLayout(BaseDecl);
+    for (const auto &bi : Layout.getVBaseOffsetsMap())
+      if (bi.second.hasVtorDisp())
+        HasVtordispSet.insert(bi.first);
+  }
+  // We don't introduce any additional vtordisps if either:
+  // * A user declared constructor or destructor aren't declared.
+  // * #pragma vtordisp(0) or the /vd0 flag are in use.
+  if ((!RD->hasUserDeclaredConstructor() && !RD->hasUserDeclaredDestructor()) ||
+      RD->getMSVtorDispMode() == MSVtorDispAttr::Never)
+    return HasVtordispSet;
   // /vd1 or #pragma vtordisp(1): Try to guess based on whether we think it's
   // possible for a partially constructed object with virtual base overrides to
   // escape a non-trivial constructor.
   assert(RD->getMSVtorDispMode() == MSVtorDispAttr::ForVBaseOverride);
-
-  // If any of our bases need a vtordisp for this type, so do we.  Check our
-  // direct bases for vtordisp requirements.
-  for (const auto &I : RD->bases()) {
-    const CXXRecordDecl *BaseDecl =
-        cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl());
-    const ASTRecordLayout &Layout = Context.getASTRecordLayout(BaseDecl);
-    for (ASTRecordLayout::VBaseOffsetsMapTy::const_iterator
-             bi = Layout.getVBaseOffsetsMap().begin(),
-             be = Layout.getVBaseOffsetsMap().end();
-         bi != be; ++bi)
-      if (bi->second.hasVtorDisp())
-        HasVtordispSet.insert(bi->first);
+  // Compute a set of base classes which define methods we override.  A virtual
+  // base in this set will require a vtordisp.  A virtual base that transitively
+  // contains one of these bases as a non-virtual base will also require a
+  // vtordisp.
+  llvm::SmallPtrSet<const CXXMethodDecl *, 8> Work;
+  llvm::SmallPtrSet<const CXXRecordDecl *, 2> BasesWithOverriddenMethods;
+  // Seed the working set with our non-destructor virtual methods.
+  for (const auto *I : RD->methods())
+    if (I->isVirtual() && !isa<CXXDestructorDecl>(I))
+      Work.insert(I);
+  while (!Work.empty()) {
+    const CXXMethodDecl *MD = *Work.begin();
+    CXXMethodDecl::method_iterator i = MD->begin_overridden_methods(),
+                                   e = MD->end_overridden_methods();
+    // If a virtual method has no-overrides it lives in its parent's vtable.
+    if (i == e)
+      BasesWithOverriddenMethods.insert(MD->getParent());
+    else
+      Work.insert(i, e);
+    // We've finished processing this element, remove it from the working set.
+    Work.erase(MD);
   }
-  // If we define a constructor or destructor and override a function that is
-  // defined in a virtual base's vtable, that virtual bases need a vtordisp.
-  // Here we collect a list of classes with vtables for which our virtual bases
-  // actually live.  The virtual bases with this property will require
-  // vtordisps.  In addition, virtual bases that contain non-virtual bases that
-  // define functions we override also require vtordisps, this case is checked
-  // explicitly below.
-  if (RD->hasUserDeclaredConstructor() || RD->hasUserDeclaredDestructor()) {
-    llvm::SmallPtrSet<const CXXMethodDecl *, 8> Work;
-    // Seed the working set with our non-destructor virtual methods.
-    for (const auto *I : RD->methods())
-      if (I->isVirtual() && !isa<CXXDestructorDecl>(I))
-        Work.insert(I);
-    while (!Work.empty()) {
-      const CXXMethodDecl *MD = *Work.begin();
-      CXXMethodDecl::method_iterator i = MD->begin_overridden_methods(),
-                                     e = MD->end_overridden_methods();
-      if (i == e)
-        // If a virtual method has no-overrides it lives in its parent's vtable.
-        HasVtordispSet.insert(MD->getParent());
-      else
-        Work.insert(i, e);
-      // We've finished processing this element, remove it from the working set.
-      Work.erase(MD);
-    }
-  }
-  // Re-check all of our vbases for vtordisp requirements (in case their
-  // non-virtual bases have vtordisp requirements).
+  // For each of our virtual bases, check if it is in the set of overridden
+  // bases or if it transitively contains a non-virtual base that is.
   for (const auto &I : RD->vbases()) {
     const CXXRecordDecl *BaseDecl =  I.getType()->getAsCXXRecordDecl();
     if (!HasVtordispSet.count(BaseDecl) &&
-        RequiresVtordisp(HasVtordispSet, BaseDecl))
+        RequiresVtordisp(BasesWithOverriddenMethods, BaseDecl))
       HasVtordispSet.insert(BaseDecl);
   }
   return HasVtordispSet;
@@ -3058,13 +3038,11 @@ static void DumpCXXRecordLayout(raw_ostream &OS,
     CharUnits FieldOffset = Offset + 
       C.toCharUnitsFromBits(Layout.getFieldOffset(FieldNo));
 
-    if (const RecordType *RT = Field.getType()->getAs<RecordType>()) {
-      if (const CXXRecordDecl *D = dyn_cast<CXXRecordDecl>(RT->getDecl())) {
-        DumpCXXRecordLayout(OS, D, C, FieldOffset, IndentLevel,
-                            Field.getName().data(),
-                            /*IncludeVirtualBases=*/true);
-        continue;
-      }
+    if (const CXXRecordDecl *D = Field.getType()->getAsCXXRecordDecl()) {
+      DumpCXXRecordLayout(OS, D, C, FieldOffset, IndentLevel,
+                          Field.getName().data(),
+                          /*IncludeVirtualBases=*/true);
+      continue;
     }
 
     PrintOffset(OS, FieldOffset, IndentLevel);
@@ -3079,8 +3057,7 @@ static void DumpCXXRecordLayout(raw_ostream &OS,
     Layout.getVBaseOffsetsMap();
   for (const auto &I : RD->vbases()) {
     assert(I.isVirtual() && "Found non-virtual class!");
-    const CXXRecordDecl *VBase =
-      cast<CXXRecordDecl>(I.getType()->getAs<RecordType>()->getDecl());
+    const CXXRecordDecl *VBase = I.getType()->getAsCXXRecordDecl();
 
     CharUnits VBaseOffset = Offset + Layout.getVBaseClassOffset(VBase);
 

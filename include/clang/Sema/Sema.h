@@ -4431,7 +4431,8 @@ public:
                                    bool EnteringContext,
                                    CXXScopeSpec &SS,
                                    NamedDecl *ScopeLookupResult,
-                                   bool ErrorRecoveryLookup);
+                                   bool ErrorRecoveryLookup,
+                                   bool *IsCorrectedToColon = 0);
 
   /// \brief The parser has parsed a nested-name-specifier 'identifier::'.
   ///
@@ -4454,6 +4455,13 @@ public:
   /// output parameter (containing the full nested-name-specifier,
   /// including this new type).
   ///
+  /// \param ErrorRecoveryLookup If true, then this method is called to improve
+  /// error recovery. In this case do not emit error message.
+  ///
+  /// \param IsCorrectedToColon If not null, suggestions to replace '::' -> ':'
+  /// are allowed.  The bool value pointed by this parameter is set to 'true'
+  /// if the identifier is treated as if it was followed by ':', not '::'.
+  ///
   /// \returns true if an error occurred, false otherwise.
   bool ActOnCXXNestedNameSpecifier(Scope *S,
                                    IdentifierInfo &Identifier,
@@ -4461,7 +4469,9 @@ public:
                                    SourceLocation CCLoc,
                                    ParsedType ObjectType,
                                    bool EnteringContext,
-                                   CXXScopeSpec &SS);
+                                   CXXScopeSpec &SS,
+                                   bool ErrorRecoveryLookup = false,
+                                   bool *IsCorrectedToColon = 0);
 
   ExprResult ActOnDecltypeExpression(Expr *E);
 
