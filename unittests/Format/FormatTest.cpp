@@ -4584,6 +4584,16 @@ TEST_F(FormatTest, UnderstandsUsesOfStarAndAmp) {
   // FIXME: Is there a way to make this work?
   // verifyIndependentOfContext("MACRO(A *a);");
 
+  EXPECT_EQ("#define OP(x)                                    \\\n"
+            "  ostream &operator<<(ostream &s, const A &a) {  \\\n"
+            "    return s << a.DebugString();                 \\\n"
+            "  }",
+            format("#define OP(x) \\\n"
+                   "  ostream &operator<<(ostream &s, const A &a) { \\\n"
+                   "    return s << a.DebugString(); \\\n"
+                   "  }",
+                   getLLVMStyleWithColumns(50)));
+
   // FIXME: We cannot handle this case yet; we might be able to figure out that
   // foo<x> d > v; doesn't make sense.
   verifyFormat("foo<a < b && c> d > v;");
@@ -4647,6 +4657,7 @@ TEST_F(FormatTest, UnderstandsRvalueReferences) {
                "};");
   verifyGoogleFormat("#define IF(a, b, c) if (a && (b == c))");
   verifyGoogleFormat("#define WHILE(a, b, c) while (a && (b == c))");
+  verifyFormat("#define A(a, b) (a && b)");
 }
 
 TEST_F(FormatTest, FormatsBinaryOperatorsPrecedingEquals) {
@@ -6650,6 +6661,10 @@ TEST_F(FormatTest, DoesNotTryToParseUDLiteralsInPreCpp11Code) {
   Style.Standard = FormatStyle::LS_Cpp03;
   EXPECT_EQ("#define x(_a) printf(\"foo\" _a);",
             format("#define x(_a) printf(\"foo\"_a);", Style));
+}
+
+TEST_F(FormatTest, UnderstandsCpp1y) {
+  verifyFormat("int bi{1'000'000};");
 }
 
 TEST_F(FormatTest, BreakStringLiteralsBeforeUnbreakableTokenSequence) {

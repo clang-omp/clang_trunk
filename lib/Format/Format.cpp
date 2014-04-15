@@ -343,6 +343,7 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
     GoogleStyle.SpacesInContainerLiterals = false;
   } else if (Language == FormatStyle::LK_Proto) {
     GoogleStyle.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_None;
+    GoogleStyle.SpacesInContainerLiterals = false;
   }
 
   return GoogleStyle;
@@ -721,6 +722,13 @@ public:
 
   unsigned format(const SmallVectorImpl<AnnotatedLine *> &Lines, bool DryRun,
                   int AdditionalIndent = 0, bool FixBadIndentation = false) {
+    // Try to look up already computed penalty in DryRun-mode.
+    std::pair<const SmallVectorImpl<AnnotatedLine *> *, unsigned> CacheKey{
+        &Lines, AdditionalIndent};
+    auto CacheIt = PenaltyCache.find(CacheKey);
+    if (DryRun && CacheIt != PenaltyCache.end())
+      return CacheIt->second;
+
     assert(!Lines.empty());
     unsigned Penalty = 0;
     std::vector<int> IndentForLevel;
@@ -844,6 +852,7 @@ public:
       }
       PreviousLine = *I;
     }
+    PenaltyCache[CacheKey] = Penalty;
     return Penalty;
   }
 
@@ -1131,6 +1140,13 @@ private:
     if (Previous.Children[0]->Last->isTrailingComment())
       return false;
 
+    // If the child line exceeds the column limit, we wouldn't want to merge it.
+    // We add +2 for the trailing " }".
+    if (Style.ColumnLimit > 0 &&
+        Previous.Children[0]->Last->TotalLength + State.Column + 2 >
+            Style.ColumnLimit)
+      return false;
+
     if (!DryRun) {
       Whitespaces->replaceWhitespace(
           *Previous.Children[0]->First,
@@ -1149,6 +1165,12 @@ private:
   LineJoiner Joiner;
 
   llvm::SpecificBumpPtrAllocator<StateNode> Allocator;
+
+  // Cache to store the penalty of formatting a vector of AnnotatedLines
+  // starting from a specific additional offset. Improves performance if there
+  // are many nested blocks.
+  std::map<std::pair<const SmallVectorImpl<AnnotatedLine *> *, unsigned>,
+           unsigned> PenaltyCache;
 };
 
 class FormatTokenLexer {
@@ -1827,6 +1849,7 @@ LangOptions getFormattingLangOpts(FormatStyle::LanguageStandard Standard) {
   LangOptions LangOpts;
   LangOpts.CPlusPlus = 1;
   LangOpts.CPlusPlus11 = Standard == FormatStyle::LS_Cpp03 ? 0 : 1;
+  LangOpts.CPlusPlus1y = Standard == FormatStyle::LS_Cpp03 ? 0 : 1;
   LangOpts.LineComment = 1;
   LangOpts.Bool = 1;
   LangOpts.ObjC1 = 1;

@@ -209,6 +209,8 @@ public:
 
     /// \brief Emit the captured statement body.
     virtual void EmitBody(CodeGenFunction &CGF, Stmt *S) {
+      RegionCounter Cnt = CGF.getPGORegionCounter(S);
+      Cnt.beginRegion(CGF.Builder);
       CGF.EmitStmt(S);
     }
 

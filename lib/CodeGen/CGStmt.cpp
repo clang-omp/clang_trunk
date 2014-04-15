@@ -2057,8 +2057,11 @@ CodeGenFunction::GenerateCapturedStmtFunction(const CapturedDecl *CD,
     CXXThisValue = EmitLoadOfLValue(ThisLValue, Loc).getScalarVal();
   }
 
+  PGO.assignRegionCounters(CD, F);
   CapturedStmtInfo->EmitBody(*this, CD->getBody());
   FinishFunction(CD->getBodyRBrace());
+  PGO.emitInstrumentationData();
+  PGO.destroyRegionCounters();
 
   return F;
 }

@@ -526,7 +526,9 @@ def warn_cxx98_compat_attribute : Warning<
   "C++11 attribute syntax is incompatible with C++98">,
   InGroup<CXX98Compat>, DefaultIgnore;
 def err_cxx11_attribute_forbids_arguments : Error<
-  "attribute '%0' cannot have an argument list">;
+  "attribute %0 cannot have an argument list">;
+def err_attribute_requires_arguments : Error<
+  "parentheses must be omitted if %0 attribute's argument list is empty">;
 def err_cxx11_attribute_forbids_ellipsis : Error<
   "attribute '%0' cannot be used as an attribute pack">;
 def err_cxx11_attribute_repeated : Error<
