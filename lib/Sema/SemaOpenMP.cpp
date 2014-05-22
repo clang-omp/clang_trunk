@@ -612,26 +612,19 @@ ExprResult Sema::ActOnOpenMPIdExpression(Scope *CurScope,
   VarDecl *VD;
   if (!Lookup.isSingleResult()) {
     VarDeclFilterCCC Validator(*this);
-    TypoCorrection Corrected = CorrectTypo(Id, LookupOrdinaryName, CurScope,
-                                           0, Validator);
-    std::string CorrectedStr = Corrected.getAsString(getLangOpts());
-    std::string CorrectedQuotedStr = Corrected.getQuoted(getLangOpts());
-    if (Lookup.empty()) {
-      if (Corrected.isResolved()) {
-        Diag(Id.getLoc(), diag::err_undeclared_var_use_suggest)
-          << Id.getName() << CorrectedQuotedStr
-          << FixItHint::CreateReplacement(Id.getLoc(), CorrectedStr);
-      } else {
-        Diag(Id.getLoc(), diag::err_undeclared_var_use)
-          << Id.getName();
-      }
+    if (TypoCorrection Corrected = CorrectTypo(Id, LookupOrdinaryName, CurScope,
+                                               0, Validator, CTK_ErrorRecovery)) {
+      diagnoseTypo(Corrected,
+                   PDiag(Lookup.empty()? diag::err_undeclared_var_use_suggest
+                                       : diag::err_omp_expected_var_arg_suggest)
+                     << Id.getName());
+      VD = Corrected.getCorrectionDeclAs<VarDecl>();
     } else {
-      Diag(Id.getLoc(), diag::err_omp_expected_var_arg_suggest)
-        << Id.getName() << Corrected.isResolved() << CorrectedQuotedStr
-        << FixItHint::CreateReplacement(Id.getLoc(), CorrectedStr);
+      Diag(Id.getLoc(), Lookup.empty() ? diag::err_undeclared_var_use
+                                       : diag::err_omp_expected_var_arg)
+          << Id.getName();
+      return ExprError();
     }
-    if (!Corrected.isResolved()) return ExprError();
-    VD = Corrected.getCorrectionDeclAs<VarDecl>();
   } else {
     if (!(VD = Lookup.getAsSingle<VarDecl>())) {
       Diag(Id.getLoc(), diag::err_omp_expected_var_arg_suggest)
@@ -3159,6 +3152,50 @@ OMPClause *Sema::ActOnOpenMPIfClause(Expr *Condition, SourceLocation StartLoc,
   return new (Context) OMPIfClause(ValExpr, StartLoc, LParenLoc, EndLoc);
 }
 
+ExprResult Sema::PerformImplicitIntegerConversion(SourceLocation Loc,
+                                                  Expr *Op) {
+  if (!Op)
+    return ExprError();
+
+  class IntConvertDiagnoser : public ICEConvertDiagnoser {
+  public:
+    IntConvertDiagnoser()
+        : ICEConvertDiagnoser(/*AllowScopedEnumerations*/false,
+                              false, true) {}
+    SemaDiagnosticBuilder diagnoseNotInt(Sema &S, SourceLocation Loc,
+                                         QualType T) override {
+      return S.Diag(Loc, diag::err_omp_not_integral) << T;
+    }
+    SemaDiagnosticBuilder diagnoseIncomplete(
+        Sema &S, SourceLocation Loc, QualType T) override {
+      return S.Diag(Loc, diag::err_omp_incomplete_type) << T;
+    }
+    SemaDiagnosticBuilder diagnoseExplicitConv(
+        Sema &S, SourceLocation Loc, QualType T, QualType ConvTy) override {
+      return S.Diag(Loc, diag::err_omp_explicit_conversion) << T << ConvTy;
+    }
+    SemaDiagnosticBuilder noteExplicitConv(
+        Sema &S, CXXConversionDecl *Conv, QualType ConvTy) override {
+      return S.Diag(Conv->getLocation(), diag::note_omp_conversion_here)
+               << ConvTy->isEnumeralType() << ConvTy;
+    }
+    SemaDiagnosticBuilder diagnoseAmbiguous(
+        Sema &S, SourceLocation Loc, QualType T) override {
+      return S.Diag(Loc, diag::err_omp_ambiguous_conversion) << T;
+    }
+    SemaDiagnosticBuilder noteAmbiguous(
+        Sema &S, CXXConversionDecl *Conv, QualType ConvTy) override {
+      return S.Diag(Conv->getLocation(), diag::note_omp_conversion_here)
+               << ConvTy->isEnumeralType() << ConvTy;
+    }
+    SemaDiagnosticBuilder diagnoseConversion(
+        Sema &S, SourceLocation Loc, QualType T, QualType ConvTy) override {
+      llvm_unreachable("conversion functions are permitted");
+    }
+  } ConvertDiagnoser;
+  return PerformContextualImplicitConversion(Loc, Op, ConvertDiagnoser);
+}
+
 OMPClause *Sema::ActOnOpenMPFinalClause(Expr *Condition,
                                         SourceLocation StartLoc,
                                         SourceLocation LParenLoc,
@@ -3725,10 +3762,9 @@ OMPClause *Sema::ActOnOpenMPDistScheduleClause(OpenMPScheduleClauseKind Kind,
 }
 
 OMPClause *Sema::ActOnOpenMPVarListClause(
-    OpenMPClauseKind Kind, ArrayRef<Expr *> VarList, SourceLocation StartLoc,
-    SourceLocation LParenLoc, SourceLocation EndLoc, unsigned Op,
-    Expr *TailExpr, CXXScopeSpec &SS, const UnqualifiedId &OpName,
-    SourceLocation OpLoc) {
+    OpenMPClauseKind Kind, ArrayRef<Expr *> VarList, Expr *TailExpr,
+    SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation ColonLoc,
+    SourceLocation EndLoc, unsigned Op, CXXScopeSpec &SS, const UnqualifiedId &OpName) {
   OMPClause *Res = 0;
   switch (Kind) {
   case OMPC_private:
@@ -3762,17 +3798,17 @@ OMPClause *Sema::ActOnOpenMPVarListClause(
     Res = ActOnOpenMPUniformClause(VarList, StartLoc, LParenLoc, EndLoc);
     break;
   case OMPC_linear:
-    Res = ActOnOpenMPLinearClause(VarList, StartLoc, LParenLoc, EndLoc,
-                                  TailExpr, OpLoc);
+    Res = ActOnOpenMPLinearClause(VarList, TailExpr, StartLoc, LParenLoc,
+                                  ColonLoc, EndLoc);
     break;
   case OMPC_aligned:
     Res = ActOnOpenMPAlignedClause(VarList, StartLoc, LParenLoc, EndLoc,
-                                   TailExpr, OpLoc);
+                                   TailExpr, ColonLoc);
     break;
   case OMPC_depend:
     Res =
         ActOnOpenMPDependClause(VarList, StartLoc, LParenLoc, EndLoc,
-                                static_cast<OpenMPDependClauseType>(Op), OpLoc);
+                                static_cast<OpenMPDependClauseType>(Op), ColonLoc);
     break;
   default:
     break;
@@ -3895,8 +3931,8 @@ OMPClause *Sema::ActOnOpenMPDeclarativeLinearClause(ArrayRef<Expr *> VarList,
   if (Vars.empty())
     return 0;
 
-  return OMPLinearClause::Create(Context, StartLoc, SourceLocation(), EndLoc,
-                                 VarList, Step, StepLoc);
+  return OMPLinearClause::Create(Context, StartLoc, SourceLocation(), StepLoc,
+                                 EndLoc, VarList, Step);
 }
 
 OMPClause *Sema::ActOnOpenMPDeclarativeAlignedClause(
@@ -5469,11 +5505,11 @@ OMPClause *Sema::ActOnOpenMPReductionClause(ArrayRef<Expr *> VarList,
       HelperParams2, DefaultInits, Op, SS.getWithLocInContext(Context), OpName);
 }
 
-OMPClause *Sema::ActOnOpenMPLinearClause(ArrayRef<Expr *> VarList,
+OMPClause *Sema::ActOnOpenMPLinearClause(ArrayRef<Expr *> VarList, Expr *Step,
                                          SourceLocation StartLoc,
                                          SourceLocation LParenLoc,
-                                         SourceLocation EndLoc, Expr *Step,
-                                         SourceLocation StepLoc) {
+                                         SourceLocation ColonLoc,
+                                         SourceLocation EndLoc) {
   // Checks that apply to both private and linear variables.
   SmallVector<Expr *, 4> Vars;
   for (ArrayRef<Expr *>::iterator I = VarList.begin(), E = VarList.end();
@@ -5530,7 +5566,7 @@ OMPClause *Sema::ActOnOpenMPLinearClause(ArrayRef<Expr *> VarList,
     }
     if (QTy->isReferenceType()) {
       Diag(ELoc, diag::err_omp_clause_ref_type_arg)
-          << getOpenMPClauseName(OMPC_linear);
+          << getOpenMPClauseName(OMPC_linear) << QTy;
       bool IsDecl =
           VD->isThisDeclarationADefinition(Context) == VarDecl::DeclarationOnly;
       Diag(VD->getLocation(),
@@ -5558,7 +5594,12 @@ OMPClause *Sema::ActOnOpenMPLinearClause(ArrayRef<Expr *> VarList,
     const Type *Ty = QTy.getTypePtrOrNull();
     if (!Ty || (!Ty->isDependentType() && !Ty->isIntegralType(Context) &&
                 !Ty->isPointerType())) {
-      Diag(ELoc, diag::err_omp_expected_int_or_ptr) << (*I)->getSourceRange();
+      Diag(ELoc, diag::err_omp_linear_expected_int_or_ptr) << QTy;
+      bool IsDecl =
+          VD->isThisDeclarationADefinition(Context) == VarDecl::DeclarationOnly;
+      Diag(VD->getLocation(),
+           IsDecl ? diag::note_previous_decl : diag::note_defined_here)
+          << VD;
       continue;
     }
 
@@ -5570,14 +5611,27 @@ OMPClause *Sema::ActOnOpenMPLinearClause(ArrayRef<Expr *> VarList,
   if (Vars.empty())
     return 0;
 
-  if (Step && Step->isIntegerConstantExpr(Context)) {
-    Step = ActOnConstantLinearStep(Step);
-    if (!Step)
+  Expr *StepExpr = Step;
+  if (Step && !Step->isValueDependent() && !Step->isTypeDependent() &&
+      !Step->isInstantiationDependent() &&
+      !Step->containsUnexpandedParameterPack()) {
+    SourceLocation StepLoc = Step->getLocStart();
+    ExprResult Val = PerformImplicitIntegerConversion(StepLoc, Step);
+    if (Val.isInvalid())
       return 0;
+    StepExpr = Val.take();
+
+    // Warn about zero linear step (it would be probably better specified as
+    // making corresponding variables 'const').
+    llvm::APSInt Result;
+    if (StepExpr->isIntegerConstantExpr(Result, Context) &&
+        !Result.isNegative() && !Result.isStrictlyPositive())
+      Diag(StepLoc, diag::warn_omp_linear_step_zero) << Vars[0]
+                                                     << (Vars.size() > 1);
   }
 
-  return OMPLinearClause::Create(Context, StartLoc, LParenLoc, EndLoc, Vars,
-                                 Step, StepLoc);
+  return OMPLinearClause::Create(Context, StartLoc, LParenLoc, ColonLoc, EndLoc,
+                                 Vars, StepExpr);
 }
 
 OMPClause *Sema::ActOnOpenMPAlignedClause(ArrayRef<Expr *> VarList,

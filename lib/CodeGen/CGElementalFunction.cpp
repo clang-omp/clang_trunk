@@ -17,6 +17,8 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/Debug.h"
 
+#define DEBUG_TYPE "cg-elemental-function"
+
 using namespace clang;
 using namespace CodeGen;
 typedef CodeGenModule::CilkElementalGroup CilkElementalGroup;

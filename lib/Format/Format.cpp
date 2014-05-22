@@ -13,8 +13,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "format-formatter"
-
 #include "ContinuationIndenter.h"
 #include "TokenAnnotator.h"
 #include "UnwrappedLineParser.h"
@@ -30,6 +28,8 @@
 #include "llvm/Support/YAMLTraits.h"
 #include <queue>
 #include <string>
+
+#define DEBUG_TYPE "format-formatter"
 
 using clang::format::FormatStyle;
 
@@ -723,8 +723,8 @@ public:
   unsigned format(const SmallVectorImpl<AnnotatedLine *> &Lines, bool DryRun,
                   int AdditionalIndent = 0, bool FixBadIndentation = false) {
     // Try to look up already computed penalty in DryRun-mode.
-    std::pair<const SmallVectorImpl<AnnotatedLine *> *, unsigned> CacheKey{
-        &Lines, AdditionalIndent};
+    std::pair<const SmallVectorImpl<AnnotatedLine *> *, unsigned> CacheKey(
+        &Lines, AdditionalIndent);
     auto CacheIt = PenaltyCache.find(CacheKey);
     if (DryRun && CacheIt != PenaltyCache.end())
       return CacheIt->second;

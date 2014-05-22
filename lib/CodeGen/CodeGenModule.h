@@ -42,6 +42,7 @@ namespace llvm {
   class DataLayout;
   class FunctionType;
   class LLVMContext;
+  class IndexedInstrProfReader;
 }
 
 namespace clang {
@@ -85,7 +86,6 @@ namespace CodeGen {
   class CGCUDARuntime;
   class BlockFieldFlags;
   class FunctionArgList;
-  class PGOProfileData;
 
   struct OrderGlobalInits {
     unsigned int priority;
@@ -220,6 +220,15 @@ struct ARCEntrypoints {
   llvm::Constant *clang_arc_use;
 };
 
+/// This class records statistics on instrumentation based profiling.
+struct InstrProfStats {
+  InstrProfStats() : Visited(0), Missing(0), Mismatched(0) {}
+  bool isOutOfDate() { return Missing || Mismatched; }
+  uint32_t Visited;
+  uint32_t Missing;
+  uint32_t Mismatched;
+};
+
 /// CodeGenModule - This class organizes the cross-function state that is used
 /// while generating LLVM code.
 class CodeGenModule : public CodeGenTypeCache {
@@ -257,7 +266,8 @@ class CodeGenModule : public CodeGenTypeCache {
   ARCEntrypoints *ARCData;
   llvm::MDNode *NoObjCARCExceptionsMetadata;
   RREntrypoints *RRData;
-  PGOProfileData *PGOData;
+  std::unique_ptr<llvm::IndexedInstrProfReader> PGOReader;
+  InstrProfStats PGOStats;
 
   struct ElementalVariantInfo {
     /// \brief The CodeGen infomation of this function.
@@ -573,9 +583,8 @@ public:
     return *RRData;
   }
 
-  PGOProfileData *getPGOData() const {
-    return PGOData;
-  }
+  InstrProfStats &getPGOStats() { return PGOStats; }
+  llvm::IndexedInstrProfReader *getPGOReader() const { return PGOReader.get(); }
 
   llvm::Constant *getStaticLocalDeclAddress(const VarDecl *D) {
     return StaticLocalDeclMap[D];
@@ -1060,11 +1069,16 @@ public:
   /// the given LLVM type.
   CharUnits GetTargetTypeStoreSize(llvm::Type *Ty) const;
   
-  /// GetLLVMLinkageVarDefinition - Returns LLVM linkage for a global 
-  /// variable.
-  llvm::GlobalValue::LinkageTypes 
-  GetLLVMLinkageVarDefinition(const VarDecl *D, bool isConstant);
-  
+  /// getLLVMLinkageforDeclarator - Returns LLVM linkage for a declarator.
+  llvm::GlobalValue::LinkageTypes
+  getLLVMLinkageforDeclarator(const DeclaratorDecl *D, GVALinkage Linkage,
+                              bool IsConstantVariable,
+                              bool UseThunkForDtorVariant);
+
+  /// getLLVMLinkageVarDefinition - Returns LLVM linkage for a declarator.
+  llvm::GlobalValue::LinkageTypes
+  getLLVMLinkageVarDefinition(const VarDecl *VD, bool IsConstant);
+
   /// Emit all the global annotations.
   void EmitGlobalAnnotations();
 

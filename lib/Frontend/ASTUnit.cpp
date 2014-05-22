@@ -692,7 +692,8 @@ ASTUnit *ASTUnit::LoadFromASTFile(const std::string &Filename,
   AST->OnlyLocalDecls = OnlyLocalDecls;
   AST->CaptureDiagnostics = CaptureDiagnostics;
   AST->Diagnostics = Diags;
-  AST->FileMgr = new FileManager(FileSystemOpts);
+  IntrusiveRefCntPtr<vfs::FileSystem> VFS = vfs::getRealFileSystem();
+  AST->FileMgr = new FileManager(FileSystemOpts, VFS);
   AST->UserFilesAreVolatile = UserFilesAreVolatile;
   AST->SourceMgr = new SourceManager(AST->getDiagnostics(),
                                      AST->getFileManager(),
@@ -1093,10 +1094,9 @@ bool ASTUnit::Parse(llvm::MemoryBuffer *OverrideMainBuffer) {
          "IR inputs not support here!");
 
   // Configure the various subsystems.
-  // FIXME: Should we retain the previous file manager?
   LangOpts = &Clang->getLangOpts();
   FileSystemOpts = Clang->getFileSystemOpts();
-  FileMgr = new FileManager(FileSystemOpts);
+  // Re-use the existing FileManager
   SourceMgr = new SourceManager(getDiagnostics(), *FileMgr,
                                 UserFilesAreVolatile);
   TheSema.reset();
@@ -1598,9 +1598,14 @@ llvm::MemoryBuffer *ASTUnit::getMainBufferWithPrecompiledPreamble(
   TopLevelDecls.clear();
   TopLevelDeclsInPreamble.clear();
   PreambleDiagnostics.clear();
-  
+
+  IntrusiveRefCntPtr<vfs::FileSystem> VFS =
+      createVFSFromCompilerInvocation(Clang->getInvocation(), getDiagnostics());
+  if (!VFS)
+    return nullptr;
+
   // Create a file manager object to provide access to and cache the filesystem.
-  Clang->setFileManager(new FileManager(Clang->getFileSystemOpts()));
+  Clang->setFileManager(new FileManager(Clang->getFileSystemOpts(), VFS));
   
   // Create the source manager.
   Clang->setSourceManager(new SourceManager(getDiagnostics(),
@@ -1709,14 +1714,20 @@ void ASTUnit::RealizeTopLevelDeclsFromPreamble() {
 }
 
 void ASTUnit::transferASTDataFromCompilerInstance(CompilerInstance &CI) {
-  // Steal the created target, context, and preprocessor.
+  // Steal the created target, context, and preprocessor if they have been
+  // created.
+  assert(CI.hasInvocation() && "missing invocation");
+  LangOpts = CI.getInvocation().getLangOpts();
   TheSema.reset(CI.takeSema());
   Consumer.reset(CI.takeASTConsumer());
-  Ctx = &CI.getASTContext();
-  PP = &CI.getPreprocessor();
+  if (CI.hasASTContext())
+    Ctx = &CI.getASTContext();
+  if (CI.hasPreprocessor())
+    PP = &CI.getPreprocessor();
   CI.setSourceManager(0);
   CI.setFileManager(0);
-  Target = &CI.getTarget();
+  if (CI.hasTarget())
+    Target = &CI.getTarget();
   Reader = CI.getModuleManager();
   HadModuleLoaderFatalFailure = CI.hadModuleLoaderFatalFailure();
 }
@@ -1758,7 +1769,11 @@ ASTUnit *ASTUnit::create(CompilerInvocation *CI,
   AST->Diagnostics = Diags;
   AST->Invocation = CI;
   AST->FileSystemOpts = CI->getFileSystemOpts();
-  AST->FileMgr = new FileManager(AST->FileSystemOpts);
+  IntrusiveRefCntPtr<vfs::FileSystem> VFS =
+      createVFSFromCompilerInvocation(*CI, *Diags);
+  if (!VFS)
+    return nullptr;
+  AST->FileMgr = new FileManager(AST->FileSystemOpts, VFS);
   AST->UserFilesAreVolatile = UserFilesAreVolatile;
   AST->SourceMgr = new SourceManager(AST->getDiagnostics(), *AST->FileMgr,
                                      UserFilesAreVolatile);
@@ -1781,6 +1796,8 @@ ASTUnit *ASTUnit::LoadFromCompilerInvocationAction(
     // Create the AST unit.
     OwnAST.reset(create(CI, Diags, CaptureDiagnostics, UserFilesAreVolatile));
     AST = OwnAST.get();
+    if (!AST)
+      return nullptr;
   }
   
   if (!ResourceFilesPath.empty()) {
@@ -1928,18 +1945,13 @@ bool ASTUnit::LoadFromCompilerInvocation(bool PrecompilePreamble) {
   return Parse(OverrideMainBuffer);
 }
 
-ASTUnit *ASTUnit::LoadFromCompilerInvocation(CompilerInvocation *CI,
-                              IntrusiveRefCntPtr<DiagnosticsEngine> Diags,
-                                             bool OnlyLocalDecls,
-                                             bool CaptureDiagnostics,
-                                             bool PrecompilePreamble,
-                                             TranslationUnitKind TUKind,
-                                             bool CacheCodeCompletionResults,
-                                    bool IncludeBriefCommentsInCodeCompletion,
-                                             bool UserFilesAreVolatile) {
+std::unique_ptr<ASTUnit> ASTUnit::LoadFromCompilerInvocation(
+    CompilerInvocation *CI, IntrusiveRefCntPtr<DiagnosticsEngine> Diags,
+    bool OnlyLocalDecls, bool CaptureDiagnostics, bool PrecompilePreamble,
+    TranslationUnitKind TUKind, bool CacheCodeCompletionResults,
+    bool IncludeBriefCommentsInCodeCompletion, bool UserFilesAreVolatile) {
   // Create the AST unit.
-  std::unique_ptr<ASTUnit> AST;
-  AST.reset(new ASTUnit(false));
+  std::unique_ptr<ASTUnit> AST(new ASTUnit(false));
   ConfigureDiags(Diags, 0, 0, *AST, CaptureDiagnostics);
   AST->Diagnostics = Diags;
   AST->OnlyLocalDecls = OnlyLocalDecls;
@@ -1950,7 +1962,11 @@ ASTUnit *ASTUnit::LoadFromCompilerInvocation(CompilerInvocation *CI,
     = IncludeBriefCommentsInCodeCompletion;
   AST->Invocation = CI;
   AST->FileSystemOpts = CI->getFileSystemOpts();
-  AST->FileMgr = new FileManager(AST->FileSystemOpts);
+  IntrusiveRefCntPtr<vfs::FileSystem> VFS =
+      createVFSFromCompilerInvocation(*CI, *Diags);
+  if (!VFS)
+    return nullptr;
+  AST->FileMgr = new FileManager(AST->FileSystemOpts, VFS);
   AST->UserFilesAreVolatile = UserFilesAreVolatile;
   
   // Recover resources if we crash before exiting this method.
@@ -1960,8 +1976,9 @@ ASTUnit *ASTUnit::LoadFromCompilerInvocation(CompilerInvocation *CI,
     llvm::CrashRecoveryContextReleaseRefCleanup<DiagnosticsEngine> >
     DiagCleanup(Diags.getPtr());
 
-  return AST->LoadFromCompilerInvocation(PrecompilePreamble) ? 0
-                                                             : AST.release();
+  if (AST->LoadFromCompilerInvocation(PrecompilePreamble))
+    return nullptr;
+  return AST;
 }
 
 ASTUnit *ASTUnit::LoadFromCommandLine(
@@ -2017,7 +2034,11 @@ ASTUnit *ASTUnit::LoadFromCommandLine(
   AST->Diagnostics = Diags;
   Diags = 0; // Zero out now to ease cleanup during crash recovery.
   AST->FileSystemOpts = CI->getFileSystemOpts();
-  AST->FileMgr = new FileManager(AST->FileSystemOpts);
+  IntrusiveRefCntPtr<vfs::FileSystem> VFS =
+      createVFSFromCompilerInvocation(*CI, *Diags);
+  if (!VFS)
+    return nullptr;
+  AST->FileMgr = new FileManager(AST->FileSystemOpts, VFS);
   AST->OnlyLocalDecls = OnlyLocalDecls;
   AST->CaptureDiagnostics = CaptureDiagnostics;
   AST->TUKind = TUKind;

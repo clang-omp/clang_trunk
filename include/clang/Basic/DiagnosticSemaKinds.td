@@ -35,7 +35,7 @@ def warn_unsigned_abs : Warning<
   "taking the absolute value of unsigned type %0 has no effect">,
   InGroup<AbsoluteValue>;
 def note_remove_abs : Note<
-  "remove the call to %0 since unsigned values cannot be negative">;
+  "remove the call to '%0' since unsigned values cannot be negative">;
 def warn_abs_too_small : Warning<
   "absolute value function %0 given an argument of type %1 but has parameter "
   "of type %2 which may cause truncation of value">, InGroup<AbsoluteValue>;
@@ -2319,7 +2319,7 @@ def warn_impcast_float_precision : Warning<
   InGroup<Conversion>, DefaultIgnore;
 def warn_impcast_float_integer : Warning<
   "implicit conversion turns floating-point number into integer: %0 to %1">,
-  InGroup<Conversion>, DefaultIgnore;
+  InGroup<FloatConversion>, DefaultIgnore;
 def warn_impcast_integer_sign : Warning<
   "implicit conversion changes signedness: %0 to %1">,
   InGroup<SignConversion>, DefaultIgnore;
@@ -2551,6 +2551,8 @@ def warn_objc_invalid_bridge : Warning<
   "%0 bridges to %1, not %2">, InGroup<ObjCBridge>;
 def warn_objc_invalid_bridge_to_cf : Warning<
   "%0 cannot bridge to %1">, InGroup<ObjCBridge>;
+def err_objc_invalid_bridge : Error<
+  "under ARC %0 bridges to %1, but it still requires an explicit bridge cast">;
 
 // objc_bridge_related attribute diagnostics.
 def err_objc_bridged_related_invalid_class : Error<
@@ -3267,8 +3269,8 @@ def err_template_qualified_declarator_no_match : Error<
   "nested name specifier '%0' for declaration does not refer into a class, "
   "class template or class template partial specialization">;
 def err_specialize_member_of_template : Error<
-  "cannot specialize (with 'template<>') a member of an unspecialized "
-  "template">;
+  "cannot specialize %select{|(with 'template<>') }0a member of an "
+  "unspecialized template">;
 
 // C++ Class Template Partial Specialization
 def err_default_arg_in_partial_spec : Error<
@@ -4638,7 +4640,7 @@ def warn_deprecated_string_literal_conversion : Warning<
   InGroup<CXX11CompatDeprecatedWritableStr>;
 def ext_deprecated_string_literal_conversion : ExtWarn<
   "ISO C++11 does not allow conversion from string literal to %0">,
-  InGroup<CXX11CompatDeprecatedWritableStr>, SFINAEFailure;
+  InGroup<WritableStrings>, SFINAEFailure;
 def err_realimag_invalid_type : Error<"invalid type %0 to %1 operator">;
 def err_typecheck_sclass_fscope : Error<
   "illegal storage class on file-scoped variable">;
@@ -6959,47 +6961,49 @@ def note_omp_explicit_dsa : Note <
   "defined as %0">;
 def note_omp_predetermined_dsa : Note<
   "predetermined as %0">;
-def note_omp_referenced : Note <
+def note_omp_referenced : Note<
   "previously referenced here">;
-def note_omp_specified : Note <
+def note_omp_specified : Note<
   "previously specified here">;
 def err_omp_dsa_with_directives : Error<
   "%0 variable in '#pragma omp %1' cannot be %2 in '#pragma omp %3'">;
-def err_omp_not_for : Error <
-  "only for-loops are allowed for '#pragma omp %0'">;
-def err_omp_for_variable : Error <
+def err_omp_not_for : Error<
+  "statement after '#pragma omp %0' must be a for loop">;
+def err_omp_negative_expression_in_clause : Error<
+  "argument to '%0' clause must be a positive integer value">;
+def err_omp_for_variable : Error<
   "variable must be of integer or %select{pointer|random access iterator}0 type">;
-def err_omp_not_canonical_for : Error <
+def err_omp_not_canonical_for : Error<
   "%select{initialization|condition|increment}0 of for-loop does not have canonical form">;
-def err_omp_for_incr_not_integer : Error <
+def err_omp_for_incr_not_integer : Error<
   "increment expression of for-loop must be of an integer type">;
-def err_omp_for_incr_not_compatible : Error <
+def err_omp_for_incr_not_compatible : Error<
   "increment expression must cause %q0 to %select{decrease|increase}1 on each iteration of the loop">;
-def err_omp_for_type_not_compatible : Error <
+def err_omp_for_type_not_compatible : Error<
   "expression of type %0 is not compatible with variable %1 of type %2">;
-def err_omp_for_wrong_count : Error <
+def err_omp_for_wrong_count : Error<
   "unable to calculate number of iterations of the for-loop">;
-def err_omp_type_not_rai : Error <
+def err_omp_type_not_rai : Error<
   "iteration variable is not of a random access iterator type">;
-def err_omp_for_loop_var_dsa : Error <
+def err_omp_for_loop_var_dsa : Error<
   "loop iteration variable may not be %0">;
-def err_omp_sections_not_section : Error <
+def err_omp_sections_not_section : Error<
   "the statement for '#pragma omp %0' must be '#pragma omp section'">;
-def err_omp_section_orphaned : Error <
+def err_omp_section_orphaned : Error<
   "orphaned '#pragma omp section' is prohibited">;
-def err_omp_sections_not_compound_stmt : Error <
+def err_omp_sections_not_compound_stmt : Error<
   "the statement for '#pragma omp %0' must be compound statement">;
-def err_omp_prohibited_region : Error <
+def err_omp_prohibited_region : Error<
   "region cannot be%select{| closely}0 nested inside %1 region%select{| with name %3}2">;
-def err_omp_prohibited_ordered_region : Error <
+def err_omp_prohibited_ordered_region : Error<
   "region must be closely nested inside loop or parallel loop region with 'ordered' clause">;
-def err_omp_atomic_more_one_clause : Error <
+def err_omp_atomic_more_one_clause : Error<
   "directive '#pragma omp atomic' cannot contain more than one 'read', 'write', 'update' or 'capture' clause">;
-def err_omp_atomic_not_expression : Error <
+def err_omp_atomic_not_expression : Error<
   "expected expression statement for '#pragma omp atomic %0'">;
-def err_omp_atomic_wrong_statement : Error <
+def err_omp_atomic_wrong_statement : Error<
   "statement form is not allowed for '#pragma omp atomic %0'">;
-def err_omp_no_dsa_for_variable : Error <
+def err_omp_no_dsa_for_variable : Error<
   "variable %q0 must have explicitly specified data sharing attributes">;
 def err_omp_for_cannot_break: Error<
   "cannot break from a '#pragma omp %0' loop">;
@@ -7039,12 +7043,30 @@ def err_omp_expected_var_name_or_array_item : Error<
   "expected variable name or an array item">;
 def err_omp_depend_arg_not_lvalue : Error<
   "argument expression must be an l-value">;
-def err_omp_prohibited_cancel_region : Error <
+def err_omp_prohibited_cancel_region : Error<
   "region must be nested inside a taskgroup region">;
-def err_omp_prohibited_cancel_region_nowait : Error <
+def err_omp_prohibited_cancel_region_nowait : Error<
   "region cannot be nested inside region with 'nowait' clause">;
-def err_omp_prohibited_cancel_region_ordered : Error <
+def err_omp_prohibited_cancel_region_ordered : Error<
   "region cannot be nested inside region with 'ordered' clause">;
+def err_omp_not_integral : Error<
+  "expression must have integral or unscoped enumeration "
+  "type, not %0">;
+def err_omp_incomplete_type : Error<
+  "expression has incomplete class type %0">;
+def err_omp_explicit_conversion : Error<
+  "expression requires explicit conversion from %0 to %1">;
+def note_omp_conversion_here : Note<
+  "conversion to %select{integral|enumeration}0 type %1 declared here">;
+def err_omp_ambiguous_conversion : Error<
+  "ambiguous conversion from type %0 to an integral or unscoped "
+  "enumeration type">;
+def err_omp_linear_expected_int_or_ptr : Error<
+  "argument of a linear clause should be of integral or pointer "
+  "type, not %0">;
+def warn_omp_linear_step_zero : Warning<
+  "zero linear step (%0 %select{|and other variables in clause }1should probably be const)">,
+  InGroup<OpenMPClauses>;
 } // end of OpenMP category
 
 let CategoryName = "Related Result Type Issue" in {
@@ -7100,6 +7122,13 @@ let CategoryName = "Documentation Issue" in {
 def warn_not_a_doxygen_trailing_member_comment : Warning<
   "not a Doxygen trailing comment">, InGroup<Documentation>, DefaultIgnore;
 } // end of documentation issue category
+
+let CategoryName = "Instrumentation Issue" in {
+def warn_profile_data_out_of_date : Warning<
+  "profile data may be out of date: of %0 function%s0, %1 %plural{1:has|:have}1"
+  " no data and %2 %plural{1:has|:have}2 mismatched data that will be ignored">,
+  InGroup<ProfileInstrOutOfDate>;
+} // end of instrumentation issue category
 
 } // end of sema component.
 

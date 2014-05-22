@@ -1102,10 +1102,10 @@ OMPClause *Parser::ParseOpenMPClause(OpenMPDirectiveKind DKind,
   case OMPC_lastprivate:
   case OMPC_firstprivate:
   case OMPC_shared:
+  case OMPC_linear:
   case OMPC_copyin:
   case OMPC_copyprivate:
   case OMPC_reduction:
-  case OMPC_linear:
   case OMPC_aligned:
   case OMPC_uniform:
   case OMPC_depend:
@@ -1302,6 +1302,8 @@ OMPClause *Parser::ParseOpenMPClause(OpenMPClauseKind Kind) {
 ///
 ///    shared-clause:
 ///       'shared' '(' list ')'
+///    linear-clause:
+///       'linear' '(' list [ ':' linear-step ] ')'
 ///
 ///    copyin-clause:
 ///       'copyin' '(' list ')'
@@ -1328,6 +1330,7 @@ OMPClause *Parser::ParseOpenMPVarListClause(OpenMPClauseKind Kind) {
   assert(Kind != OMPC_uniform);
   SourceLocation Loc = Tok.getLocation();
   SourceLocation LOpen = ConsumeAnyToken();
+  SourceLocation ColonLoc = SourceLocation();
   bool LParen = true;
   CXXScopeSpec SS;
   UnqualifiedId OpName;
@@ -1427,13 +1430,12 @@ OMPClause *Parser::ParseOpenMPVarListClause(OpenMPClauseKind Kind) {
     }
     // Skip ',' if any
     IsComma = Tok.is(tok::comma);
-    if (IsComma) {
+    if (IsComma)
       ConsumeToken();
-    } else if (Tok.isNot(tok::r_paren) &&
+    else if (Tok.isNot(tok::r_paren) &&
                Tok.isNot(tok::annot_pragma_openmp_end) &&
-               (!MayHaveTail || Tok.isNot(tok::colon))) {
+               (!MayHaveTail || Tok.isNot(tok::colon)))
       Diag(Tok, diag::err_omp_expected_punc) << 1 << getOpenMPClauseName(Kind);
-    }
   }
 
   bool MustHaveTail = false;
@@ -1473,13 +1475,14 @@ OMPClause *Parser::ParseOpenMPVarListClause(OpenMPClauseKind Kind) {
     return 0;
 
   if (MustHaveTail && !TailExpr) {
+    ColonLoc = Tok.getLocation();
     // The error ('expected expression') was already emitted.
     return 0;
   }
 
-  return Actions.ActOnOpenMPVarListClause(
-      Kind, Vars, Loc, LOpen, Tok.getLocation(), Op, TailExpr, SS, OpName,
-      (TailExpr ? TailLoc : SourceLocation()));
+  return Actions.ActOnOpenMPVarListClause(Kind, Vars, TailExpr, Loc, LOpen,
+                                          ColonLoc, Tok.getLocation(),
+                                          Op, SS, OpName);
 }
 
 /// \brief Parsing of OpenMP clause 'linear', 'aligned' or 'uniform' for
@@ -1549,12 +1552,10 @@ bool Parser::ParseOpenMPDeclarativeVarListClause(
     }
   }
   bool MayHaveTail = (CKind == OMPC_linear) || (CKind == OMPC_aligned);
-  bool MustHaveTail = false;
   TailExpr = 0;
   if (MayHaveTail) {
     // Parse "':' linear-step" or "':' alignment"
     if (Tok.is(tok::colon)) {
-      MustHaveTail = true;
       ConsumeAnyToken();
       ColonProtectionRAIIObject ColonRAII(*this);
       TailLoc = Tok.getLocation();

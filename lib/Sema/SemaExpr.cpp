@@ -1875,7 +1875,7 @@ bool Sema::DiagnoseEmptyLookup(Scope *S, CXXScopeSpec &SS, LookupResult &R,
   // We didn't find anything, so try to correct for a typo.
   TypoCorrection Corrected;
   if (S && (Corrected = CorrectTypo(R.getLookupNameInfo(), R.getLookupKind(),
-                                    S, &SS, CCC))) {
+                                    S, &SS, CCC, CTK_ErrorRecovery))) {
     std::string CorrectedStr(Corrected.getAsString(getLangOpts()));
     bool DroppedSpecifier =
         Corrected.WillReplaceSpecifier() && Name.getAsString() == CorrectedStr;
@@ -1886,7 +1886,8 @@ bool Sema::DiagnoseEmptyLookup(Scope *S, CXXScopeSpec &SS, LookupResult &R,
     NamedDecl *ND = Corrected.getCorrectionDecl();
     if (ND) {
       if (Corrected.isOverloaded()) {
-        OverloadCandidateSet OCS(R.getNameLoc());
+        OverloadCandidateSet OCS(R.getNameLoc(),
+                                 OverloadCandidateSet::CSK_Normal);
         OverloadCandidateSet::iterator Best;
         for (TypoCorrection::decl_iterator CD = Corrected.begin(),
                                         CDEnd = Corrected.end();
@@ -4035,10 +4036,11 @@ static TypoCorrection TryTypoCorrectionForCall(Sema &S, Expr *Fn,
 
   if (TypoCorrection Corrected = S.CorrectTypo(
           DeclarationNameInfo(FuncName, NameLoc), Sema::LookupOrdinaryName,
-          S.getScopeForContext(S.CurContext), NULL, CCC)) {
+          S.getScopeForContext(S.CurContext), NULL, CCC,
+          Sema::CTK_ErrorRecovery)) {
     if (NamedDecl *ND = Corrected.getCorrectionDecl()) {
       if (Corrected.isOverloaded()) {
-        OverloadCandidateSet OCS(NameLoc);
+        OverloadCandidateSet OCS(NameLoc, OverloadCandidateSet::CSK_Normal);
         OverloadCandidateSet::iterator Best;
         for (TypoCorrection::decl_iterator CD = Corrected.begin(),
                                            CDEnd = Corrected.end();
@@ -8298,7 +8300,8 @@ inline QualType Sema::CheckLogicalOperands( // C99 6.5.[13,14]
     // Parens on the RHS are ignored.
     llvm::APSInt Result;
     if (RHS.get()->EvaluateAsInt(Result, Context))
-      if ((getLangOpts().Bool && !RHS.get()->getType()->isBooleanType()) ||
+      if ((getLangOpts().Bool && !RHS.get()->getType()->isBooleanType() &&
+           !RHS.get()->getExprLoc().isMacroID()) ||
           (Result != 0 && Result != 1)) {
         Diag(Loc, diag::warn_logical_instead_of_bitwise)
           << RHS.get()->getSourceRange()
@@ -10587,7 +10590,7 @@ ExprResult Sema::ActOnBlockStmtExpr(SourceLocation CaretLoc,
   // to deduce an implicit return type.
   if (getLangOpts().CPlusPlus && RetTy->isRecordType() &&
       !BSI->TheDecl->isDependentContext())
-    computeNRVO(Body, getCurBlock());
+    computeNRVO(Body, BSI);
   
   BlockExpr *Result = new (Context) BlockExpr(BSI->TheDecl, BlockTy);
   AnalysisBasedWarnings::Policy WP = AnalysisWarnings.getDefaultPolicy();

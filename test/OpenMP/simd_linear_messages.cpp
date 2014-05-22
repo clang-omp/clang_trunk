@@ -22,7 +22,6 @@ struct A {
   }
 };
 
-
 int z;
 const int C1 = 1;
 const int C2 = 2;
@@ -53,7 +52,7 @@ void test_linear()
 
 template<class T, class N> T test_template(T* arr, N num) {
   N i;
-  float ind;
+  float ind; // expected-note {{'ind' defined here}}
   T sum = (T)0;
   // expected-error@+1 {{argument of a linear clause should be of integral or pointer type}}
 #pragma omp simd linear(ind), reduction(+:sum)
@@ -63,5 +62,4 @@ template<class T, class N> T test_template(T* arr, N num) {
     sum += cur;
   }
 }
-
 

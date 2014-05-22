@@ -364,6 +364,12 @@ static bool isIntroducingInitializers(const ObjCInterfaceDecl *D) {
         return true;
     }
   }
+  if (const auto *ImplD = D->getImplementation()) {
+    for (const auto *MD : ImplD->instance_methods()) {
+      if (MD->getMethodFamily() == OMF_init && !MD->isOverriding())
+        return true;
+    }
+  }
   return false;
 }
 
@@ -379,11 +385,21 @@ bool ObjCInterfaceDecl::inheritsDesignatedInitializers() const {
     // misleading warnings.
     if (isIntroducingInitializers(this)) {
       data().InheritedDesignatedInitializers = DefinitionData::IDI_NotInherited;
-      return false;
     } else {
-      data().InheritedDesignatedInitializers = DefinitionData::IDI_Inherited;
-      return true;
+      if (auto SuperD = getSuperClass()) {
+        data().InheritedDesignatedInitializers =
+          SuperD->declaresOrInheritsDesignatedInitializers() ?
+            DefinitionData::IDI_Inherited :
+            DefinitionData::IDI_NotInherited;
+      } else {
+        data().InheritedDesignatedInitializers =
+          DefinitionData::IDI_NotInherited;
+      }
     }
+    assert(data().InheritedDesignatedInitializers
+             != DefinitionData::IDI_Unknown);
+    return data().InheritedDesignatedInitializers ==
+        DefinitionData::IDI_Inherited;
   }
   }
 

@@ -2449,6 +2449,14 @@ DEF_TRAVERSE_STMT(OMPOrderedDirective, {
 })
 
 template<typename Derived>
+bool
+DataRecursiveASTVisitor<Derived>::VisitOMPLinearClause(OMPLinearClause *C) {
+  VisitOMPClauseList(C);
+  TraverseStmt(C->getStep());
+  return true;
+}
+
+template<typename Derived>
 bool DataRecursiveASTVisitor<Derived>::VisitOMPCopyinClause(OMPCopyinClause *C) {
   VisitOMPClauseList(C);
   return true;

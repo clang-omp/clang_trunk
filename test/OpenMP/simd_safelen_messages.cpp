@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
   // expected-error@+1 {{expression is not an integral constant expression}}
   #pragma omp simd safelen (argv[1]=2) // expected-error {{expected ')'}} expected-note {{to match this '('}}
   for (int i = 4; i < 12; i++) argv[0][i] = argv[0][i] - argv[0][i-4];
-  // expected-error@+3 {{only for-loops are allowed for '#pragma omp simd'}}
+  // expected-error@+3 {{statement after '#pragma omp simd' must be a for loop}}
   // expected-note@+1 {{in instantiation of function template specialization 'tmain<int, char, -1, -2>' requested here}}
   #pragma omp simd safelen(safelen(tmain<int, char, -1, -2>(argc, argv) // expected-error 2 {{expected ')'}} expected-note 2 {{to match this '('}}
   foo();

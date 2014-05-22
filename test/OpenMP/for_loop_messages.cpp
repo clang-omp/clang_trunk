@@ -198,6 +198,6 @@ int main() {
       ++I;
   #pragma omp for collapse(3)
   for (Iter4 I = begin4; I >= begin4; --I)
-    ++I; // expected-error {{only for-loops are allowed for '#pragma omp for'}}
+    ++I; // expected-error {{statement after '#pragma omp for' must be a for loop}}
   ++begin4; 
 }

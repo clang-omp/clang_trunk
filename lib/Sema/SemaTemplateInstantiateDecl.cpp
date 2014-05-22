@@ -2653,7 +2653,7 @@ Decl *TemplateDeclInstantiator::TouchOMPDeclareSimdDecl(
           C->getLocStart(),
           C->getLocEnd(),
           Step,
-          C->getStepLoc());
+          C->getColonLoc());
       CL.push_back(NC);
     }
     else if (OMPAlignedClause *C = dyn_cast_or_null<OMPAlignedClause>(*J)) {

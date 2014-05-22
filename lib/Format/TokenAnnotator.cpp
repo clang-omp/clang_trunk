@@ -17,6 +17,8 @@
 #include "clang/Basic/SourceManager.h"
 #include "llvm/Support/Debug.h"
 
+#define DEBUG_TYPE "format-token-annotator"
+
 namespace clang {
 namespace format {
 
@@ -368,7 +370,8 @@ private:
       if (Tok->Previous == NULL)
         return false;
       // Colons from ?: are handled in parseConditional().
-      if (Tok->Previous->is(tok::r_paren) && Contexts.size() == 1) {
+      if (Tok->Previous->is(tok::r_paren) && Contexts.size() == 1 &&
+          Line.First->isNot(tok::kw_case)) {
         Tok->Type = TT_CtorInitializerColon;
       } else if (Contexts.back().ColonIsDictLiteral) {
         Tok->Type = TT_DictLiteral;
@@ -679,7 +682,7 @@ private:
       for (FormatToken *Previous = Current.Previous;
            Previous && !Previous->isOneOf(tok::comma, tok::semi);
            Previous = Previous->Previous) {
-        if (Previous->is(tok::r_square))
+        if (Previous->isOneOf(tok::r_square, tok::r_paren))
           Previous = Previous->MatchingParen;
         if (Previous->Type == TT_BinaryOperator &&
             Previous->isOneOf(tok::star, tok::amp)) {
@@ -978,6 +981,7 @@ public:
 
     FormatToken *Start = Current;
     FormatToken *LatestOperator = NULL;
+    unsigned OperatorIndex = 0;
 
     while (Current) {
       // Consume operators with higher precedence.
@@ -997,8 +1001,8 @@ public:
       if (Current == NULL || Current->closesScope() ||
           (CurrentPrecedence != -1 && CurrentPrecedence < Precedence)) {
         if (LatestOperator) {
+          LatestOperator->LastOperator = true;
           if (Precedence == PrecedenceArrowAndPeriod) {
-            LatestOperator->LastInChainOfCalls = true;
             // Call expressions don't have a binary operator precedence.
             addFakeParenthesis(Start, prec::Unknown);
           } else {
@@ -1017,8 +1021,11 @@ public:
         next();
       } else {
         // Operator found.
-        if (CurrentPrecedence == Precedence)
+        if (CurrentPrecedence == Precedence) {
           LatestOperator = Current;
+          Current->OperatorIndex = OperatorIndex;
+          ++OperatorIndex;
+        }
 
         next();
       }
@@ -1423,7 +1430,7 @@ bool TokenAnnotator::spaceRequiredBetween(const AnnotatedLine &Line,
                         tok::semi) ||
            (Style.SpaceBeforeParens != FormatStyle::SBPO_Never &&
             (Left.isOneOf(tok::kw_if, tok::kw_for, tok::kw_while,
-                          tok::kw_switch, tok::kw_catch) ||
+                          tok::kw_switch, tok::kw_catch, tok::kw_case) ||
              Left.IsForEachMacro)) ||
            (Style.SpaceBeforeParens == FormatStyle::SBPO_Always &&
             Left.isOneOf(tok::identifier, tok::kw___attribute) &&
@@ -1576,6 +1583,8 @@ bool TokenAnnotator::canBreakBefore(const AnnotatedLine &Line,
                                     const FormatToken &Right) {
   const FormatToken &Left = *Right.Previous;
   if (Left.is(tok::at))
+    return false;
+  if (Left.Tok.getObjCKeywordID() == tok::objc_interface)
     return false;
   if (Right.Type == TT_StartOfName || Right.is(tok::kw_operator))
     return true;

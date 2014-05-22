@@ -447,12 +447,13 @@ void Driver::generateCompilationDiagnostics(Compilation &C,
     bool IgnoreInput = false;
 
     // Ignore input from stdin or any inputs that cannot be preprocessed.
-    if (!strcmp(it->second->getValue(), "-")) {
+    // Check type first as not all linker inputs have a value.
+   if (types::getPreprocessedType(it->first) == types::TY_INVALID) {
+      IgnoreInput = true;
+    } else if (!strcmp(it->second->getValue(), "-")) {
       Diag(clang::diag::note_drv_command_failed_diag_msg)
         << "Error generating preprocessed source(s) - ignoring input from stdin"
         ".";
-      IgnoreInput = true;
-    } else if (types::getPreprocessedType(it->first) == types::TY_INVALID) {
       IgnoreInput = true;
     }
 
@@ -1873,6 +1874,8 @@ static llvm::Triple computeTargetTriple(StringRef DefaultTargetTriple,
         Target.setArch(llvm::Triple::mips64el);
       else if (Target.getArch() == llvm::Triple::aarch64_be)
         Target.setArch(llvm::Triple::aarch64);
+      else if (Target.getArch() == llvm::Triple::arm64_be)
+        Target.setArch(llvm::Triple::arm64);
     } else {
       if (Target.getArch() == llvm::Triple::mipsel)
         Target.setArch(llvm::Triple::mips);
@@ -1880,6 +1883,8 @@ static llvm::Triple computeTargetTriple(StringRef DefaultTargetTriple,
         Target.setArch(llvm::Triple::mips64);
       else if (Target.getArch() == llvm::Triple::aarch64)
         Target.setArch(llvm::Triple::aarch64_be);
+      else if (Target.getArch() == llvm::Triple::arm64)
+        Target.setArch(llvm::Triple::arm64_be);
     }
   }
 

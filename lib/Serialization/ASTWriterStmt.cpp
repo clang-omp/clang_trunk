@@ -1773,6 +1773,15 @@ void OMPClauseWriter::VisitOMPSharedClause(OMPSharedClause *C) {
     Writer.AddStmt(*I);
 }
 
+void OMPClauseWriter::VisitOMPLinearClause(OMPLinearClause *C) {
+  Record.push_back(C->varlist_size());
+  Writer.AddSourceLocation(C->getLParenLoc(), Record);
+  Writer.AddSourceLocation(C->getColonLoc(), Record);
+  for (auto *VE : C->varlists())
+    Writer.AddStmt(VE);
+  Writer.AddStmt(C->getStep());
+}
+
 void OMPClauseWriter::VisitOMPCopyinClause(OMPCopyinClause *C) {
   Record.push_back(C->varlist_size());
   for (OMPCopyinClause::varlist_iterator I = C->varlist_begin(),
@@ -1888,15 +1897,6 @@ void OMPClauseWriter::VisitOMPNumTeamsClause(OMPNumTeamsClause *C) {
 
 void OMPClauseWriter::VisitOMPThreadLimitClause(OMPThreadLimitClause *C) {
   Writer.AddStmt(C->getThreadLimit());
-}
-
-void OMPClauseWriter::VisitOMPLinearClause(OMPLinearClause *C) {
-  Record.push_back(C->varlist_size());
-  for (OMPLinearClause::varlist_iterator I = C->varlist_begin(),
-                                         E = C->varlist_end();
-       I != E; ++I)
-    Writer.AddStmt(*I);
-  Writer.AddStmt(C->getStep());
 }
 
 void OMPClauseWriter::VisitOMPAlignedClause(OMPAlignedClause *C) {
