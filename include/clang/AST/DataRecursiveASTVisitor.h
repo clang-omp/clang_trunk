@@ -1405,6 +1405,8 @@ DEF_TRAVERSE_DECL(OMPDeclareReductionDecl, {
     }
   })
 
+DEF_TRAVERSE_DECL(OMPDeclareTargetDecl, { })
+
 // A helper method for TemplateDecl's children.
 template<typename Derived>
 bool DataRecursiveASTVisitor<Derived>::TraverseTemplateParameterListHelper(
@@ -2391,6 +2393,18 @@ DEF_TRAVERSE_STMT(OMPForSimdDirective, {
   return TraverseOMPExecutableDirective(S);
 })
 
+DEF_TRAVERSE_STMT(OMPDistributeSimdDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
+DEF_TRAVERSE_STMT(OMPDistributeParallelForDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
+DEF_TRAVERSE_STMT(OMPDistributeParallelForSimdDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
 DEF_TRAVERSE_STMT(OMPSectionsDirective, {
   return TraverseOMPExecutableDirective(S);
 })
@@ -2462,11 +2476,23 @@ bool DataRecursiveASTVisitor<Derived>::VisitOMPCopyinClause(OMPCopyinClause *C) 
   return true;
 }
 
+DEF_TRAVERSE_STMT(OMPTeamsDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
+DEF_TRAVERSE_STMT(OMPDistributeDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
 DEF_TRAVERSE_STMT(OMPCancelDirective, {
   return TraverseOMPExecutableDirective(S);
 })
 
 DEF_TRAVERSE_STMT(OMPCancellationPointDirective, {
+  return TraverseOMPExecutableDirective(S);
+})
+
+DEF_TRAVERSE_STMT(OMPTargetDirective, {
   return TraverseOMPExecutableDirective(S);
 })
 

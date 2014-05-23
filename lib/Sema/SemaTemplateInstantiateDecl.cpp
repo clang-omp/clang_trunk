@@ -2342,6 +2342,11 @@ Decl *TemplateDeclInstantiator::VisitOMPThreadPrivateDecl(
   return TD;
 }
 
+Decl *
+TemplateDeclInstantiator::VisitOMPDeclareTargetDecl(OMPDeclareTargetDecl *D) {
+  llvm_unreachable("OpenMP declare target cannot be instantiated");
+}
+
 Decl *TemplateDeclInstantiator::VisitFunctionDecl(FunctionDecl *D) {
   return VisitFunctionDecl(D, 0);
 }

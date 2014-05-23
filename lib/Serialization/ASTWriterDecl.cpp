@@ -132,6 +132,7 @@ namespace clang {
     void VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D);
     void VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D);
     void VisitOMPDeclareSimdDecl(OMPDeclareSimdDecl *D);
+    void VisitOMPDeclareTargetDecl(OMPDeclareTargetDecl *D);
 
     void AddFunctionDefinition(const FunctionDecl *FD) {
       assert(FD->doesThisDeclarationHaveABody());
@@ -1484,6 +1485,10 @@ void ASTDeclWriter::VisitOMPDeclareSimdDecl(OMPDeclareSimdDecl *D) {
   Code = serialization::DECL_OMP_DECLARESIMD;
 }
 
+void ASTDeclWriter::VisitOMPDeclareTargetDecl(OMPDeclareTargetDecl *D) {
+  VisitDecl(D);
+  Code = serialization::DECL_OMP_DECLARETARGET;
+}
 //===----------------------------------------------------------------------===//
 // ASTWriter Implementation
 //===----------------------------------------------------------------------===//

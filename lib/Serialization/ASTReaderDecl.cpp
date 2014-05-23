@@ -326,6 +326,7 @@ namespace clang {
     void VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D);
     void VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D);
     void VisitOMPDeclareSimdDecl(OMPDeclareSimdDecl *D);
+    void VisitOMPDeclareTargetDecl(OMPDeclareTargetDecl *D);
   };
 }
 
@@ -2162,6 +2163,10 @@ void ASTDeclReader::VisitOMPDeclareSimdDecl(OMPDeclareSimdDecl *D) {
   D->setFunction(ReadDeclAs<Decl>(Record, Idx));
 }
 
+void ASTDeclReader::VisitOMPDeclareTargetDecl(OMPDeclareTargetDecl *D) {
+  VisitDecl(D);
+}
+
 //===----------------------------------------------------------------------===//
 // Attribute Reading
 //===----------------------------------------------------------------------===//
@@ -2804,6 +2809,9 @@ Decl *ASTReader::ReadDeclRecord(DeclID ID) {
     D = OMPDeclareSimdDecl::CreateDeserialized(
                               Context, ID, NumVariants, NumClauses);
     }
+    break;
+  case DECL_OMP_DECLARETARGET:
+    D = OMPDeclareTargetDecl::CreateDeserialized(Context, ID);
     break;
   case DECL_EMPTY:
     D = EmptyDecl::CreateDeserialized(Context, ID);

@@ -424,6 +424,53 @@ public:
   StmtRange children() { return StmtRange(&Safelen, &Safelen + 1); }
 };
 
+/// \brief This represents 'device' clause in the '#pragma omp ...'
+/// directive.
+///
+/// \code
+/// #pragma omp target device(a)
+/// \endcode
+/// In this example directive '#pragma omp target' has clause 'device'
+/// with single expression 'a'.
+///
+class OMPDeviceClause : public OMPClause {
+  friend class OMPClauseReader;
+  /// \brief Device number.
+  Stmt *Device;
+  /// \brief Set the device number.
+  ///
+  /// \param E Device number.
+  ///
+  void setDevice(Expr *E) { Device = E; }
+
+public:
+  /// \brief Build 'device' clause.
+  ///
+  /// \param E Expression associated with this clause.
+  /// \param StartLoc Starting location of the clause.
+  /// \param EndLoc Ending location of the clause.
+  ///
+  OMPDeviceClause(Expr *E, SourceLocation StartLoc, SourceLocation EndLoc)
+      : OMPClause(OMPC_device, StartLoc, EndLoc), Device(E) {}
+
+  /// \brief Build an empty clause.
+  ///
+  OMPDeviceClause()
+      : OMPClause(OMPC_device, SourceLocation(), SourceLocation()), Device(0) {}
+
+  /// \brief Return device number.
+  Expr *getDevice() { return dyn_cast_or_null<Expr>(Device); }
+
+  /// \brief Return device number.
+  Expr *getDevice() const { return dyn_cast_or_null<Expr>(Device); }
+
+  static bool classof(const OMPClause *T) {
+    return T->getClauseKind() == OMPC_device;
+  }
+
+  StmtRange children() { return StmtRange(&Device, &Device + 1); }
+};
+
 /// \brief This represents 'default' clause in the '#pragma omp ...' directive.
 ///
 /// \code
@@ -1365,6 +1412,156 @@ public:
   }
 };
 
+/// \brief This represents clause 'map' in the '#pragma omp ...'
+/// directives.
+///
+/// \code
+/// #pragma omp target map(a,b)
+/// \endcode
+/// In this example directive '#pragma omp target' has clause 'map'
+/// with the variables 'a' and 'b'.
+///
+class OMPMapClause : public OMPVarListClause<OMPMapClause> {
+  friend class OMPClauseReader;
+  friend class OMPClauseWriter;
+  friend class Sema;
+
+  /// \brief Mapping kind for the 'map' clause.
+  OpenMPMapClauseKind Kind;
+  /// \brief Location of the mapping kind.
+  SourceLocation KindLoc;
+
+  /// \brief Set Kind for the clause.
+  ///
+  /// \param K Kind for the clause.
+  ///
+  void setKind(OpenMPMapClauseKind K) { Kind = K; }
+
+  /// \brief Set kind location.
+  ///
+  /// \param KLoc Kind location.
+  ///
+  void setKindLoc(SourceLocation KLoc) { KindLoc = KLoc; }
+
+  /// \brief Build clause with number of variables \a N.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param EndLoc Ending location of the clause.
+  /// \param N Number of the variables in the clause.
+  ///
+  explicit OMPMapClause(SourceLocation StartLoc, SourceLocation LParenLoc,
+                        SourceLocation EndLoc, unsigned N,
+                        OpenMPMapClauseKind K, SourceLocation KLoc)
+      : OMPVarListClause<OMPMapClause>(OMPC_map, StartLoc, LParenLoc, EndLoc, N),
+        Kind(K), KindLoc(KLoc) {}
+
+  /// \brief Build an empty clause.
+  ///
+  /// \param N Number of variables.
+  ///
+  explicit OMPMapClause(unsigned N)
+      : OMPVarListClause<OMPMapClause>(OMPC_map, SourceLocation(), SourceLocation(),
+                                       SourceLocation(), N),
+        Kind(OMPC_MAP_unknown), KindLoc() {}
+
+  /// \brief Sets whole starting addresses for the items.
+  void setWholeStartAddresses(ArrayRef<Expr *> WholeStartAddresses);
+
+  /// \brief Return the list of whole starting addresses.
+  llvm::MutableArrayRef<Expr *> getWholeStartAddresses() {
+    return llvm::MutableArrayRef<Expr *>(varlist_end(), numberOfVariables());
+  }
+
+  /// \brief Sets whole sizes/ending addresses for the items.
+  void setWholeSizesEndAddresses(ArrayRef<Expr *> WholeSizesEndAddresses);
+
+  /// \brief Return whole sizes/ending addresses for the items.
+  llvm::MutableArrayRef<Expr *> getWholeSizesEndAddresses() {
+    return llvm::MutableArrayRef<Expr *>(getWholeStartAddresses().end(),
+                                         numberOfVariables());
+  }
+
+  /// \brief Sets starting addresses for the items to be copied.
+  void setCopyingStartAddresses(ArrayRef<Expr *> CopyingStartAddresses);
+
+  /// \brief Return the list of copied starting addresses.
+  llvm::MutableArrayRef<Expr *> getCopyingStartAddresses() {
+    return llvm::MutableArrayRef<Expr *>(getWholeSizesEndAddresses().end(),
+                                         numberOfVariables());
+  }
+
+  /// \brief Sets sizes/ending addresses for the copied items.
+  void setCopyingSizesEndAddresses(ArrayRef<Expr *> CopyingSizesEndAddresses);
+
+  /// \brief Return sizes/ending addresses for the copied items.
+  llvm::MutableArrayRef<Expr *> getCopyingSizesEndAddresses() {
+    return llvm::MutableArrayRef<Expr *>(getCopyingStartAddresses().end(),
+                                         numberOfVariables());
+  }
+
+public:
+  /// \brief Creates clause with a list of variables \a VL.
+  ///
+  /// \param C AST context.
+  /// \brief StartLoc Starting location of the clause.
+  /// \brief EndLoc Ending location of the clause.
+  /// \param VL List of references to the variables.
+  ///
+  static OMPMapClause *Create(const ASTContext &C, SourceLocation StartLoc,
+                              SourceLocation LParenLoc,
+                              SourceLocation EndLoc, ArrayRef<Expr *> VL,
+                              ArrayRef<Expr *> WholeStartAddresses,
+                              ArrayRef<Expr *> WholeSizesEndAddresses,
+                              ArrayRef<Expr *> CopyingStartAddresses,
+                              ArrayRef<Expr *> CopyingSizesEndAddresses,
+                              OpenMPMapClauseKind Kind, SourceLocation KindLoc);
+  /// \brief Creates an empty clause with the place for \a N variables.
+  ///
+  /// \param C AST context.
+  /// \param N The number of variables.
+  ///
+  static OMPMapClause *CreateEmpty(const ASTContext &C, unsigned N);
+
+  /// \brief Fetches mapping kind for the clause.
+  OpenMPMapClauseKind getKind() const LLVM_READONLY { return Kind; }
+
+  /// \brief Fetches location of clause mapping kind.
+  SourceLocation getKindLoc() const LLVM_READONLY { return KindLoc; }
+
+  /// \brief Return the list of whole starting addresses.
+  ArrayRef<const Expr *> getWholeStartAddresses() const {
+    return ArrayRef<const Expr *>(varlist_end(), numberOfVariables());
+  }
+
+  /// \brief Return whole sizes/ending addresses for the items.
+  ArrayRef<const Expr *> getWholeSizesEndAddresses() const {
+    return ArrayRef<const Expr *>(getWholeStartAddresses().end(),
+                                  numberOfVariables());
+  }
+
+  /// \brief Return the list of copied starting addresses.
+  ArrayRef<const Expr *> getCopyingStartAddresses() const {
+    return ArrayRef<const Expr *>(getWholeSizesEndAddresses().end(),
+                                  numberOfVariables());
+  }
+
+  /// \brief Return sizes/ending addresses for the copied items.
+  ArrayRef<const Expr *> getCopyingSizesEndAddresses() const {
+    return ArrayRef<const Expr *>(getCopyingStartAddresses().end(),
+                                  numberOfVariables());
+  }
+
+  static bool classof(const OMPClause *T) {
+    return T->getClauseKind() == OMPC_map;
+  }
+
+  StmtRange children() {
+    return StmtRange(
+        reinterpret_cast<Stmt **>(varlist_begin()),
+        reinterpret_cast<Stmt **>(getCopyingSizesEndAddresses().end()));
+  }
+};
+
 /// \brief This represents 'schedule' clause in the '#pragma omp ...' directive.
 ///
 /// \code
@@ -1447,8 +1644,8 @@ public:
   StmtRange children() { return StmtRange(&ChunkSize, &ChunkSize + 1); }
 };
 
-/// \brief This represents 'dist_schedule' clause in the
-/// '#pragma omp ...' directive.
+/// \brief This represents 'dist_schedule' clause in the '#pragma omp ...'
+/// directive.
 ///
 /// \code
 /// #pragma omp distribute dist_schedule(static, 3)
@@ -1461,7 +1658,7 @@ class OMPDistScheduleClause : public OMPClause {
   /// \brief Location of '('.
   SourceLocation LParenLoc;
   /// \brief A kind of the 'dist_schedule' clause.
-  OpenMPScheduleClauseKind Kind;
+  OpenMPDistScheduleClauseKind Kind;
   /// \brief Start location of the kind in cource code.
   SourceLocation KindLoc;
   /// \brief Chunk size.
@@ -1471,17 +1668,17 @@ class OMPDistScheduleClause : public OMPClause {
   ///
   /// \param K Argument of clause.
   ///
-  void setScheduleKind(OpenMPScheduleClauseKind K) { Kind = K; }
+  void setDistScheduleKind(OpenMPDistScheduleClauseKind K) { Kind = K; }
   /// \brief Set kind location.
   ///
   /// \param KLoc Kind location.
   ///
-  void setScheduleKindLoc(SourceLocation KLoc) { KindLoc = KLoc; }
+  void setDistScheduleKindLoc(SourceLocation KLoc) { KindLoc = KLoc; }
   /// \brief Set chunk size.
   ///
   /// \param E Chunk size.
   ///
-  void setChunkSize(Expr *E) { ChunkSize = E; }
+  void setDistChunkSize(Expr *E) { ChunkSize = E; }
 
 public:
   /// \brief Build 'dist_schedule' clause with argument \a Kind and
@@ -1493,9 +1690,9 @@ public:
   /// \brief StartLoc Starting location of the clause.
   /// \brief EndLoc Ending location of the clause.
   ///
-  OMPDistScheduleClause(OpenMPScheduleClauseKind K, SourceLocation KLoc, Expr *E,
-                        SourceLocation StartLoc, SourceLocation LParenLoc,
-                        SourceLocation EndLoc)
+  OMPDistScheduleClause(OpenMPDistScheduleClauseKind K, SourceLocation KLoc,
+                        Expr *E, SourceLocation StartLoc,
+                        SourceLocation LParenLoc, SourceLocation EndLoc)
       : OMPClause(OMPC_dist_schedule, StartLoc, EndLoc), LParenLoc(LParenLoc),
         Kind(K), KindLoc(KLoc), ChunkSize(E) {}
 
@@ -1503,7 +1700,8 @@ public:
   ///
   explicit OMPDistScheduleClause()
       : OMPClause(OMPC_dist_schedule, SourceLocation(), SourceLocation()),
-        Kind(OMPC_SCHEDULE_unknown), KindLoc(SourceLocation()), ChunkSize(0) {}
+        Kind(OMPC_DIST_SCHEDULE_unknown), KindLoc(SourceLocation()),
+        ChunkSize(0) {}
 
   /// \brief Sets the location of '('.
   void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
@@ -1512,16 +1710,16 @@ public:
 
   /// \brief Get kind of the clause.
   ///
-  OpenMPScheduleClauseKind getScheduleKind() const { return Kind; }
+  OpenMPDistScheduleClauseKind getDistScheduleKind() const { return Kind; }
   /// \brief Get kind location.
   ///
-  SourceLocation getScheduleKindLoc() { return KindLoc; }
+  SourceLocation getDistScheduleKindLoc() { return KindLoc; }
   /// \brief Get chunk size.
   ///
-  Expr *getChunkSize() { return dyn_cast_or_null<Expr>(ChunkSize); }
+  Expr *getDistChunkSize() { return dyn_cast_or_null<Expr>(ChunkSize); }
   /// \brief Get chunk size.
   ///
-  Expr *getChunkSize() const { return dyn_cast_or_null<Expr>(ChunkSize); }
+  Expr *getDistChunkSize() const { return dyn_cast_or_null<Expr>(ChunkSize); }
 
   static bool classof(const OMPClause *T) {
     return T->getClauseKind() == OMPC_dist_schedule;

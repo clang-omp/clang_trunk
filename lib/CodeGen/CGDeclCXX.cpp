@@ -905,3 +905,4 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
                                                        getMangledName(Var)));
   }
 }
+

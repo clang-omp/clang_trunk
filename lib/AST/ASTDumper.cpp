@@ -1507,6 +1507,9 @@ void ASTDumper::dumpStmt(const Stmt *S) {
       lastChild();
     dumpStmt(*CI);
   }
+  if (const CapturedStmt *CS = dyn_cast<CapturedStmt>(S)) {
+    dumpStmt(CS->getCapturedStmt());
+  }
 }
 
 void ASTDumper::VisitStmt(const Stmt *Node) {
