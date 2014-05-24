@@ -1650,8 +1650,6 @@ void ASTDeclReader::VisitClassTemplateDecl(ClassTemplateDecl *D) {
       memcpy(CommonPtr->LazySpecializations, SpecIDs.data(), 
              SpecIDs.size() * sizeof(DeclID));
     }
-    
-    CommonPtr->InjectedClassNameType = Reader.readType(F, Record, Idx);
   }
 
   if (D->getTemplatedDecl()->TemplateOrInstantiation) {
@@ -1659,7 +1657,7 @@ void ASTDeclReader::VisitClassTemplateDecl(ClassTemplateDecl *D) {
     // its corresponding type yet (see VisitCXXRecordDeclImpl), so reconstruct
     // it now.
     Reader.Context.getInjectedClassNameType(
-        D->getTemplatedDecl(), D->getCommonPtr()->InjectedClassNameType);
+        D->getTemplatedDecl(), D->getInjectedClassNameSpecialization());
   }
 }
 

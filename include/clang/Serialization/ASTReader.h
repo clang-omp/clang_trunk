@@ -769,6 +769,9 @@ private:
   /// \brief The floating point pragma option settings.
   SmallVector<uint64_t, 1> FPPragmaOptions;
 
+  /// \brief The pragma clang optimize location (if the pragma state is "off").
+  SourceLocation OptimizeOffPragmaLocation;
+
   /// \brief The OpenCL extension settings.
   SmallVector<uint64_t, 1> OpenCLExtensions;
 

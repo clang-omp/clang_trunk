@@ -489,6 +489,7 @@ private:
   void WriteRedeclarations();
   void WriteMergedDecls();
   void WriteLateParsedTemplates(Sema &SemaRef);
+  void WriteOptimizePragmaOptions(Sema &SemaRef);
 
   unsigned DeclParmVarAbbrev;
   unsigned DeclContextLexicalAbbrev;
