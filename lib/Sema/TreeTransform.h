@@ -25,7 +25,6 @@
 #include "clang/AST/StmtCXX.h"
 #include "clang/AST/StmtObjC.h"
 #include "clang/AST/StmtOpenMP.h"
-#include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Designator.h"
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/Ownership.h"
@@ -1187,7 +1186,7 @@ public:
   /// By default, performs semantic analysis to build the new statement.
   /// Subclasses may override this routine to provide different behavior.
   StmtResult RebuildReturnStmt(SourceLocation ReturnLoc, Expr *Result) {
-    return getSema().ActOnReturnStmt(ReturnLoc, Result);
+    return getSema().BuildReturnStmt(ReturnLoc, Result);
   }
 
   /// \brief Build a new declaration statement.
@@ -6640,7 +6639,7 @@ StmtResult TreeTransform<Derived>::TransformOMPExecutableDirective(
         return StmtError();
       TClauses.push_back(Clause);
     } else {
-      TClauses.push_back(0);
+      TClauses.push_back(nullptr);
     }
   }
   StmtResult AssociatedStmt;
@@ -6733,7 +6732,7 @@ TreeTransform<Derived>::TransformOMPForDirective(OMPForDirective *D) {
   return Res;
 }
 
-template<typename Derived>
+template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformOMPCancelDirective(OMPCancelDirective *D) {
   DeclarationNameInfo DirName;
@@ -6773,7 +6772,7 @@ OMPClause *TreeTransform<Derived>::TransformOMPIfClause(OMPIfClause *C) {
                                          C->getLParenLoc(), C->getLocEnd());
 }
 
-template<typename Derived>
+template <typename Derived>
 OMPClause *
 TreeTransform<Derived>::TransformOMPNumThreadsClause(OMPNumThreadsClause *C) {
   ExprResult NumThreads = getDerived().TransformExpr(C->getNumThreads());
@@ -6795,7 +6794,7 @@ TreeTransform<Derived>::TransformOMPSafelenClause(OMPSafelenClause *C) {
       E.take(), C->getLocStart(), C->getLParenLoc(), C->getLocEnd());
 }
 
-template<typename Derived>
+template <typename Derived>
 OMPClause *
 TreeTransform<Derived>::TransformOMPDefaultClause(OMPDefaultClause *C) {
   return getDerived().RebuildOMPDefaultClause(C->getDefaultKind(),
@@ -7885,8 +7884,8 @@ TreeTransform<Derived>::TransformMemberExpr(MemberExpr *E) {
   }
 
   // FIXME: Bogus source location for the operator
-  SourceLocation FakeOperatorLoc
-    = SemaRef.PP.getLocForEndOfToken(E->getBase()->getSourceRange().getEnd());
+  SourceLocation FakeOperatorLoc =
+      SemaRef.getLocForEndOfToken(E->getBase()->getSourceRange().getEnd());
 
   // FIXME: to do this check properly, we will need to preserve the
   // first-qualifier-in-scope here, just in case we had a dependent
@@ -8059,8 +8058,8 @@ TreeTransform<Derived>::TransformExtVectorElementExpr(ExtVectorElementExpr *E) {
     return SemaRef.Owned(E);
 
   // FIXME: Bad source location
-  SourceLocation FakeOperatorLoc
-    = SemaRef.PP.getLocForEndOfToken(E->getBase()->getLocEnd());
+  SourceLocation FakeOperatorLoc =
+      SemaRef.getLocForEndOfToken(E->getBase()->getLocEnd());
   return getDerived().RebuildExtVectorElementExpr(Base.get(), FakeOperatorLoc,
                                                   E->getAccessorLoc(),
                                                   E->getAccessor());
@@ -8296,9 +8295,8 @@ TreeTransform<Derived>::TransformCXXOperatorCallExpr(CXXOperatorCallExpr *E) {
       return ExprError();
 
     // FIXME: Poor location information
-    SourceLocation FakeLParenLoc
-      = SemaRef.PP.getLocForEndOfToken(
-                              static_cast<Expr *>(Object.get())->getLocEnd());
+    SourceLocation FakeLParenLoc = SemaRef.getLocForEndOfToken(
+        static_cast<Expr *>(Object.get())->getLocEnd());
 
     // Transform the call arguments.
     SmallVector<Expr*, 8> Args;
@@ -10890,9 +10888,22 @@ template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformCapturedStmt(CapturedStmt *S) {
   SourceLocation Loc = S->getLocStart();
-  unsigned NumParams = S->getCapturedDecl()->getNumParams();
+  CapturedDecl *CD = S->getCapturedDecl();
+  unsigned NumParams = CD->getNumParams();
+  unsigned ContextParamPos = CD->getContextParamPosition();
+  SmallVector<Sema::CapturedParamNameType, 4> Params;
+  for (unsigned I = 0; I < NumParams; ++I) {
+    if (I != ContextParamPos) {
+      Params.push_back(
+             std::make_pair(
+                  CD->getParam(I)->getName(),
+                  getDerived().TransformType(CD->getParam(I)->getType())));
+    } else {
+      Params.push_back(std::make_pair(StringRef(), QualType()));
+    }
+  }
   getSema().ActOnCapturedRegionStart(Loc, /*CurScope*/0,
-                                     S->getCapturedRegionKind(), NumParams);
+                                     S->getCapturedRegionKind(), Params);
   StmtResult Body = getDerived().TransformStmt(S->getCapturedStmt());
 
   if (Body.isInvalid()) {

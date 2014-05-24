@@ -65,3 +65,4 @@ void h4(float *c, float *a, float *b, int size)
 // Metadata for h4:
 // CHECK: [[LOOP_H4_HEADER]] = metadata !{metadata [[LOOP_H4_HEADER]], metadata [[LOOP_VEC_ENABLE]]}
 //
+

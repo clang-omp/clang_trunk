@@ -14,6 +14,8 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
 #include "RAIIObjectsForParser.h"
+#include "clang/AST/ASTConsumer.h"
+#include "clang/AST/ASTContext.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Parse/Parser.h"
@@ -1137,7 +1139,7 @@ Decl *Parser::ParseOpenMPDeclareReduction(
 ///
 OMPClause *Parser::ParseOpenMPClause(OpenMPDirectiveKind DKind,
                                      OpenMPClauseKind CKind, bool FirstClause) {
-  OMPClause *Clause = 0;
+  OMPClause *Clause = nullptr;
   bool ErrorFound = false;
   // Check if clause is allowed for the given directive.
   if (CKind != OMPC_unknown && !isAllowedClauseForDirective(DKind, CKind)) {
@@ -1262,7 +1264,7 @@ OMPClause *Parser::ParseOpenMPClause(OpenMPDirectiveKind DKind,
       ;
     break;
   }
-  return ErrorFound ? 0 : Clause;
+  return ErrorFound ? nullptr : Clause;
 }
 
 /// \brief Parsing of OpenMP clauses with single expressions like 'if',
@@ -1317,7 +1319,7 @@ OMPClause *Parser::ParseOpenMPSingleExprClause(OpenMPClauseKind Kind) {
     ConsumeAnyToken();
 
   if (Val.isInvalid())
-    return 0;
+    return nullptr;
 
   return Actions.ActOnOpenMPSingleExprClause(Kind, Val.take(), Loc, LOpen,
                                              Tok.getLocation());
@@ -1376,6 +1378,9 @@ OMPClause *Parser::ParseOpenMPSingleExprWithTypeClause(OpenMPClauseKind Kind) {
 ///
 ///    proc_bind-clause:
 ///         'proc_bind' '(' 'master' | 'close' | 'spread' ')'
+///
+///    proc_bind-clause:
+///         'proc_bind' '(' 'master' | 'close' | 'spread' ')
 ///
 OMPClause *Parser::ParseOpenMPSimpleClause(OpenMPClauseKind Kind) {
   SourceLocation Loc = Tok.getLocation();

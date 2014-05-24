@@ -17,7 +17,9 @@ namespace CodeGen {
 
 class CodeGenFunction;
 
-/// IRBuilder inserter which forwards to CodeGenFunction::InsertHelper.
+/// \brief This is an IRBuilder insertion helper that forwards to
+/// CodeGenFunction::InsertHelper, which adds nesessary metadata to
+/// instructions.
 template <bool PreserveNames>
 class CGBuilderInserter
   : protected llvm::IRBuilderDefaultInserter<PreserveNames> {

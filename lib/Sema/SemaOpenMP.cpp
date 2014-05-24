@@ -1,4 +1,4 @@
-//===--- SemaOpenMP.cpp - Semantic Analysis for OpenMP constructs ----------===//
+//===--- SemaOpenMP.cpp - Semantic Analysis for OpenMP constructs ---------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -14,12 +14,14 @@
 
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/AST/ASTConsumer.h"
+#include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclOpenMP.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/AST/StmtCXX.h"
 #include "clang/AST/StmtVisitor.h"
+#include "clang/Basic/OpenMPKinds.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Initialization.h"
 #include "clang/Sema/Lookup.h"
@@ -450,7 +452,7 @@ OpenMPClauseKind DSAStackTy::getTopDSA(VarDecl *D, DeclRefExpr *&E) {
   //  Variables with const qualified type having no mutable member are
   //  shared.
   CXXRecordDecl *RD =
-      Actions.getLangOpts().CPlusPlus ? Type->getAsCXXRecordDecl() : 0;
+      Actions.getLangOpts().CPlusPlus ? Type->getAsCXXRecordDecl() : nullptr;
   if (IsConstant &&
       !(Actions.getLangOpts().CPlusPlus && RD && RD->hasMutableFields())) {
     DeclRefExpr *E;
@@ -706,12 +708,14 @@ ExprResult Sema::ActOnOpenMPIdExpression(Scope *CurScope,
   VarDecl *VD;
   if (!Lookup.isSingleResult()) {
     VarDeclFilterCCC Validator(*this);
-    if (TypoCorrection Corrected = CorrectTypo(Id, LookupOrdinaryName, CurScope,
-                                               0, Validator, CTK_ErrorRecovery)) {
+    if (TypoCorrection Corrected =
+            CorrectTypo(Id, LookupOrdinaryName, CurScope, nullptr, Validator,
+                        CTK_ErrorRecovery)) {
       diagnoseTypo(Corrected,
-                   PDiag(Lookup.empty()? diag::err_undeclared_var_use_suggest
-                                       : diag::err_omp_expected_var_arg_suggest)
-                     << Id.getName());
+                   PDiag(Lookup.empty()
+                             ? diag::err_undeclared_var_use_suggest
+                             : diag::err_omp_expected_var_arg_suggest)
+                       << Id.getName());
       VD = Corrected.getCorrectionDeclAs<VarDecl>();
     } else {
       Diag(Id.getLoc(), Lookup.empty() ? diag::err_undeclared_var_use
@@ -865,7 +869,7 @@ Sema::CheckOMPThreadPrivateDecl(SourceLocation Loc, ArrayRef<Expr *> VarList) {
     Vars.push_back(*I);
     DSAStack->addDSA(VD, DE, OMPC_threadprivate);
   }
-  OMPThreadPrivateDecl *D = 0;
+  OMPThreadPrivateDecl *D = nullptr;
   if (!Vars.empty()) {
     D = OMPThreadPrivateDecl::Create(Context, getCurLexicalContext(), Loc,
                                      Vars);

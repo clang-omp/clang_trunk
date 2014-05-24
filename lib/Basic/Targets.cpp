@@ -384,6 +384,17 @@ protected:
     Builder.defineMacro("__ELF__");
     if (Opts.POSIXThreads)
       Builder.defineMacro("_POSIX_THREADS");
+
+    switch (Triple.getArch()) {
+    default:
+      break;
+    case llvm::Triple::arm:
+    case llvm::Triple::armeb:
+    case llvm::Triple::thumb:
+    case llvm::Triple::thumbeb:
+      Builder.defineMacro("__ARM_DWARF_EH__");
+      break;
+    }
   }
 public:
   NetBSDTargetInfo(const llvm::Triple &Triple) : OSTargetInfo<Target>(Triple) {
@@ -445,7 +456,6 @@ protected:
 public:
   BitrigTargetInfo(const llvm::Triple &Triple) : OSTargetInfo<Target>(Triple) {
     this->UserLabelPrefix = "";
-    this->TLSSupported = false;
     this->MCountName = "__mcount";
   }
 };
@@ -1346,7 +1356,7 @@ namespace {
     void getGCCRegAliases(const GCCRegAlias *&Aliases,
                                   unsigned &NumAliases) const override {
       // No aliases.
-      Aliases = 0;
+      Aliases = nullptr;
       NumAliases = 0;
     }
     bool validateAsmConstraint(const char *&Name,
@@ -1439,7 +1449,7 @@ static const char *DescriptionStringR600DoubleOps =
   "-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64";
 
 static const char *DescriptionStringSI =
-  "e-p:32:32-p1:64:64-p2:64:64-p3:32:32-p4:32:32-p5:64:64"
+  "e-p:32:32-p1:64:64-p2:64:64-p3:32:32-p4:64:64-p5:32:32-p24:64:64"
   "-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128"
   "-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64";
 
@@ -1473,13 +1483,13 @@ public:
 
   void getGCCRegNames(const char * const *&Names,
                       unsigned &numNames) const override {
-    Names = NULL;
+    Names = nullptr;
     numNames = 0;
   }
 
   void getGCCRegAliases(const GCCRegAlias *&Aliases,
                         unsigned &NumAliases) const override {
-    Aliases = NULL;
+    Aliases = nullptr;
     NumAliases = 0;
   }
 
@@ -1490,7 +1500,7 @@ public:
 
   void getTargetBuiltins(const Builtin::Info *&Records,
                          unsigned &NumRecords) const override {
-    Records = NULL;
+    Records = nullptr;
     NumRecords = 0;
   }
 
@@ -1769,6 +1779,7 @@ class X86TargetInfo : public TargetInfo {
     CK_BDVER1,
     CK_BDVER2,
     CK_BDVER3,
+    CK_BDVER4,
     //@}
 
     /// This specification is deprecated and will be removed in the future.
@@ -1818,7 +1829,7 @@ public:
   }
   void getGCCRegAliases(const GCCRegAlias *&Aliases,
                         unsigned &NumAliases) const override {
-    Aliases = 0;
+    Aliases = nullptr;
     NumAliases = 0;
   }
   void getGCCAddlRegNames(const AddlRegName *&Names,
@@ -1912,6 +1923,7 @@ public:
       .Case("bdver1", CK_BDVER1)
       .Case("bdver2", CK_BDVER2)
       .Case("bdver3", CK_BDVER3)
+      .Case("bdver4", CK_BDVER4)
       .Case("x86-64", CK_x86_64)
       .Case("geode", CK_Geode)
       .Default(CK_Generic);
@@ -1981,6 +1993,7 @@ public:
     case CK_BDVER1:
     case CK_BDVER2:
     case CK_BDVER3:
+    case CK_BDVER4:
     case CK_x86_64:
       return true;
     }
@@ -2183,6 +2196,10 @@ void X86TargetInfo::getDefaultFeatures(llvm::StringMap<bool> &Features) const {
     setFeatureEnabledImpl(Features, "prfchw", true);
     setFeatureEnabledImpl(Features, "cx16", true);
     break;
+  case CK_BDVER4:
+    setFeatureEnabledImpl(Features, "avx2", true);
+    setFeatureEnabledImpl(Features, "bmi2", true);
+    // FALLTHROUGH
   case CK_BDVER2:
   case CK_BDVER3:
     setFeatureEnabledImpl(Features, "xop", true);
@@ -2685,6 +2702,9 @@ void X86TargetInfo::getTargetDefines(const LangOptions &Opts,
     break;
   case CK_BDVER3:
     defineCPUMacros(Builder, "bdver3");
+    break;
+  case CK_BDVER4:
+    defineCPUMacros(Builder, "bdver4");
     break;
   case CK_Geode:
     defineCPUMacros(Builder, "geode");
@@ -3400,6 +3420,7 @@ class AArch64TargetInfo : public TargetInfo {
   };
 
   unsigned FPU;
+  unsigned CRC;
   unsigned Crypto;
   static const Builtin::Info BuiltinInfo[];
 
@@ -3473,8 +3494,11 @@ public:
     if (FPU == NeonMode) {
       Builder.defineMacro("__ARM_NEON");
       // 64-bit NEON supports half, single and double precision operations.
-      Builder.defineMacro("__ARM_NEON_FP", "7");
+      Builder.defineMacro("__ARM_NEON_FP", "0xe");
     }
+
+    if (CRC)
+      Builder.defineMacro("__ARM_FEATURE_CRC32");
 
     if (Crypto) {
       Builder.defineMacro("__ARM_FEATURE_CRYPTO");
@@ -3499,10 +3523,13 @@ public:
   bool handleTargetFeatures(std::vector<std::string> &Features,
                             DiagnosticsEngine &Diags) override {
     FPU = FPUMode;
+    CRC = 0;
     Crypto = 0;
     for (unsigned i = 0, e = Features.size(); i != e; ++i) {
       if (Features[i] == "+neon")
         FPU = NeonMode;
+      if (Features[i] == "+crc")
+        CRC = 1;
       if (Features[i] == "+crypto")
         Crypto = 1;
     }
@@ -3768,11 +3795,18 @@ class ARMTargetInfo : public TargetInfo {
     else
       SizeType = UnsignedInt;
 
-    if (T.getOS() == llvm::Triple::NetBSD) {
+    switch (T.getOS()) {
+    case llvm::Triple::NetBSD:
       WCharType = SignedInt;
-    } else {
+      break;
+    case llvm::Triple::Win32:
+      WCharType = UnsignedShort;
+      break;
+    case llvm::Triple::Linux:
+    default:
       // AAPCS 7.1.1, ARM-Linux ABI 2.4: type of wchar_t is unsigned int.
       WCharType = UnsignedInt;
+      break;
     }
 
     UseBitFieldTypeAlignment = true;
@@ -4069,7 +4103,7 @@ public:
       .Cases("cortex-m3", "cortex-m4", "7M")
       .Case("cortex-m0", "6M")
       .Cases("cortex-a53", "cortex-a57", "8A")
-      .Default(0);
+      .Default(nullptr);
   }
   static const char *getCPUProfile(StringRef Name) {
     return llvm::StringSwitch<const char*>(Name)
@@ -4493,6 +4527,7 @@ class ARM64TargetInfo : public TargetInfo {
   };
 
   unsigned FPU;
+  unsigned CRC;
   unsigned Crypto;
 
   static const Builtin::Info BuiltinInfo[];
@@ -4587,8 +4622,11 @@ public:
     if (FPU == NeonMode) {
       Builder.defineMacro("__ARM_NEON");
       // 64-bit NEON supports half, single and double precision operations.
-      Builder.defineMacro("__ARM_NEON_FP", "7");
+      Builder.defineMacro("__ARM_NEON_FP", "0xe");
     }
+
+    if (CRC)
+      Builder.defineMacro("__ARM_FEATURE_CRC32");
 
     if (Crypto)
       Builder.defineMacro("__ARM_FEATURE_CRYPTO");
@@ -4609,10 +4647,13 @@ public:
   bool handleTargetFeatures(std::vector<std::string> &Features,
                             DiagnosticsEngine &Diags) override {
     FPU = FPUMode;
+    CRC = 0;
     Crypto = 0;
     for (unsigned i = 0, e = Features.size(); i != e; ++i) {
       if (Features[i] == "+neon")
         FPU = NeonMode;
+      if (Features[i] == "+crc")
+        CRC = 1;
       if (Features[i] == "+crypto")
         Crypto = 1;
     }
@@ -4865,7 +4906,7 @@ public:
     return llvm::StringSwitch<const char*>(Name)
       .Case("hexagonv4", "4")
       .Case("hexagonv5", "5")
-      .Default(0);
+      .Default(nullptr);
   }
 
   bool setCPU(const std::string &Name) override {
@@ -5197,7 +5238,7 @@ public:
   void getTargetBuiltins(const Builtin::Info *&Records,
                          unsigned &NumRecords) const override {
     // FIXME: Implement.
-    Records = 0;
+    Records = nullptr;
     NumRecords = 0;
   }
 
@@ -5206,7 +5247,7 @@ public:
   void getGCCRegAliases(const GCCRegAlias *&Aliases,
                         unsigned &NumAliases) const override {
     // No aliases.
-    Aliases = 0;
+    Aliases = nullptr;
     NumAliases = 0;
   }
   bool validateAsmConstraint(const char *&Name,
@@ -5303,7 +5344,7 @@ namespace {
     void getTargetBuiltins(const Builtin::Info *&Records,
                            unsigned &NumRecords) const override {
       // FIXME: Implement.
-      Records = 0;
+      Records = nullptr;
       NumRecords = 0;
     }
     bool hasFeature(StringRef Feature) const override {
@@ -5314,7 +5355,7 @@ namespace {
     void getGCCRegAliases(const GCCRegAlias *&Aliases,
                           unsigned &NumAliases) const override {
       // No aliases.
-      Aliases = 0;
+      Aliases = nullptr;
       NumAliases = 0;
     }
     bool validateAsmConstraint(const char *&Name,
@@ -5637,9 +5678,6 @@ public:
     // Remove front-end specific options.
     std::vector<std::string>::iterator it =
       std::find(Features.begin(), Features.end(), "+soft-float");
-    if (it != Features.end())
-      Features.erase(it);
-    it = std::find(Features.begin(), Features.end(), "+nan2008");
     if (it != Features.end())
       Features.erase(it);
 
@@ -5975,13 +6013,13 @@ public:
 
 void PNaClTargetInfo::getGCCRegNames(const char * const *&Names,
                                      unsigned &NumNames) const {
-  Names = NULL;
+  Names = nullptr;
   NumNames = 0;
 }
 
 void PNaClTargetInfo::getGCCRegAliases(const GCCRegAlias *&Aliases,
                                        unsigned &NumAliases) const {
-  Aliases = NULL;
+  Aliases = nullptr;
   NumAliases = 0;
 }
 } // end anonymous namespace.
@@ -6115,7 +6153,7 @@ public:
   }
   void getGCCRegAliases(const GCCRegAlias *&Aliases,
                         unsigned &NumAliases) const override {
-    Aliases = NULL;
+    Aliases = nullptr;
     NumAliases = 0;
   }
   bool validateAsmConstraint(const char *&Name,
@@ -6146,7 +6184,7 @@ static TargetInfo *AllocateTarget(const llvm::Triple &Triple) {
 
   switch (Triple.getArch()) {
   default:
-    return NULL;
+    return nullptr;
 
   case llvm::Triple::arm64:
     if (Triple.isOSDarwin())
@@ -6324,7 +6362,7 @@ static TargetInfo *AllocateTarget(const llvm::Triple &Triple) {
       case llvm::Triple::NaCl:
         return new NaClTargetInfo<PNaClTargetInfo>(Triple);
       default:
-        return NULL;
+        return nullptr;
     }
 
   case llvm::Triple::ppc:
@@ -6513,13 +6551,13 @@ static TargetInfo *AllocateTarget(const llvm::Triple &Triple) {
     case llvm::Triple::spir: {
       if (Triple.getOS() != llvm::Triple::UnknownOS ||
           Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
-        return NULL;
+        return nullptr;
       return new SPIR32TargetInfo(Triple);
     }
     case llvm::Triple::spir64: {
       if (Triple.getOS() != llvm::Triple::UnknownOS ||
           Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
-        return NULL;
+        return nullptr;
       return new SPIR64TargetInfo(Triple);
     }
   }
@@ -6535,26 +6573,26 @@ TargetInfo *TargetInfo::CreateTargetInfo(DiagnosticsEngine &Diags,
   std::unique_ptr<TargetInfo> Target(AllocateTarget(Triple));
   if (!Target) {
     Diags.Report(diag::err_target_unknown_triple) << Triple.str();
-    return 0;
+    return nullptr;
   }
   Target->setTargetOpts(Opts);
 
   // Set the target CPU if specified.
   if (!Opts->CPU.empty() && !Target->setCPU(Opts->CPU)) {
     Diags.Report(diag::err_target_unknown_cpu) << Opts->CPU;
-    return 0;
+    return nullptr;
   }
 
   // Set the target ABI if specified.
   if (!Opts->ABI.empty() && !Target->setABI(Opts->ABI)) {
     Diags.Report(diag::err_target_unknown_abi) << Opts->ABI;
-    return 0;
+    return nullptr;
   }
 
   // Set the fp math unit.
   if (!Opts->FPMath.empty() && !Target->setFPMath(Opts->FPMath)) {
     Diags.Report(diag::err_target_unknown_fpmath) << Opts->FPMath;
-    return 0;
+    return nullptr;
   }
 
   // Compute the default target features, we need the target to handle this
@@ -6580,7 +6618,7 @@ TargetInfo *TargetInfo::CreateTargetInfo(DiagnosticsEngine &Diags,
          ie = Features.end(); it != ie; ++it)
     Opts->Features.push_back((it->second ? "+" : "-") + it->first().str());
   if (!Target->handleTargetFeatures(Opts->Features, Diags))
-    return 0;
+    return nullptr;
 
   return Target.release();
 }

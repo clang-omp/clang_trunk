@@ -1079,6 +1079,9 @@ CursorKind.CXX_OVERRIDE_ATTR = CursorKind(405)
 CursorKind.ANNOTATE_ATTR = CursorKind(406)
 CursorKind.ASM_LABEL_ATTR = CursorKind(407)
 CursorKind.PACKED_ATTR = CursorKind(408)
+CursorKind.PURE_ATTR = CursorKind(409)
+CursorKind.CONST_ATTR = CursorKind(410)
+CursorKind.NODUPLICATE_ATTR = CursorKind(411)
 
 ###
 # Preprocessing
@@ -3401,8 +3404,8 @@ class Config:
         python bindings can disable the compatibility check. This will cause
         the python bindings to load, even though they are written for a newer
         version of libclang. Failures now arise if unsupported or incompatible
-        features are accessed. The user is required to test himself if the
-        features he is using are available and compatible between different
+        features are accessed. The user is required to test themselves if the
+        features they are using are available and compatible between different
         libclang versions.
         """
         if Config.loaded:

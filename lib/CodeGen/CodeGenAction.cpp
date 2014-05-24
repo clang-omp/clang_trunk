@@ -249,7 +249,7 @@ static FullSourceLoc ConvertBackendLocation(const llvm::SMDiagnostic &D,
   llvm::MemoryBuffer *CBuf =
   llvm::MemoryBuffer::getMemBufferCopy(LBuf->getBuffer(),
                                        LBuf->getBufferIdentifier());
-  FileID FID = CSM.createFileIDForMemBuffer(CBuf);
+  FileID FID = CSM.createFileID(CBuf);
 
   // Translate the offset into the file.
   unsigned Offset = D.getLoc().getPointer()  - LBuf->getBufferStart();
@@ -383,7 +383,7 @@ BackendConsumer::StackSizeDiagHandler(const llvm::DiagnosticInfoStackSize &D) {
 void BackendConsumer::OptimizationRemarkHandler(
     const llvm::DiagnosticInfoOptimizationRemark &D) {
   // We only support remarks.
-  assert (D.getSeverity() == llvm::DS_Remark);
+  assert(D.getSeverity() == llvm::DS_Remark);
 
   // Optimization remarks are active only if -Rpass=regexp is given and the
   // regular expression pattern in 'regexp' matches the name of the pass
@@ -396,13 +396,13 @@ void BackendConsumer::OptimizationRemarkHandler(
     unsigned Line, Column;
     D.getLocation(&Filename, &Line, &Column);
     SourceLocation Loc;
-    if (Line > 0) {
+    const FileEntry *FE = FileMgr.getFile(Filename);
+    if (FE && Line > 0) {
       // If -gcolumn-info was not used, Column will be 0. This upsets the
       // source manager, so if Column is not set, set it to 1.
       if (Column == 0)
         Column = 1;
-      Loc = SourceMgr.translateFileLineCol(FileMgr.getFile(Filename), Line,
-                                           Column);
+      Loc = SourceMgr.translateFileLineCol(FE, Line, Column);
     }
     Diags.Report(Loc, diag::remark_fe_backend_optimization_remark)
         << AddFlagValue(D.getPassName()) << D.getMsg().str();
@@ -415,6 +415,13 @@ void BackendConsumer::OptimizationRemarkHandler(
       // -Rpass is used. !srcloc annotations need to be emitted in
       // approximately the same spots as !dbg nodes.
       Diags.Report(diag::note_fe_backend_optimization_remark_missing_loc);
+    else if (Loc.isInvalid())
+      // If we were not able to translate the file:line:col information
+      // back to a SourceLocation, at least emit a note stating that
+      // we could not translate this location. This can happen in the
+      // case of #line directives.
+      Diags.Report(diag::note_fe_backend_optimization_remark_invalid_loc)
+        << Filename << Line << Column;
   }
 }
 
@@ -459,7 +466,7 @@ void BackendConsumer::DiagnosticHandlerImpl(const DiagnosticInfo &DI) {
 #undef ComputeDiagID
 
 CodeGenAction::CodeGenAction(unsigned _Act, LLVMContext *_VMContext)
-  : Act(_Act), LinkModule(0),
+  : Act(_Act), LinkModule(nullptr),
     VMContext(_VMContext ? _VMContext : new LLVMContext),
     OwnsVMContext(!_VMContext) {}
 
@@ -502,7 +509,7 @@ static raw_ostream *GetOutputStream(CompilerInstance &CI,
   case Backend_EmitBC:
     return CI.createDefaultOutputFile(true, InFile, "bc");
   case Backend_EmitNothing:
-    return 0;
+    return nullptr;
   case Backend_EmitMCNull:
   case Backend_EmitObj:
     return CI.createDefaultOutputFile(true, InFile, "o");
@@ -516,7 +523,7 @@ ASTConsumer *CodeGenAction::CreateASTConsumer(CompilerInstance &CI,
   BackendAction BA = static_cast<BackendAction>(Act);
   std::unique_ptr<raw_ostream> OS(GetOutputStream(CI, InFile, BA));
   if (BA != Backend_EmitNothing && !OS)
-    return 0;
+    return nullptr;
 
   llvm::Module *LinkModuleToUse = LinkModule;
 
@@ -531,7 +538,7 @@ ASTConsumer *CodeGenAction::CreateASTConsumer(CompilerInstance &CI,
     if (!BCBuf) {
       CI.getDiagnostics().Report(diag::err_cannot_open_file)
         << LinkBCFile << ErrorStr;
-      return 0;
+      return nullptr;
     }
 
     ErrorOr<llvm::Module *> ModuleOrErr =
@@ -539,14 +546,17 @@ ASTConsumer *CodeGenAction::CreateASTConsumer(CompilerInstance &CI,
     if (error_code EC = ModuleOrErr.getError()) {
       CI.getDiagnostics().Report(diag::err_cannot_open_file)
         << LinkBCFile << EC.message();
-      return 0;
+      return nullptr;
     }
     LinkModuleToUse = ModuleOrErr.get();
   }
 
+  StringRef MainFileName = getCompilerInstance().getCodeGenOpts().MainFileName;
+  if (MainFileName.empty())
+    MainFileName = InFile;
   BEConsumer = new BackendConsumer(BA, CI.getDiagnostics(), CI.getCodeGenOpts(),
                                    CI.getTargetOpts(), CI.getLangOpts(),
-                                   CI.getFrontendOpts().ShowTimers, InFile,
+                                   CI.getFrontendOpts().ShowTimers, MainFileName,
                                    LinkModuleToUse, OS.release(), *VMContext);
   return BEConsumer;
 }

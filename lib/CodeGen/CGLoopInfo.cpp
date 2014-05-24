@@ -31,15 +31,22 @@ static llvm::MDNode *CreateMetadata(llvm::LLVMContext &Ctx,
   Args.push_back(TempNode);
 
   // Setting vectorizer.width
-  // TODO: For a correct implementation of 'safelen' clause
-  // we need to update the value somewhere (based on target info).
   if (Attrs.VectorizerWidth > 0) {
-    Value *Vals[] = {
-      MDString::get(Ctx, "llvm.vectorizer.width"),
-      ConstantInt::get(Type::getInt32Ty(Ctx), Attrs.VectorizerWidth)
-    };
+    Value *Vals[] = { MDString::get(Ctx, "llvm.vectorizer.width"),
+                      ConstantInt::get(Type::getInt32Ty(Ctx),
+                                       Attrs.VectorizerWidth) };
     Args.push_back(MDNode::get(Ctx, Vals));
   }
+
+#if 0
+  // Setting vectorizer.unroll
+  if (Attrs.VectorizerUnroll > 0) {
+    Value *Vals[] = { MDString::get(Ctx, "llvm.vectorizer.unroll"),
+                      ConstantInt::get(Type::getInt32Ty(Ctx),
+                                       Attrs.VectorizerUnroll) };
+    Args.push_back(MDNode::get(Ctx, Vals));
+  }
+#endif
 
   // Setting vectorizer.enable
   int EnableLoopVectorizer = 0;

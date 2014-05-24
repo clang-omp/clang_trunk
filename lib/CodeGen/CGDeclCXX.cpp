@@ -17,6 +17,7 @@
 #include "clang/Frontend/CodeGenOptions.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/Support/Path.h"
 
 using namespace clang;
 using namespace CodeGen;
@@ -89,7 +90,7 @@ static void EmitDeclDestroy(CodeGenFunction &CGF, const VarDecl &D,
 
   // Special-case non-array C++ destructors, where there's a function
   // with the right signature that we can just call.
-  const CXXRecordDecl *record = 0;
+  const CXXRecordDecl *record = nullptr;
   if (dtorKind == QualType::DK_cxx_destructor &&
       (record = type->getAsCXXRecordDecl())) {
     assert(!record->hasTrivialDestructor());
@@ -304,7 +305,7 @@ CodeGenModule::EmitCXXGlobalVarDeclInitFunc(const VarDecl *D,
     if (I == DelayedCXXInitPosition.end()) {
       CXXGlobalInits.push_back(Fn);
     } else {
-      assert(CXXGlobalInits[I->second] == 0);
+      assert(CXXGlobalInits[I->second] == nullptr);
       CXXGlobalInits[I->second] = Fn;
       DelayedCXXInitPosition.erase(I);
     }
@@ -312,7 +313,7 @@ CodeGenModule::EmitCXXGlobalVarDeclInitFunc(const VarDecl *D,
 }
 
 void CodeGenModule::EmitCXXThreadLocalInitFunc() {
-  llvm::Function *InitFn = 0;
+  llvm::Function *InitFn = nullptr;
   if (!CXXThreadLocalInits.empty()) {
     // Generate a guarded initialization function.
     llvm::FunctionType *FTy = llvm::FunctionType::get(VoidTy, false);
@@ -362,7 +363,7 @@ CodeGenModule::EmitCXXGlobalInitFunc() {
       // Compute the function suffix from priority. Prepend with zeroes to make
       // sure the function names are also ordered as priorities.
       std::string PrioritySuffix = llvm::utostr(Priority);
-      // Priority is always <= 65535 (enforced by sema)..
+      // Priority is always <= 65535 (enforced by sema).
       PrioritySuffix = std::string(6-PrioritySuffix.size(), '0')+PrioritySuffix;
       llvm::Function *Fn = 
         CreateGlobalInitOrDestructFunction(*this, FTy,
@@ -376,8 +377,20 @@ CodeGenModule::EmitCXXGlobalInitFunc() {
     }
   }
   
-  llvm::Function *Fn = 
-    CreateGlobalInitOrDestructFunction(*this, FTy, "_GLOBAL__I_a");
+  // Include the filename in the symbol name. Including "sub_" matches gcc and
+  // makes sure these symbols appear lexicographically behind the symbols with
+  // priority emitted above.
+  SourceManager &SM = Context.getSourceManager();
+  SmallString<128> FileName(llvm::sys::path::filename(
+      SM.getFileEntryForID(SM.getMainFileID())->getName()));
+  for (size_t i = 0; i < FileName.size(); ++i) {
+    // Replace everything that's not [a-zA-Z0-9._] with a _. This set happens
+    // to be the set of C preprocessing numbers.
+    if (!isPreprocessingNumberBody(FileName[i]))
+      FileName[i] = '_';
+  }
+  llvm::Function *Fn = CreateGlobalInitOrDestructFunction(
+      *this, FTy, llvm::Twine("_GLOBAL__sub_I_", FileName));
 
   CodeGenFunction(*this).GenerateCXXGlobalInitFunc(Fn, CXXGlobalInits);
   AddGlobalCtor(Fn);
@@ -407,7 +420,7 @@ void CodeGenFunction::GenerateCXXGlobalVarDeclInitFunc(llvm::Function *Fn,
                                                        bool PerformInit) {
   // Check if we need to emit debug info for variable initializer.
   if (D->hasAttr<NoDebugAttr>())
-    DebugInfo = NULL; // disable debug info indefinitely for this function
+    DebugInfo = nullptr; // disable debug info indefinitely for this function
 
   StartFunction(GlobalDecl(D), getContext().VoidTy, Fn,
                 getTypes().arrangeNullaryFunction(),
@@ -438,7 +451,7 @@ CodeGenFunction::GenerateCXXGlobalInitFunc(llvm::Function *Fn,
     // Emit an artificial location for this function.
     AL.Emit();
 
-    llvm::BasicBlock *ExitBlock = 0;
+    llvm::BasicBlock *ExitBlock = nullptr;
     if (Guard) {
       // If we have a guard variable, check whether we've already performed
       // these initializations. This happens for TLS initialization functions.
@@ -509,7 +522,8 @@ llvm::Function *CodeGenFunction::generateDestroyHelper(
     llvm::Constant *addr, QualType type, Destroyer *destroyer,
     bool useEHCleanupForArray, const VarDecl *VD) {
   FunctionArgList args;
-  ImplicitParamDecl dst(0, SourceLocation(), 0, getContext().VoidPtrTy);
+  ImplicitParamDecl dst(getContext(), nullptr, SourceLocation(), nullptr,
+                        getContext().VoidPtrTy);
   args.push_back(&dst);
 
   const CGFunctionInfo &FI = CGM.getTypes().arrangeFreeFunctionDeclaration(
@@ -557,7 +571,8 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
   if (Init) {
     CodeGenFunction CGF(*this);
     FunctionArgList Args;
-    ImplicitParamDecl Dst(0, SourceLocation(), 0, getContext().VoidPtrTy);
+    ImplicitParamDecl Dst(getContext(), 0, SourceLocation(), 0,
+                          getContext().VoidPtrTy);
     Args.push_back(&Dst);
 
     const CGFunctionInfo &FI =
@@ -641,7 +656,8 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
   if (DtorKind != QualType::DK_none && !Ty->hasTrivialDestructor()) {
     CodeGenFunction CGF(*this);
     FunctionArgList Args;
-    ImplicitParamDecl Dst(0, SourceLocation(), 0, getContext().VoidPtrTy);
+    ImplicitParamDecl Dst(getContext(), 0, SourceLocation(), 0,
+                          getContext().VoidPtrTy);
     Args.push_back(&Dst);
 
     const CGFunctionInfo &FI =
@@ -669,7 +685,8 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
   if (Init || (DtorKind != QualType::DK_none && !Ty->hasTrivialDestructor())) {
     if (!Ctor) {
       FunctionArgList Args;
-      ImplicitParamDecl Dst(0, SourceLocation(), 0, getContext().VoidPtrTy);
+      ImplicitParamDecl Dst(getContext(), 0, SourceLocation(), 0,
+                            getContext().VoidPtrTy);
       Args.push_back(&Dst);
 
       const CGFunctionInfo &FI =
@@ -682,9 +699,9 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
     }
     if (!CCtor) {
       FunctionArgList Args;
-      ImplicitParamDecl Dst1(0, SourceLocation(), 0,
+      ImplicitParamDecl Dst1(getContext(), 0, SourceLocation(), 0,
                              getContext().VoidPtrTy);
-      ImplicitParamDecl Dst2(0, SourceLocation(), 0,
+      ImplicitParamDecl Dst2(getContext(), 0, SourceLocation(), 0,
                              getContext().VoidPtrTy);
       Args.push_back(&Dst1);
       Args.push_back(&Dst2);
@@ -698,7 +715,8 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
     }
     if (DtorKind == QualType::DK_none || Ty->hasTrivialDestructor()) {
       FunctionArgList Args;
-      ImplicitParamDecl Dst(0, SourceLocation(), 0, getContext().VoidPtrTy);
+      ImplicitParamDecl Dst(getContext(), 0, SourceLocation(), 0,
+                            getContext().VoidPtrTy);
       Args.push_back(&Dst);
 
       const CGFunctionInfo &FI =
@@ -747,7 +765,8 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
   const Expr *Init = Var->getAnyInitializer();
   if (Init) {
     FunctionArgList Args;
-    ImplicitParamDecl Dst(0, SourceLocation(), 0, getContext().VoidPtrTy);
+    ImplicitParamDecl Dst(getContext(), 0, SourceLocation(), 0,
+                          getContext().VoidPtrTy);
     Args.push_back(&Dst);
 
     const CGFunctionInfo &FI =
@@ -828,7 +847,8 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
   }*/
   if (DtorDecl && !DtorDecl->isTrivial()) {
     FunctionArgList Args;
-    ImplicitParamDecl Dst(0, SourceLocation(), 0, getContext().VoidPtrTy);
+    ImplicitParamDecl Dst(getContext(), 0, SourceLocation(), 0,
+                          getContext().VoidPtrTy);
     Args.push_back(&Dst);
 
     const CGFunctionInfo &FI =
@@ -858,7 +878,8 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
   if (Init || DtorDecl) {
     if (!Ctor) {
       FunctionArgList Args;
-      ImplicitParamDecl Dst(0, SourceLocation(), 0, getContext().VoidPtrTy);
+      ImplicitParamDecl Dst(getContext(), 0, SourceLocation(), 0,
+                            getContext().VoidPtrTy);
       Args.push_back(&Dst);
 
       const CGFunctionInfo &FI =
@@ -871,9 +892,9 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
     }
     if (!CCtor) {
       FunctionArgList Args;
-      ImplicitParamDecl Dst1(0, SourceLocation(), 0,
+      ImplicitParamDecl Dst1(getContext(), 0, SourceLocation(), 0,
                              getContext().VoidPtrTy);
-      ImplicitParamDecl Dst2(0, SourceLocation(), 0,
+      ImplicitParamDecl Dst2(getContext(), 0, SourceLocation(), 0,
                              getContext().VoidPtrTy);
       Args.push_back(&Dst1);
       Args.push_back(&Dst2);
@@ -887,7 +908,8 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
     }
     if (!Dtor) {
       FunctionArgList Args;
-      ImplicitParamDecl Dst(0, SourceLocation(), 0, getContext().VoidPtrTy);
+      ImplicitParamDecl Dst(getContext(), 0, SourceLocation(), 0,
+                            getContext().VoidPtrTy);
       Args.push_back(&Dst);
 
       const CGFunctionInfo &FI =

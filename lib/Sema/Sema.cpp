@@ -21,6 +21,7 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/StmtCXX.h"
+#include "clang/Basic/DiagnosticOptions.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Basic/TargetInfo.h"
@@ -42,6 +43,12 @@
 #include "llvm/Support/CrashRecoveryContext.h"
 using namespace clang;
 using namespace sema;
+
+SourceLocation Sema::getLocForEndOfToken(SourceLocation Loc, unsigned Offset) {
+  return Lexer::getLocForEndOfToken(Loc, Offset, SourceMgr, LangOpts);
+}
+
+ModuleLoader &Sema::getModuleLoader() const { return PP.getModuleLoader(); }
 
 PrintingPolicy Sema::getPrintingPolicy(const ASTContext &Context,
                                        const Preprocessor &PP) {
@@ -144,7 +151,7 @@ void Sema::Initialize() {
     ExternalSema->InitializeSema(*this);
 
   // Initialize predefined 128-bit integer types, if needed.
-  if (PP.getTargetInfo().hasInt128Type()) {
+  if (Context.getTargetInfo().hasInt128Type()) {
     // If either of the 128-bit integer types are unavailable to name lookup,
     // define them now.
     DeclarationName Int128 = &Context.Idents.get("__int128_t");
@@ -473,6 +480,13 @@ static void checkUndefinedButUsed(Sema &S) {
          I = Undefined.begin(), E = Undefined.end(); I != E; ++I) {
     NamedDecl *ND = I->first;
 
+    if (ND->hasAttr<DLLImportAttr>() || ND->hasAttr<DLLExportAttr>()) {
+      // An exported function will always be emitted when defined, so even if
+      // the function is inline, it doesn't have to be emitted in this TU. An
+      // imported function implies that it has been exported somewhere else.
+      continue;
+    }
+
     if (!ND->isExternallyVisible()) {
       S.Diag(ND->getLocation(), diag::warn_undefined_internal)
         << isa<VarDecl>(ND) << ND;
@@ -602,7 +616,8 @@ void Sema::ActOnEndOfTranslationUnit() {
          I != E; ++I) {
       assert(!(*I)->isDependentType() &&
              "Should not see dependent types here!");
-      if (const CXXMethodDecl *KeyFunction = Context.getCurrentKeyFunction(*I)) {
+      if (const CXXMethodDecl *KeyFunction =
+              Context.getCurrentKeyFunction(*I)) {
         const FunctionDecl *Definition = 0;
         if (KeyFunction->hasBody(Definition))
           MarkVTableUsed(Definition->getLocation(), *I, true);
@@ -1080,19 +1095,12 @@ void Sema::PopFunctionScopeInfo(const AnalysisBasedWarnings::Policy *WP,
   // Issue any analysis-based warnings.
   if (WP && D)
     AnalysisWarnings.IssueWarnings(*WP, Scope, D, blkExpr);
-  else {
-    for (SmallVectorImpl<sema::PossiblyUnreachableDiag>::iterator
-         i = Scope->PossiblyUnreachableDiags.begin(),
-         e = Scope->PossiblyUnreachableDiags.end();
-         i != e; ++i) {
-      const sema::PossiblyUnreachableDiag &D = *i;
-      Diag(D.Loc, D.PD);
-    }
-  }
+  else
+    for (const auto &PUD : Scope->PossiblyUnreachableDiags)
+      Diag(PUD.Loc, PUD.PD);
 
-  if (FunctionScopes.back() != Scope) {
+  if (FunctionScopes.back() != Scope)
     delete Scope;
-  }
 }
 
 void Sema::PushCompoundScope() {

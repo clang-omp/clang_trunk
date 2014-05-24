@@ -1,4 +1,4 @@
-//===--- CGStmtOpenMP.cpp - Emit LLVM Code for declarations ---------------===//
+//===--- CGStmtOpenMP.cpp - Emit LLVM Code from Statements ----------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -3917,8 +3917,10 @@ CodeGenFunction::EmitInitOMPReductionClause(const OMPReductionClause &C,
   llvm::Function *ReductionFunc = CGF.CurFn;
   if (!ReductionFunc) {
     FunctionArgList Args;
-    ImplicitParamDecl Arg1(0, SourceLocation(), 0, getContext().VoidPtrTy);
-    ImplicitParamDecl Arg2(0, SourceLocation(), 0, getContext().VoidPtrTy);
+    ImplicitParamDecl Arg1(getContext(), 0, SourceLocation(), 0,
+                           getContext().VoidPtrTy);
+    ImplicitParamDecl Arg2(getContext(), 0, SourceLocation(), 0,
+                           getContext().VoidPtrTy);
     Args.push_back(&Arg1);
     Args.push_back(&Arg2);
     const CGFunctionInfo &FI = CGF.getTypes().arrangeFreeFunctionDeclaration(
@@ -4887,8 +4889,10 @@ void CodeGenFunction::EmitOMPSingleDirective(const OMPSingleDirective &S) {
         CodeGenFunction CGF(CGM, true);
         CGF.CurFn = 0;
         FunctionArgList Args;
-        ImplicitParamDecl Arg1(0, SourceLocation(), 0, getContext().VoidPtrTy);
-        ImplicitParamDecl Arg2(0, SourceLocation(), 0, getContext().VoidPtrTy);
+        ImplicitParamDecl Arg1(getContext(), 0, SourceLocation(), 0,
+                               getContext().VoidPtrTy);
+        ImplicitParamDecl Arg2(getContext(), 0, SourceLocation(), 0,
+                               getContext().VoidPtrTy);
         Args.push_back(&Arg1);
         Args.push_back(&Arg2);
         const CGFunctionInfo &FI = CGF.getTypes().arrangeFreeFunctionDeclaration(

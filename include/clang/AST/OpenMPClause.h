@@ -407,7 +407,7 @@ public:
   ///
   explicit OMPSafelenClause()
       : OMPClause(OMPC_safelen, SourceLocation(), SourceLocation()),
-        LParenLoc(SourceLocation()), Safelen(0) {}
+        LParenLoc(SourceLocation()), Safelen(nullptr) {}
 
   /// \brief Sets the location of '('.
   void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }

@@ -170,19 +170,8 @@ void StmtPrinter::VisitLabelStmt(LabelStmt *Node) {
 }
 
 void StmtPrinter::VisitAttributedStmt(AttributedStmt *Node) {
-  OS << "[[";
-  bool first = true;
-  for (ArrayRef<const Attr*>::iterator it = Node->getAttrs().begin(),
-                                       end = Node->getAttrs().end();
-                                       it != end; ++it) {
-    if (!first) {
-      OS << ", ";
-      first = false;
-    }
-    // TODO: check this
-    (*it)->printPretty(OS, Policy);
-  }
-  OS << "]] ";
+  for (const auto *Attr : Node->getAttrs())
+    Attr->printPretty(OS, Policy);
   PrintStmt(Node->getSubStmt(), 0);
 }
 
@@ -595,6 +584,9 @@ namespace {
 class OMPClausePrinter : public OMPClauseVisitor<OMPClausePrinter> {
   raw_ostream &OS;
   const PrintingPolicy &Policy;
+  /// \brief Process clauses with list of variables.
+  template <typename T>
+  void VisitOMPClauseList(T *Node, char StartSym);
 public:
   OMPClausePrinter(raw_ostream &OS,
                    const PrintingPolicy &P)
@@ -606,13 +598,13 @@ public:
 
 void OMPClausePrinter::VisitOMPIfClause(OMPIfClause *Node) {
   OS << "if(";
-  Node->getCondition()->printPretty(OS, 0, Policy, 0);
+  Node->getCondition()->printPretty(OS, nullptr, Policy, 0);
   OS << ")";
 }
 
 void OMPClausePrinter::VisitOMPNumThreadsClause(OMPNumThreadsClause *Node) {
   OS << "num_threads(";
-  Node->getNumThreads()->printPretty(OS, 0, Policy, 0);
+  Node->getNumThreads()->printPretty(OS, nullptr, Policy, 0);
   OS << ")";
 }
 
@@ -646,15 +638,25 @@ void OMPClausePrinter::VisitOMPProcBindClause(OMPProcBindClause *Node) {
      << ")";
 }
 
+template <typename T>
+void OMPClausePrinter::VisitOMPClauseList(T *Node, char StartSym) {
+  for (typename T::varlist_iterator I = Node->varlist_begin(),
+                                    E = Node->varlist_end();
+         I != E; ++I) {
+    if (DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(*I)) {
+      OS << (I == Node->varlist_begin() ? StartSym : ',');
+      cast<NamedDecl>(DRE->getDecl())->printQualifiedName(OS);
+    } else {
+      OS << (I == Node->varlist_begin() ? StartSym : ',');
+      (*I)->printPretty(OS, 0, Policy, 0);
+    }
+  }
+}
+
 void OMPClausePrinter::VisitOMPPrivateClause(OMPPrivateClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "private";
-    for (OMPPrivateClause::varlist_iterator I = Node->varlist_begin(),
-                                            E = Node->varlist_end();
-         I != E; ++I) {
-      OS << (I == Node->varlist_begin() ? '(' : ',')
-         << *cast<NamedDecl>(cast<DeclRefExpr>(*I)->getDecl());
-    }
+    VisitOMPClauseList(Node, '(');
     OS << ")";
   }
 }
@@ -662,12 +664,7 @@ void OMPClausePrinter::VisitOMPPrivateClause(OMPPrivateClause *Node) {
 void OMPClausePrinter::VisitOMPFirstPrivateClause(OMPFirstPrivateClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "firstprivate";
-    for (OMPFirstPrivateClause::varlist_iterator I = Node->varlist_begin(),
-                                                 E = Node->varlist_end();
-         I != E; ++I) {
-      OS << (I == Node->varlist_begin() ? '(' : ',')
-         << *cast<NamedDecl>(cast<DeclRefExpr>(*I)->getDecl());
-    }
+    VisitOMPClauseList(Node, '(');
     OS << ")";
   }
 }
@@ -675,12 +672,7 @@ void OMPClausePrinter::VisitOMPFirstPrivateClause(OMPFirstPrivateClause *Node) {
 void OMPClausePrinter::VisitOMPSharedClause(OMPSharedClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "shared";
-    for (OMPSharedClause::varlist_iterator I = Node->varlist_begin(),
-                                           E = Node->varlist_end();
-         I != E; ++I) {
-      OS << (I == Node->varlist_begin() ? '(' : ',')
-         << *cast<NamedDecl>(cast<DeclRefExpr>(*I)->getDecl());
-    }
+    VisitOMPClauseList(Node, '(');
     OS << ")";
   }
 }
@@ -688,12 +680,7 @@ void OMPClausePrinter::VisitOMPSharedClause(OMPSharedClause *Node) {
 void OMPClausePrinter::VisitOMPCopyinClause(OMPCopyinClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "copyin";
-    for (OMPCopyinClause::varlist_iterator I = Node->varlist_begin(),
-                                           E = Node->varlist_end();
-         I != E; ++I) {
-      OS << (I == Node->varlist_begin() ? '(' : ',')
-         << *cast<NamedDecl>(cast<DeclRefExpr>(*I)->getDecl());
-    }
+    VisitOMPClauseList(Node, '(');
     OS << ")";
   }
 }
@@ -701,12 +688,7 @@ void OMPClausePrinter::VisitOMPCopyinClause(OMPCopyinClause *Node) {
 void OMPClausePrinter::VisitOMPCopyPrivateClause(OMPCopyPrivateClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "copyprivate";
-    for (OMPCopyinClause::varlist_iterator I = Node->varlist_begin(),
-                                           E = Node->varlist_end();
-         I != E; ++I) {
-      OS << (I == Node->varlist_begin() ? '(' : ',')
-         << *cast<NamedDecl>(cast<DeclRefExpr>(*I)->getDecl());
-    }
+    VisitOMPClauseList(Node, '(');
     OS << ")";
   }
 }
@@ -723,12 +705,7 @@ void OMPClausePrinter::VisitOMPReductionClause(OMPReductionClause *Node) {
     }
     OS << ':';
 
-    for (OMPReductionClause::varlist_iterator I = Node->varlist_begin(),
-                                              E = Node->varlist_end();
-         I != E; ++I) {
-      OS << (I == Node->varlist_begin() ? ' ' : ',')
-         << *cast<NamedDecl>(cast<DeclRefExpr>(*I)->getDecl());
-    }
+    VisitOMPClauseList(Node, ' ');
     OS << ")";
   }
 }
@@ -736,12 +713,7 @@ void OMPClausePrinter::VisitOMPReductionClause(OMPReductionClause *Node) {
 void OMPClausePrinter::VisitOMPLastPrivateClause(OMPLastPrivateClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "lastprivate";
-    for (OMPLastPrivateClause::varlist_iterator I = Node->varlist_begin(),
-                                                E = Node->varlist_end();
-         I != E; ++I) {
-      OS << (I == Node->varlist_begin() ? '(' : ',')
-         << *cast<NamedDecl>(cast<DeclRefExpr>(*I)->getDecl());
-    }
+    VisitOMPClauseList(Node, '(');
     OS << ")";
   }
 }
@@ -752,12 +724,7 @@ void OMPClausePrinter::VisitOMPMapClause(OMPMapClause *Node) {
     OS << getOpenMPSimpleClauseTypeName(OMPC_map, Node->getKind());
     OS << ':';
 
-    for (OMPMapClause::varlist_iterator I = Node->varlist_begin(),
-                                        E = Node->varlist_end();
-         I != E; ++I) {
-      OS << (I == Node->varlist_begin() ? ' ' : ',')
-         << *cast<NamedDecl>(cast<DeclRefExpr>(*I)->getDecl());
-    }
+    VisitOMPClauseList(Node, ' ');
     OS << ")";
   }
 }
@@ -829,12 +796,7 @@ void OMPClausePrinter::VisitOMPNotInBranchClause(OMPNotInBranchClause *Node) {
 
 void OMPClausePrinter::VisitOMPFlushClause(OMPFlushClause *Node) {
   if (!Node->varlist_empty()) {
-    for (OMPFlushClause::varlist_iterator I = Node->varlist_begin(),
-                                          E = Node->varlist_end();
-         I != E; ++I) {
-      OS << (I == Node->varlist_begin() ? '(' : ',')
-         << *cast<NamedDecl>(cast<DeclRefExpr>(*I)->getDecl());
-    }
+    VisitOMPClauseList(Node, '(');
     OS << ")";
   }
 }
@@ -859,12 +821,7 @@ void OMPClausePrinter::VisitOMPDependClause(OMPDependClause *Node) {
 void OMPClausePrinter::VisitOMPUniformClause(OMPUniformClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "uniform";
-    for (OMPUniformClause::varlist_iterator I = Node->varlist_begin(),
-                                            E = Node->varlist_end();
-         I != E; ++I) {
-      OS << (I == Node->varlist_begin() ? '(' : ',')
-         << *cast<NamedDecl>(cast<DeclRefExpr>(*I)->getDecl());
-    }
+    VisitOMPClauseList(Node, '(');
     OS << ")";
   }
 }
@@ -896,15 +853,10 @@ void OMPClausePrinter::VisitOMPThreadLimitClause(OMPThreadLimitClause *Node) {
 void OMPClausePrinter::VisitOMPLinearClause(OMPLinearClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "linear";
-    for (OMPLinearClause::varlist_iterator I = Node->varlist_begin(),
-                                           E = Node->varlist_end();
-         I != E; ++I) {
-      OS << (I == Node->varlist_begin() ? '(' : ',')
-         << *cast<NamedDecl>(cast<DeclRefExpr>(*I)->getDecl());
-    }
+    VisitOMPClauseList(Node, '(');
     if (Node->getStep() != 0) {
       OS << ": ";
-      Node->getStep()->printPretty(OS, 0, Policy, 0);
+      Node->getStep()->printPretty(OS, nullptr, Policy, 0);
     }
     OS << ")";
   }
@@ -913,12 +865,7 @@ void OMPClausePrinter::VisitOMPLinearClause(OMPLinearClause *Node) {
 void OMPClausePrinter::VisitOMPAlignedClause(OMPAlignedClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "aligned";
-    for (OMPAlignedClause::varlist_iterator I = Node->varlist_begin(),
-                                            E = Node->varlist_end();
-         I != E; ++I) {
-      OS << (I == Node->varlist_begin() ? '(' : ',')
-         << *cast<NamedDecl>(cast<DeclRefExpr>(*I)->getDecl());
-    }
+    VisitOMPClauseList(Node, '(');
     if (Node->getAlignment() != 0) {
       OS << ": ";
       Node->getAlignment()->printPretty(OS, 0, Policy, 0);
@@ -1470,7 +1417,7 @@ void StmtPrinter::VisitMemberExpr(MemberExpr *Node) {
 
   MemberExpr *ParentMember = dyn_cast<MemberExpr>(Node->getBase());
   FieldDecl  *ParentDecl   = ParentMember
-    ? dyn_cast<FieldDecl>(ParentMember->getMemberDecl()) : NULL;
+    ? dyn_cast<FieldDecl>(ParentMember->getMemberDecl()) : nullptr;
 
   if (!ParentDecl || !ParentDecl->isAnonymousStructOrUnion())
     OS << (Node->isArrow() ? "->" : ".");
@@ -1662,7 +1609,7 @@ void StmtPrinter::VisitPseudoObjectExpr(PseudoObjectExpr *Node) {
 }
 
 void StmtPrinter::VisitAtomicExpr(AtomicExpr *Node) {
-  const char *Name = 0;
+  const char *Name = nullptr;
   switch (Node->getOp()) {
 #define BUILTIN(ID, TYPE, ATTRS)
 #define ATOMIC_BUILTIN(ID, TYPE, ATTRS) \
@@ -1874,7 +1821,7 @@ void StmtPrinter::VisitCXXThisExpr(CXXThisExpr *Node) {
 }
 
 void StmtPrinter::VisitCXXThrowExpr(CXXThrowExpr *Node) {
-  if (Node->getSubExpr() == 0)
+  if (!Node->getSubExpr())
     OS << "throw";
   else {
     OS << "throw ";
@@ -2390,14 +2337,14 @@ void StmtPrinter::VisitAsTypeExpr(AsTypeExpr *Node) {
 //===----------------------------------------------------------------------===//
 
 void Stmt::dumpPretty(const ASTContext &Context) const {
-  printPretty(llvm::errs(), 0, PrintingPolicy(Context.getLangOpts()));
+  printPretty(llvm::errs(), nullptr, PrintingPolicy(Context.getLangOpts()));
 }
 
 void Stmt::printPretty(raw_ostream &OS,
                        PrinterHelper *Helper,
                        const PrintingPolicy &Policy,
                        unsigned Indentation) const {
-  if (this == 0) {
+  if (this == nullptr) {
     OS << "<NULL>";
     return;
   }

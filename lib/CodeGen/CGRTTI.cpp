@@ -147,7 +147,8 @@ llvm::Constant *RTTIBuilder::GetAddrOfExternalRTTIDescriptor(QualType Ty) {
     // Create a new global variable.
     GV = new llvm::GlobalVariable(CGM.getModule(), CGM.Int8PtrTy,
                                   /*Constant=*/true,
-                                  llvm::GlobalValue::ExternalLinkage, 0, Name);
+                                  llvm::GlobalValue::ExternalLinkage, nullptr,
+                                  Name);
   }
   
   return llvm::ConstantExpr::getBitCast(GV, CGM.Int8PtrTy);
@@ -398,7 +399,7 @@ void RTTIBuilder::BuildVTablePointer(const Type *Ty) {
   static const char * const VMIClassTypeInfo =
     "_ZTVN10__cxxabiv121__vmi_class_type_infoE";
 
-  const char *VTableName = 0;
+  const char *VTableName = nullptr;
 
   switch (Ty->getTypeClass()) {
 #define TYPE(Class, Base)
@@ -678,17 +679,16 @@ llvm::Constant *RTTIBuilder::BuildTypeInfo(QualType Ty, bool Force) {
 
   // Give the type_info object and name the formal visibility of the
   // type itself.
-  Visibility formalVisibility = Ty->getVisibility();
-  llvm::GlobalValue::VisibilityTypes llvmVisibility =
-    CodeGenModule::GetLLVMVisibility(formalVisibility);
+  llvm::GlobalValue::VisibilityTypes llvmVisibility;
+  if (llvm::GlobalValue::isLocalLinkage(Linkage))
+    // If the linkage is local, only default visibility makes sense.
+    llvmVisibility = llvm::GlobalValue::DefaultVisibility;
+  else if (RTTIUniqueness == CGCXXABI::RUK_NonUniqueHidden)
+    llvmVisibility = llvm::GlobalValue::HiddenVisibility;
+  else
+    llvmVisibility = CodeGenModule::GetLLVMVisibility(Ty->getVisibility());
   TypeName->setVisibility(llvmVisibility);
   GV->setVisibility(llvmVisibility);
-
-  // FIXME: integrate this better into the above when we move to trunk
-  if (RTTIUniqueness == CGCXXABI::RUK_NonUniqueHidden) {
-    TypeName->setVisibility(llvm::GlobalValue::HiddenVisibility);
-    GV->setVisibility(llvm::GlobalValue::HiddenVisibility);
-  }
 
   return llvm::ConstantExpr::getBitCast(GV, CGM.Int8PtrTy);
 }

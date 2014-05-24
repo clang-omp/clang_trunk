@@ -21,3 +21,15 @@ namespace Std {
     extern T g();
   }
 }
+
+template<typename T> struct TemplateInstantiationVisibility { typedef int type; };
+
+template<typename T> struct Outer {
+  template<typename U> struct Inner {
+    void f();
+    void g();
+  };
+};
+
+template<typename T> struct WithPartialSpecialization {};
+typedef WithPartialSpecialization<int*> WithPartialSpecializationUse;
