@@ -2370,27 +2370,6 @@ void CodeGenFunction::EmitOMPTaskDirective(const OMPTaskDirective &S) {
       if (*I)
         CGF.EmitPreOMPClause(*(*I), S);
 
-    if (CGM.OpenMPSupport.getParentUntied()) {
-      // CodeGen for 'depend' clause.
-      llvm::Value *DependenceAddresses = 0;
-      unsigned ArraySize = 0;
-
-      std::tie(DependenceAddresses, ArraySize) =
-          ProcessDependAddresses(CGF, S);
-      if (ArraySize != 0) {
-        llvm::Type *PtrDepTy = getKMPDependInfoType(&CGM)->getPointerTo();
-        llvm::Value *Loc = CGM.CreateIntelOpenMPRTLLoc(S.getLocStart(), CGF);
-        llvm::Value *GTid =
-            CGM.CreateOpenMPGlobalThreadNum(S.getLocStart(), CGF);
-        llvm::Value *RealArgs1[] = { Loc,
-                                     GTid,
-                                     llvm::ConstantInt::get(Int32Ty, ArraySize),
-                                     DependenceAddresses,
-                                     llvm::ConstantInt::get(Int32Ty, 0),
-                                     llvm::Constant::getNullValue(PtrDepTy) };
-        CGF.EmitRuntimeCall(OPENMPRTL_FUNC(omp_wait_deps), RealArgs1);
-      }
-    }
     llvm::BasicBlock *UntiedEnd = 0;
     if (CGM.OpenMPSupport.getUntied()) {
       llvm::Value *Addr = CGF.Builder.CreateConstInBoundsGEP2_32(
@@ -2513,6 +2492,13 @@ void CodeGenFunction::EmitOMPTaskDirective(const OMPTaskDirective &S) {
                                      llvm::Constant::getNullValue(PtrDepTy) };
         EmitRuntimeCall(OPENMPRTL_FUNC(omp_task_with_deps), RealArgs1,
                         ".task.res.");
+        llvm::Value *WaitDepsArgs[] = { Loc, GTid, llvm::ConstantInt::get(
+                                                       Int32Ty, ArraySize),
+                                        DependenceAddresses,
+                                        llvm::ConstantInt::get(Int32Ty, 0),
+                                        llvm::Constant::getNullValue(
+                                            PtrDepTy) };
+        CGM.OpenMPSupport.setWaitDepsArgs(WaitDepsArgs);
       }
       EmitUntiedTaskSwitch(*this, true);
     }
@@ -3151,6 +3137,10 @@ void CodeGenFunction::EmitFinalOMPIfClause(const OMPIfClause &C,
     EmitBranch(ContBlock);
     EmitBlock(CGM.OpenMPSupport.takeIfDest());
     {
+      if (CGM.OpenMPSupport.getWaitDepsArgs()) {
+        EmitRuntimeCall(OPENMPRTL_FUNC(omp_wait_deps),
+                        makeArrayRef(CGM.OpenMPSupport.getWaitDepsArgs(), 6));
+      }
       llvm::Value *PTask;
       llvm::Value *TaskTVal;
       llvm::Type *PrivateTy;
