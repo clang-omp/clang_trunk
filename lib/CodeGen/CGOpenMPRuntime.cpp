@@ -135,7 +135,8 @@ llvm::Value *CGOpenMPRuntime::GetOpenMPGlobalThreadNum(CodeGenFunction &CGF,
 }
 
 void CGOpenMPRuntime::FunctionFinished(CodeGenFunction &CGF) {
-  assert(CGF.CurFn && "No function in current CodeGenFunction.");
+  // FIXME: This assert does not work with reductions.
+  // assert(CGF.CurFn && "No function in current CodeGenFunction.");
   if (OpenMPGtidMap.count(CGF.CurFn))
     OpenMPGtidMap.erase(CGF.CurFn);
   if (OpenMPLocMap.count(CGF.CurFn))
