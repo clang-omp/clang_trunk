@@ -1041,6 +1041,91 @@ public:
   }
 };
 
+/// \brief This represents clause 'aligned' in the '#pragma omp ...'
+/// directives.
+///
+/// \code
+/// #pragma omp simd aligned(a,b : 8)
+/// \endcode
+/// In this example directive '#pragma omp simd' has clause 'aligned'
+/// with variables 'a', 'b' and alignment '8'.
+///
+class OMPAlignedClause : public OMPVarListClause<OMPAlignedClause> {
+  friend class OMPClauseReader;
+  /// \brief Location of ':'.
+  SourceLocation ColonLoc;
+
+  /// \brief Sets the alignment for clause.
+  void setAlignment(Expr *A) { *varlist_end() = A; }
+
+  /// \brief Build 'aligned' clause with given number of variables \a NumVars.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param ColonLoc Location of ':'.
+  /// \param EndLoc Ending location of the clause.
+  /// \param NumVars Number of variables.
+  ///
+  OMPAlignedClause(SourceLocation StartLoc, SourceLocation LParenLoc,
+                   SourceLocation ColonLoc, SourceLocation EndLoc,
+                   unsigned NumVars)
+      : OMPVarListClause<OMPAlignedClause>(OMPC_aligned, StartLoc, LParenLoc,
+                                           EndLoc, NumVars),
+        ColonLoc(ColonLoc) {}
+
+  /// \brief Build an empty clause.
+  ///
+  /// \param NumVars Number of variables.
+  ///
+  explicit OMPAlignedClause(unsigned NumVars)
+      : OMPVarListClause<OMPAlignedClause>(OMPC_aligned, SourceLocation(),
+                                           SourceLocation(), SourceLocation(),
+                                           NumVars),
+        ColonLoc(SourceLocation()) {}
+
+public:
+  /// \brief Creates clause with a list of variables \a VL and alignment \a A.
+  ///
+  /// \param C AST Context.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param ColonLoc Location of ':'.
+  /// \param EndLoc Ending location of the clause.
+  /// \param VL List of references to the variables.
+  /// \param A Alignment.
+  static OMPAlignedClause *Create(const ASTContext &C, SourceLocation StartLoc,
+                                  SourceLocation LParenLoc,
+                                  SourceLocation ColonLoc,
+                                  SourceLocation EndLoc, ArrayRef<Expr *> VL,
+                                  Expr *A);
+
+  /// \brief Creates an empty clause with the place for \a NumVars variables.
+  ///
+  /// \param C AST context.
+  /// \param NumVars Number of variables.
+  ///
+  static OMPAlignedClause *CreateEmpty(const ASTContext &C, unsigned NumVars);
+
+  /// \brief Sets the location of ':'.
+  void setColonLoc(SourceLocation Loc) { ColonLoc = Loc; }
+  /// \brief Returns the location of ':'.
+  SourceLocation getColonLoc() const { return ColonLoc; }
+
+  /// \brief Returns alignment.
+  Expr *getAlignment() { return *varlist_end(); }
+  /// \brief Returns alignment.
+  const Expr *getAlignment() const { return *varlist_end(); }
+
+  StmtRange children() {
+    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
+                     reinterpret_cast<Stmt **>(varlist_end() + 1));
+  }
+
+  static bool classof(const OMPClause *T) {
+    return T->getClauseKind() == OMPC_aligned;
+  }
+};
+
 /// \brief This represents clause 'copyin' in the '#pragma omp ...' directives.
 ///
 /// \code
@@ -2335,98 +2420,6 @@ public:
   }
 
   StmtRange children() { return StmtRange(&ThreadLimit, &ThreadLimit + 1); }
-};
-
-/// \brief This represents clause 'aligned' in the '#pragma omp ...'
-/// directives.
-///
-/// \code
-/// #pragma omp simd aligned(a,b : 8)
-/// \endcode
-/// In this example directive '#pragma omp simd' has clause 'aligned'
-/// with variables 'a', 'b' and alignment '8'.
-///
-class OMPAlignedClause : public OMPVarListClause<OMPAlignedClause> {
-  friend class OMPClauseReader;
-  friend class OMPClauseWriter;
-
-  /// \brief Start location of the alignment in cource code.
-  SourceLocation AlignmentLoc;
-
-  /// \brief Set alignment for the clause.
-  ///
-  /// \param E alignment for the clause.
-  ///
-  void setAlignment(Expr *E) {
-    *(reinterpret_cast<Stmt **>(varlist_end())) = cast_or_null<Stmt>(E);
-  }
-
-  /// \brief Set alignment location.
-  ///
-  /// \param ALoc alignment location.
-  ///
-  void setAlignmentLoc(SourceLocation ALoc) { AlignmentLoc = ALoc; }
-
-  /// \brief Build clause with number of variables \a N.
-  ///
-  /// \param StartLoc Starting location of the clause.
-  /// \param EndLoc Ending location of the clause.
-  /// \param N Number of the variables in the clause.
-  /// \param ALoc Location of the alignment.
-  ///
-  OMPAlignedClause(SourceLocation StartLoc, SourceLocation LParenLoc,
-                   SourceLocation EndLoc, unsigned N,
-                   SourceLocation ALoc)
-    : OMPVarListClause<OMPAlignedClause>(OMPC_aligned, StartLoc, LParenLoc, EndLoc, N),
-      AlignmentLoc(ALoc) { }
-
-  /// \brief Build an empty clause.
-  ///
-  /// \param N Number of variables.
-  ///
-  explicit OMPAlignedClause(unsigned N)
-    : OMPVarListClause<OMPAlignedClause>(OMPC_aligned, SourceLocation(), SourceLocation(),
-                                         SourceLocation(), N),
-       AlignmentLoc(SourceLocation()) { }
-
-public:
-  /// \brief Creates clause with a list of variables \a VL and an alignment
-  /// \a A.
-  ///
-  /// \param C AST context.
-  /// \brief StartLoc Starting location of the clause.
-  /// \brief EndLoc Ending location of the clause.
-  /// \param VL List of references to the variables.
-  /// \param A Alignment.
-  /// \param ALoc Location of the alignment.
-  ///
-  static OMPAlignedClause *Create(const ASTContext &C, SourceLocation StartLoc,
-                                 SourceLocation LParenLoc,
-                                 SourceLocation EndLoc, ArrayRef<Expr *> VL,
-                                 Expr *A, SourceLocation ALoc);
-  /// \brief Creates an empty clause with the place for \a N variables.
-  ///
-  /// \param C AST context.
-  /// \param N The number of variables.
-  ///
-  static OMPAlignedClause *CreateEmpty(const ASTContext &C, unsigned N);
-
-  /// \brief Fetches the alignment.
-  Expr *getAlignment() {
-    return dyn_cast_or_null<Expr>(*(reinterpret_cast<Stmt **>(varlist_end())));
-  }
-
-  /// \brief Fetches location of the alignment.
-  SourceLocation getAlignmentLoc() const { return AlignmentLoc; }
-
-  static bool classof(const OMPClause *T) {
-    return T->getClauseKind() == OMPC_aligned;
-  }
-
-  StmtRange children() {
-    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
-                     reinterpret_cast<Stmt **>(varlist_end() + 1));
-  }
 };
 
 /// \brief This represents clause 'depend' in the '#pragma omp ...'

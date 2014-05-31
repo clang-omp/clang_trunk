@@ -1680,11 +1680,11 @@ OMPClause *OMPClauseReader::readClause() {
   case OMPC_thread_limit:
     C = new (Context) OMPThreadLimitClause();
     break;
-  case OMPC_collapse:
-    C = new (Context) OMPCollapseClause();
-    break;
   case OMPC_device:
     C = new (Context) OMPDeviceClause();
+    break;
+  case OMPC_collapse:
+    C = new (Context) OMPCollapseClause();
     break;
   case OMPC_default:
     C = new (Context) OMPDefaultClause();
@@ -1709,6 +1709,9 @@ OMPClause *OMPClauseReader::readClause() {
     break;
   case OMPC_linear:
     C = OMPLinearClause::CreateEmpty(Context, Record[Idx++]);
+    break;
+  case OMPC_aligned:
+    C = OMPAlignedClause::CreateEmpty(Context, Record[Idx++]);
     break;
   case OMPC_copyin:
     C = OMPCopyinClause::CreateEmpty(Context, Record[Idx++]);
@@ -1770,9 +1773,6 @@ OMPClause *OMPClauseReader::readClause() {
   case OMPC_simdlen:
     C = new (Context) OMPSimdlenClause();
     break;
-  case OMPC_aligned:
-    C = OMPAlignedClause::CreateEmpty(Context, Record[Idx++]);
-    break;
   case OMPC_uniform:
     C = OMPUniformClause::CreateEmpty(Context, Record[Idx++]);
     break;
@@ -1795,10 +1795,6 @@ void OMPClauseReader::VisitOMPFinalClause(OMPFinalClause *C) {
   C->setCondition(Reader.ReadSubExpr());
 }
 
-void OMPClauseReader::VisitOMPCollapseClause(OMPCollapseClause *C) {
-  C->setNumForLoops(Reader.ReadSubExpr());
-}
-
 void OMPClauseReader::VisitOMPNumThreadsClause(OMPNumThreadsClause *C) {
   C->setNumThreads(Reader.ReadSubExpr());
   C->setLParenLoc(this->ReadSourceLocation(Record, Idx));
@@ -1811,6 +1807,11 @@ void OMPClauseReader::VisitOMPSafelenClause(OMPSafelenClause *C) {
 
 void OMPClauseReader::VisitOMPDeviceClause(OMPDeviceClause *C) {
   C->setDevice(Reader.ReadSubExpr());
+}
+
+void OMPClauseReader::VisitOMPCollapseClause(OMPCollapseClause *C) {
+  C->setNumForLoops(Reader.ReadSubExpr());
+  C->setLParenLoc(ReadSourceLocation(Record, Idx));
 }
 
 void OMPClauseReader::VisitOMPDefaultClause(OMPDefaultClause *C) {
@@ -1936,6 +1937,18 @@ void OMPClauseReader::VisitOMPLinearClause(OMPLinearClause *C) {
     Vars.push_back(Reader.ReadExpr(MFile));
   C->setVars(Vars);
   C->setStep(Reader.ReadExpr(MFile));
+}
+
+void OMPClauseReader::VisitOMPAlignedClause(OMPAlignedClause *C) {
+  C->setLParenLoc(ReadSourceLocation(Record, Idx));
+  C->setColonLoc(ReadSourceLocation(Record, Idx));
+  unsigned NumVars = C->varlist_size();
+  SmallVector<Expr *, 16> Vars;
+  Vars.reserve(NumVars);
+  for (unsigned i = 0; i != NumVars; ++i)
+    Vars.push_back(Reader.ReadExpr(MFile));
+  C->setVars(Vars);
+  C->setAlignment(Reader.ReadExpr(MFile));
 }
 
 void OMPClauseReader::VisitOMPCopyinClause(OMPCopyinClause *C) {
@@ -2147,16 +2160,6 @@ void OMPClauseReader::VisitOMPNumTeamsClause(OMPNumTeamsClause *C) {
 
 void OMPClauseReader::VisitOMPThreadLimitClause(OMPThreadLimitClause *C) {
   C->setThreadLimit(Reader.ReadSubExpr());
-}
-
-void OMPClauseReader::VisitOMPAlignedClause(OMPAlignedClause *C) {
-  unsigned NumVars = C->varlist_size();
-  SmallVector<Expr *, 16> Vars;
-  Vars.reserve(NumVars);
-  for (unsigned i = 0; i != NumVars; ++i)
-    Vars.push_back(Reader.ReadExpr(MFile));
-  C->setVars(Vars);
-  C->setAlignment(Reader.ReadExpr(MFile));
 }
 
 //===----------------------------------------------------------------------===//

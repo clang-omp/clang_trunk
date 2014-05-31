@@ -1678,10 +1678,6 @@ void OMPClauseWriter::VisitOMPFinalClause(OMPFinalClause *C) {
   Writer.AddStmt(C->getCondition());
 }
 
-void OMPClauseWriter::VisitOMPCollapseClause(OMPCollapseClause *C) {
-  Writer.AddStmt(C->getNumForLoops());
-}
-
 void OMPClauseWriter::VisitOMPNumThreadsClause(OMPNumThreadsClause *C) {
   Writer.AddStmt(C->getNumThreads());
   Writer.AddSourceLocation(C->getLParenLoc(), Record);
@@ -1694,6 +1690,11 @@ void OMPClauseWriter::VisitOMPSafelenClause(OMPSafelenClause *C) {
 
 void OMPClauseWriter::VisitOMPDeviceClause(OMPDeviceClause *C) {
   Writer.AddStmt(C->getDevice());
+}
+
+void OMPClauseWriter::VisitOMPCollapseClause(OMPCollapseClause *C) {
+  Writer.AddStmt(C->getNumForLoops());
+  Writer.AddSourceLocation(C->getLParenLoc(), Record);
 }
 
 void OMPClauseWriter::VisitOMPDefaultClause(OMPDefaultClause *C) {
@@ -1786,6 +1787,15 @@ void OMPClauseWriter::VisitOMPLinearClause(OMPLinearClause *C) {
   for (auto *VE : C->varlists())
     Writer.AddStmt(VE);
   Writer.AddStmt(C->getStep());
+}
+
+void OMPClauseWriter::VisitOMPAlignedClause(OMPAlignedClause *C) {
+  Record.push_back(C->varlist_size());
+  Writer.AddSourceLocation(C->getLParenLoc(), Record);
+  Writer.AddSourceLocation(C->getColonLoc(), Record);
+  for (auto *VE : C->varlists())
+    Writer.AddStmt(VE);
+  Writer.AddStmt(C->getAlignment());
 }
 
 void OMPClauseWriter::VisitOMPCopyinClause(OMPCopyinClause *C) {
@@ -1943,15 +1953,6 @@ void OMPClauseWriter::VisitOMPNumTeamsClause(OMPNumTeamsClause *C) {
 
 void OMPClauseWriter::VisitOMPThreadLimitClause(OMPThreadLimitClause *C) {
   Writer.AddStmt(C->getThreadLimit());
-}
-
-void OMPClauseWriter::VisitOMPAlignedClause(OMPAlignedClause *C) {
-  Record.push_back(C->varlist_size());
-  for (OMPAlignedClause::varlist_iterator I = C->varlist_begin(),
-                                          E = C->varlist_end();
-        I != E; ++I)
-    Writer.AddStmt(*I);
-  Writer.AddStmt(C->getAlignment());
 }
 
 //===----------------------------------------------------------------------===//

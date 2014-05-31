@@ -1798,16 +1798,12 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
   const NamedDecl *ND = E->getDecl();
   CharUnits Alignment = getContext().getDeclAlign(ND);
   QualType T = E->getType();
-  const auto *VD = dyn_cast<VarDecl>(ND);
 
-  // Global Named registers access via intrinsics only
-  if (VD && VD->getStorageClass() == SC_Register &&
-       VD->hasAttr<AsmLabelAttr>() && !VD->isLocalVarDecl())
-    return EmitGlobalNamedRegister(VD, CGM, Alignment);
-
-  // A DeclRefExpr for a reference initialized by a constant expression can
-  // appear without being odr-used. Directly emit the constant initializer.
-  if (const VarDecl *VD = dyn_cast<VarDecl>(ND)) {
+  if (const auto *VD = dyn_cast<VarDecl>(ND)) {
+    // Global Named registers access via intrinsics only
+    if (VD->getStorageClass() == SC_Register &&
+        VD->hasAttr<AsmLabelAttr>() && !VD->isLocalVarDecl())
+      return EmitGlobalNamedRegister(VD, CGM, Alignment);
 
     // CodeGen for threadprivate variables.
     if (getLangOpts().OpenMP) {
@@ -1847,7 +1843,7 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
     return MakeAddrLValue(Aliasee, T, Alignment);
   }
 
-  if (VD) {
+  if (const auto *VD = dyn_cast<VarDecl>(ND)) {
     // Check if this is a global variable.
     if (VD->hasLinkage() || VD->isStaticDataMember())
       return EmitGlobalVarDeclLValue(*this, E, VD);

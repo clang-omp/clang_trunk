@@ -614,15 +614,15 @@ void OMPClausePrinter::VisitOMPFinalClause(OMPFinalClause *Node) {
   OS << ")";
 }
 
-void OMPClausePrinter::VisitOMPCollapseClause(OMPCollapseClause *Node) {
-  OS << "collapse(";
-  Node->getNumForLoops()->printPretty(OS, 0, Policy, 0);
-  OS << ")";
-}
-
 void OMPClausePrinter::VisitOMPDeviceClause(OMPDeviceClause *Node) {
   OS << "device(";
   Node->getDevice()->printPretty(OS, 0, Policy, 0);
+  OS << ")";
+}
+
+void OMPClausePrinter::VisitOMPCollapseClause(OMPCollapseClause *Node) {
+  OS << "collapse(";
+  Node->getNumForLoops()->printPretty(OS, nullptr, Policy, 0);
   OS << ")";
 }
 

@@ -62,7 +62,7 @@ template<class T> struct S {
 template<int LEN> struct S2 {
   static void func(int n, float *a, float *b, float *c) {
     int k1 = 0, k2 = 0;
-#pragma omp simd safelen(LEN) linear(k1,k2:LEN)
+#pragma omp simd safelen(LEN) linear(k1,k2:LEN) aligned(a:LEN)
     for(int i = 0; i < n; i++) {
       c[i] = a[i] + b[i];
       c[k1] = a[k1] + b[k1];
@@ -77,7 +77,7 @@ template<int LEN> struct S2 {
 // CHECK: template <int LEN = 4> struct S2 {
 // CHECK-NEXT: static void func(int n, float *a, float *b, float *c)     {
 // CHECK-NEXT:   int k1 = 0, k2 = 0;
-// CHECK-NEXT: #pragma omp simd safelen(4) linear(k1,k2: 4)
+// CHECK-NEXT: #pragma omp simd safelen(4) linear(k1,k2: 4) aligned(a: 4)
 // CHECK-NEXT:   for (int i = 0; i < n; i++) {
 // CHECK-NEXT:     c[i] = a[i] + b[i];
 // CHECK-NEXT:     c[k1] = a[k1] + b[k1];
@@ -129,7 +129,7 @@ int main (int argc, char **argv) {
 // CHECK-NEXT: for (int i = 0; i < 10; ++i)
 // CHECK-NEXT: foo();
 #pragma omp simd aligned(a:CLEN) linear(a:CLEN) safelen(CLEN)
-// CHECK-NEXT: #pragma omp simd aligned(a: 4) linear(a: CLEN) safelen(4)
+// CHECK-NEXT: #pragma omp simd aligned(a: CLEN) linear(a: CLEN) safelen(4)
   for (int i = 0; i < 10; ++i)foo();
 // CHECK-NEXT: for (int i = 0; i < 10; ++i)
 // CHECK-NEXT: foo();

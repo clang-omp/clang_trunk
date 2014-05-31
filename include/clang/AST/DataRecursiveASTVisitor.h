@@ -2408,6 +2408,13 @@ bool RecursiveASTVisitor<Derived>::VisitOMPLinearClause(OMPLinearClause *C) {
 }
 
 template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitOMPAlignedClause(OMPAlignedClause *C) {
+  VisitOMPClauseList(C);
+  TraverseStmt(C->getAlignment());
+  return true;
+}
+
+template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitOMPCopyinClause(OMPCopyinClause *C) {
   VisitOMPClauseList(C);
   return true;

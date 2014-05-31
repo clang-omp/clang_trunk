@@ -53,3 +53,4 @@ int main(int argc, char **argv) { // expected-note {{declared here}}
 
   return 0;
 }
+

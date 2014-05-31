@@ -1222,6 +1222,28 @@ OMPLinearClause *OMPLinearClause::CreateEmpty(const ASTContext &C,
   return new (Mem) OMPLinearClause(NumVars);
 }
 
+OMPAlignedClause *
+OMPAlignedClause::Create(const ASTContext &C, SourceLocation StartLoc,
+                         SourceLocation LParenLoc, SourceLocation ColonLoc,
+                         SourceLocation EndLoc, ArrayRef<Expr *> VL, Expr *A) {
+  void *Mem = C.Allocate(llvm::RoundUpToAlignment(sizeof(OMPAlignedClause),
+                                                  llvm::alignOf<Expr *>()) +
+                         sizeof(Expr *) * (VL.size() + 1));
+  OMPAlignedClause *Clause = new (Mem)
+      OMPAlignedClause(StartLoc, LParenLoc, ColonLoc, EndLoc, VL.size());
+  Clause->setVars(VL);
+  Clause->setAlignment(A);
+  return Clause;
+}
+
+OMPAlignedClause *OMPAlignedClause::CreateEmpty(const ASTContext &C,
+                                                unsigned NumVars) {
+  void *Mem = C.Allocate(llvm::RoundUpToAlignment(sizeof(OMPAlignedClause),
+                                                  llvm::alignOf<Expr *>()) +
+                         sizeof(Expr *) * (NumVars + 1));
+  return new (Mem) OMPAlignedClause(NumVars);
+}
+
 OMPCopyinClause *OMPCopyinClause::Create(const ASTContext &C,
                                          SourceLocation StartLoc,
                                          SourceLocation LParenLoc,
@@ -1526,33 +1548,6 @@ OMPUniformClause::CreateEmpty(const ASTContext &C, unsigned N) {
                                                   llvm::alignOf<Expr *>()) +
                          sizeof(Expr *) * N);
   return new (Mem) OMPUniformClause(N);
-}
-
-OMPAlignedClause *OMPAlignedClause::Create(const ASTContext &C,
-                                           SourceLocation StartLoc,
-                                           SourceLocation LParenLoc,
-                                           SourceLocation EndLoc,
-                                           ArrayRef<Expr *> VL,
-                                           Expr *A,
-                                           SourceLocation ALoc) {
-  void *Mem = C.Allocate(llvm::RoundUpToAlignment(sizeof(OMPAlignedClause),
-                                                  llvm::alignOf<Expr *>()) +
-                         sizeof(Expr *) * VL.size() +
-                         sizeof(Expr *));
-  OMPAlignedClause *Clause = new (Mem) OMPAlignedClause(StartLoc,
-                                                        LParenLoc, EndLoc,
-                                                        VL.size(),
-                                                        ALoc);
-  Clause->setVars(VL);
-  Clause->setAlignment(A);
-  return Clause;
-}
-
-OMPAlignedClause *OMPAlignedClause::CreateEmpty(const ASTContext &C, unsigned N) {
-  void *Mem = C.Allocate(llvm::RoundUpToAlignment(sizeof(OMPAlignedClause),
-                                                  llvm::alignOf<Expr *>()) +
-                         sizeof(Expr *) * (N + 1));
-  return new (Mem) OMPAlignedClause(N);
 }
 
 void OMPExecutableDirective::setClauses(ArrayRef<OMPClause *> CL) {

@@ -362,30 +362,33 @@ void test_aligned()
   #pragma omp for simd aligned(0)
   for (i = 0; i < 16; ++i) ;
 
+  /* expected-note@+3 {{'y' defined here}} */
+  /* expected-note@+2 {{'y' defined here}} expected-note@+2 {{'y' defined here}} */
+  /* expected-note@+1 {{'y' defined here}} expected-note@+1 {{'y' defined here}} */
   int *x, y, z[25];
   #pragma omp for simd aligned(x)
   for (i = 0; i < 16; ++i) ;
-  /* expected-error@+1 {{argument of an aligned clause should be array, pointer, reference to array or reference to pointer}} */
+  /* expected-error@+1 {{argument of aligned clause should be array or pointer, not 'int'}} */
   #pragma omp for simd aligned(x, y)
   for (i = 0; i < 16; ++i) ;
-  /* expected-error@+1 {{argument of an aligned clause should be array, pointer, reference to array or reference to pointer}} */
+  /* expected-error@+1 {{argument of aligned clause should be array or pointer, not 'int'}} */
   #pragma omp for simd aligned(x, y, z)
   for (i = 0; i < 16; ++i) ;
 
   #pragma omp for simd aligned(x:4)
   for (i = 0; i < 16; ++i) ;
-  /* expected-error@+1 {{argument of an aligned clause should be array, pointer, reference to array or reference to pointer}} */
+  /* expected-error@+1 {{argument of aligned clause should be array or pointer, not 'int'}} */
   #pragma omp for simd aligned(x, y:8)
   for (i = 0; i < 16; ++i) ;
-  /* expected-error@+1 {{argument of an aligned clause should be array, pointer, reference to array or reference to pointer}} */
+  /* expected-error@+1 {{argument of aligned clause should be array or pointer, not 'int'}} */
   #pragma omp for simd aligned(x, y, z:10+6)
   for (i = 0; i < 16; ++i) ;
-  // expected-error@+2 {{argument of an aligned clause should be array, pointer, reference to array or reference to pointer}}
+  // expected-error@+2 {{argument of aligned clause should be array or pointer, not 'int'}}
   // expected-error@+1 {{expression is not an integer constant expression}}
   #pragma omp for simd aligned(x, y, z:x)
   for (i = 0; i < 16; ++i) ;
   // expected-note@+2 {{defined as aligned}}
-  // expected-error@+1 {{aligned variable cannot be aligned}}
+  // expected-error@+1 {{a variable cannot appear in more than one aligned clause}}
   #pragma omp for simd aligned(x:16) aligned(z,x:16)
   for (i = 0; i < 16; ++i) ;
 }

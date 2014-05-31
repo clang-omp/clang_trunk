@@ -2523,8 +2523,6 @@ public:
                                              const llvm::CmpInst::Predicate Fp,
                                              const llvm::CmpInst::Predicate Ip,
                                              const llvm::Twine &Name = "");
-  llvm::Value *EmitAArch64CompareBuiltinExpr(llvm::Value *Op, llvm::Type *Ty);
-  llvm::Value *EmitAArch64BuiltinExpr(unsigned BuiltinID, const CallExpr *E);
   llvm::Value *EmitARMBuiltinExpr(unsigned BuiltinID, const CallExpr *E);
 
   llvm::Value *EmitCommonNeonBuiltinExpr(unsigned BuiltinID,
@@ -2550,14 +2548,14 @@ public:
   llvm::Value *EmitConcatVectors(llvm::Value *Lo, llvm::Value *Hi,
                                  llvm::Type *ArgTy);
   llvm::Value *EmitExtractHigh(llvm::Value *In, llvm::Type *ResTy);
-  // Helper functions for EmitARM64BuiltinExpr.
+  // Helper functions for EmitAArch64BuiltinExpr.
   llvm::Value *vectorWrapScalar8(llvm::Value *Op);
   llvm::Value *vectorWrapScalar16(llvm::Value *Op);
   llvm::Value *emitVectorWrappedScalar8Intrinsic(
       unsigned Int, SmallVectorImpl<llvm::Value *> &Ops, const char *Name);
   llvm::Value *emitVectorWrappedScalar16Intrinsic(
       unsigned Int, SmallVectorImpl<llvm::Value *> &Ops, const char *Name);
-  llvm::Value *EmitARM64BuiltinExpr(unsigned BuiltinID, const CallExpr *E);
+  llvm::Value *EmitAArch64BuiltinExpr(unsigned BuiltinID, const CallExpr *E);
   llvm::Value *EmitNeon64Call(llvm::Function *F,
                               llvm::SmallVectorImpl<llvm::Value *> &O,
                               const char *name);

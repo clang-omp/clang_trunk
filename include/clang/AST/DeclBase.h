@@ -400,6 +400,8 @@ public:
 
   bool isInAnonymousNamespace() const;
 
+  bool isInStdNamespace() const;
+
   ASTContext &getASTContext() const LLVM_READONLY;
 
   void setAccess(AccessSpecifier AS) {
@@ -1158,6 +1160,8 @@ public:
   bool isNamespace() const {
     return DeclKind == Decl::Namespace;
   }
+
+  bool isStdNamespace() const;
 
   bool isInlineNamespace() const;
 
