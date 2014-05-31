@@ -1873,7 +1873,9 @@ static bool isRequiredDecl(const Decl *D, ASTContext &Context) {
   // File scoped assembly or obj-c implementation must be seen. ImportDecl is
   // used by codegen to determine the set of imported modules to search for
   // inputs for automatic linking.
-  if (isa<FileScopeAsmDecl>(D) || isa<ObjCImplDecl>(D) || isa<ImportDecl>(D))
+  if (isa<FileScopeAsmDecl>(D) || isa<ObjCImplDecl>(D) || isa<ImportDecl>(D) ||
+      isa<OMPThreadPrivateDecl>(D) || isa<OMPDeclareSimdDecl>(D) ||
+      isa<OMPDeclareTargetDecl>(D) || isa<OMPDeclareReductionDecl>(D))
     return true;
 
   return Context.DeclMustBeEmitted(D);
