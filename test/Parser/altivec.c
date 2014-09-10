@@ -1,4 +1,6 @@
 // RUN: %clang_cc1 -triple=powerpc-apple-darwin8 -faltivec -fsyntax-only -verify %s
+// RUN: %clang_cc1 -triple=powerpc64-unknown-linux-gnu -faltivec -fsyntax-only -verify %s
+// RUN: %clang_cc1 -triple=powerpc64le-unknown-linux-gnu -faltivec -fsyntax-only -verify %s
 
 __vector char vv_c;
 __vector signed char vv_sc;
@@ -75,6 +77,11 @@ vector bool signed char v_bsc;       // expected-error {{cannot use 'signed' wit
 vector bool unsigned int v_bsc2;     // expected-error {{cannot use 'unsigned' with '__vector bool'}}
 vector bool long v_bl;               // expected-error {{cannot use 'long' with '__vector bool'}}
 vector bool long long v_bll;         // expected-error {{cannot use 'long long' with '__vector bool'}}
+
+// vector long is deprecated, but vector long long is not.
+vector long long v_ll;
+vector signed long long v_sll;
+vector unsigned long long v_ull;
 
 typedef char i8;
 typedef short i16;

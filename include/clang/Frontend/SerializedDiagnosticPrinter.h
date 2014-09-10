@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_FRONTEND_SERIALIZE_DIAGNOSTIC_PRINTER_H_
-#define LLVM_CLANG_FRONTEND_SERIALIZE_DIAGNOSTIC_PRINTER_H_
+#ifndef LLVM_CLANG_FRONTEND_SERIALIZEDDIAGNOSTICPRINTER_H
+#define LLVM_CLANG_FRONTEND_SERIALIZEDDIAGNOSTICPRINTER_H
 
 #include "clang/Basic/LLVM.h"
 #include "llvm/Bitcode/BitstreamWriter.h"
@@ -67,7 +67,7 @@ enum Level {
 /// This allows wrapper tools for Clang to get diagnostics from Clang
 /// (via libclang) without needing to parse Clang's command line output.
 ///
-DiagnosticConsumer *create(raw_ostream *OS,
+DiagnosticConsumer *create(std::unique_ptr<raw_ostream> OS,
                            DiagnosticOptions *diags);
 
 } // end serialized_diags namespace

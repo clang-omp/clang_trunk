@@ -122,11 +122,10 @@ typedef llvm::OnDiskIterableChainedHashTable<IdentifierIndexReaderTrait>
 
 }
 
-GlobalModuleIndex::GlobalModuleIndex(llvm::MemoryBuffer *Buffer,
+GlobalModuleIndex::GlobalModuleIndex(std::unique_ptr<llvm::MemoryBuffer> Buffer,
                                      llvm::BitstreamCursor Cursor)
-  : Buffer(Buffer), IdentifierIndex(),
-    NumIdentifierLookups(), NumIdentifierLookupHits()
-{
+    : Buffer(std::move(Buffer)), IdentifierIndex(), NumIdentifierLookups(),
+      NumIdentifierLookupHits() {
   // Read the global index.
   bool InGlobalIndexBlock = false;
   bool Done = false;
@@ -239,10 +238,11 @@ GlobalModuleIndex::readIndex(StringRef Path) {
   IndexPath += Path;
   llvm::sys::path::append(IndexPath, IndexFileName);
 
-  std::unique_ptr<llvm::MemoryBuffer> Buffer;
-  if (llvm::MemoryBuffer::getFile(IndexPath.c_str(), Buffer) !=
-      llvm::errc::success)
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> BufferOrErr =
+      llvm::MemoryBuffer::getFile(IndexPath.c_str());
+  if (!BufferOrErr)
     return std::make_pair(nullptr, EC_NotFound);
+  std::unique_ptr<llvm::MemoryBuffer> Buffer = std::move(BufferOrErr.get());
 
   /// \brief The bitstream reader from which we'll read the AST file.
   llvm::BitstreamReader Reader((const unsigned char *)Buffer->getBufferStart(),
@@ -259,7 +259,7 @@ GlobalModuleIndex::readIndex(StringRef Path) {
     return std::make_pair(nullptr, EC_IOError);
   }
 
-  return std::make_pair(new GlobalModuleIndex(Buffer.release(), Cursor),
+  return std::make_pair(new GlobalModuleIndex(std::move(Buffer), Cursor),
                         EC_None);
 }
 
@@ -493,9 +493,10 @@ namespace {
 
 bool GlobalModuleIndexBuilder::loadModuleFile(const FileEntry *File) {
   // Open the module file.
-  std::unique_ptr<llvm::MemoryBuffer> Buffer;
+
   std::string ErrorStr;
-  Buffer.reset(FileMgr.getBufferForFile(File, &ErrorStr, /*isVolatile=*/true));
+  std::unique_ptr<llvm::MemoryBuffer> Buffer =
+      FileMgr.getBufferForFile(File, &ErrorStr, /*isVolatile=*/true);
   if (!Buffer) {
     return true;
   }
@@ -788,7 +789,7 @@ GlobalModuleIndex::writeIndex(FileManager &FileMgr, StringRef Path) {
   GlobalModuleIndexBuilder Builder(FileMgr);
   
   // Load each of the module files.
-  llvm::error_code EC;
+  std::error_code EC;
   for (llvm::sys::fs::directory_iterator D(Path, EC), DEnd;
        D != DEnd && !EC;
        D.increment(EC)) {

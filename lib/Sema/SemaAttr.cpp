@@ -360,7 +360,7 @@ void Sema::PragmaStack<ValueType>::Act(SourceLocation PragmaLocation,
   }
 }
 
-bool Sema::UnifySection(const StringRef &SectionName,
+bool Sema::UnifySection(StringRef SectionName,
                         int SectionFlags,
                         DeclaratorDecl *Decl) {
   auto Section = SectionInfos.find(SectionName);
@@ -387,7 +387,7 @@ bool Sema::UnifySection(const StringRef &SectionName,
   return false;
 }
 
-bool Sema::UnifySection(const StringRef &SectionName,
+bool Sema::UnifySection(StringRef SectionName,
                         int SectionFlags,
                         SourceLocation PragmaSectionLocation) {
   auto Section = SectionInfos.find(SectionName);
@@ -429,6 +429,15 @@ void Sema::ActOnPragmaMSSeg(SourceLocation PragmaLocation,
 void Sema::ActOnPragmaMSSection(SourceLocation PragmaLocation,
                                 int SectionFlags, StringLiteral *SegmentName) {
   UnifySection(SegmentName->getString(), SectionFlags, PragmaLocation);
+}
+
+void Sema::ActOnPragmaMSInitSeg(SourceLocation PragmaLocation,
+                                StringLiteral *SegmentName) {
+  // There's no stack to maintain, so we just have a current section.  When we
+  // see the default section, reset our current section back to null so we stop
+  // tacking on unnecessary attributes.
+  CurInitSeg = SegmentName->getString() == ".CRT$XCU" ? nullptr : SegmentName;
+  CurInitSegLoc = PragmaLocation;
 }
 
 void Sema::ActOnPragmaUnused(const Token &IdTok, Scope *curScope,

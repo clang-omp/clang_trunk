@@ -17,8 +17,8 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_AST_MATCHERS_DYNAMIC_MARSHALLERS_H
-#define LLVM_CLANG_AST_MATCHERS_DYNAMIC_MARSHALLERS_H
+#ifndef LLVM_CLANG_LIB_ASTMATCHERS_DYNAMIC_MARSHALLERS_H
+#define LLVM_CLANG_LIB_ASTMATCHERS_DYNAMIC_MARSHALLERS_H
 
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/ASTMatchers/Dynamic/Diagnostics.h"
@@ -30,48 +30,8 @@
 namespace clang {
 namespace ast_matchers {
 namespace dynamic {
-
 namespace internal {
 
-struct ArgKind {
-  enum Kind {
-    AK_Matcher,
-    AK_Unsigned,
-    AK_String
-  };
-  ArgKind(Kind K)
-      : K(K) {}
-  ArgKind(ast_type_traits::ASTNodeKind MatcherKind)
-      : K(AK_Matcher), MatcherKind(MatcherKind) {}
-
-  std::string asString() const {
-    switch (getArgKind()) {
-    case AK_Matcher:
-      return (Twine("Matcher<") + MatcherKind.asStringRef() + ">").str();
-    case AK_Unsigned:
-      return "unsigned";
-    case AK_String:
-      return "string";
-    }
-    llvm_unreachable("unhandled ArgKind");
-  }
-
-  Kind getArgKind() const { return K; }
-  ast_type_traits::ASTNodeKind getMatcherKind() const {
-    assert(K == AK_Matcher);
-    return MatcherKind;
-  }
-
-  bool operator<(const ArgKind &Other) const {
-    if (K == AK_Matcher && Other.K == AK_Matcher)
-      return MatcherKind < Other.MatcherKind;
-    return K < Other.K;
-  }
-
-private:
-  Kind K;
-  ast_type_traits::ASTNodeKind MatcherKind;
-};
 
 /// \brief Helper template class to just from argument type to the right is/get
 ///   functions in VariantValue.
@@ -113,6 +73,27 @@ template <> struct ArgTypeTraits<unsigned> {
   }
   static ArgKind getKind() {
     return ArgKind(ArgKind::AK_Unsigned);
+  }
+};
+
+template <> struct ArgTypeTraits<attr::Kind> {
+private:
+  static attr::Kind getAttrKind(llvm::StringRef AttrKind) {
+    return llvm::StringSwitch<attr::Kind>(AttrKind)
+#define ATTR(X) .Case("attr::" #X, attr:: X)
+#include "clang/Basic/AttrList.inc"
+        .Default(attr::Kind(-1));
+  }
+public:
+  static bool is(const VariantValue &Value) {
+    return Value.isString() &&
+        getAttrKind(Value.getString()) != attr::Kind(-1);
+  }
+  static attr::Kind get(const VariantValue &Value) {
+    return getAttrKind(Value.getString());
+  }
+  static ArgKind getKind() {
+    return ArgKind(ArgKind::AK_String);
   }
 };
 
@@ -158,19 +139,13 @@ public:
 };
 
 inline bool isRetKindConvertibleTo(
-    llvm::ArrayRef<ast_type_traits::ASTNodeKind> RetKinds,
+    ArrayRef<ast_type_traits::ASTNodeKind> RetKinds,
     ast_type_traits::ASTNodeKind Kind, unsigned *Specificity,
     ast_type_traits::ASTNodeKind *LeastDerivedKind) {
-  for (llvm::ArrayRef<ast_type_traits::ASTNodeKind>::const_iterator
-           i = RetKinds.begin(),
-           e = RetKinds.end();
-       i != e; ++i) {
-    unsigned Distance;
-    if (i->isBaseOf(Kind, &Distance)) {
-      if (Specificity)
-        *Specificity = 100 - Distance;
+  for (const ast_type_traits::ASTNodeKind &NodeKind : RetKinds) {
+    if (ArgKind(NodeKind).isConvertibleTo(Kind, Specificity)) {
       if (LeastDerivedKind)
-        *LeastDerivedKind = *i;
+        *LeastDerivedKind = NodeKind;
       return true;
     }
   }
@@ -199,8 +174,8 @@ public:
   /// \param ArgKinds The types of the arguments this matcher takes.
   FixedArgCountMatcherDescriptor(
       MarshallerType Marshaller, void (*Func)(), StringRef MatcherName,
-      llvm::ArrayRef<ast_type_traits::ASTNodeKind> RetKinds,
-      llvm::ArrayRef<ArgKind> ArgKinds)
+      ArrayRef<ast_type_traits::ASTNodeKind> RetKinds,
+      ArrayRef<ArgKind> ArgKinds)
       : Marshaller(Marshaller), Func(Func), MatcherName(MatcherName),
         RetKinds(RetKinds.begin(), RetKinds.end()),
         ArgKinds(ArgKinds.begin(), ArgKinds.end()) {}
@@ -322,8 +297,8 @@ variadicMatcherDescriptor(StringRef MatcherName, const SourceRange &NameRange,
 
   VariantMatcher Out;
   if (!HasError) {
-    Out = outvalueToVariantMatcher(
-        Func(ArrayRef<const ArgT *>(InnerArgs, Args.size())));
+    Out = outvalueToVariantMatcher(Func(llvm::makeArrayRef(InnerArgs,
+                                                           Args.size())));
   }
 
   for (size_t i = 0, e = Args.size(); i != e; ++i) {
@@ -498,7 +473,7 @@ private:
   template <typename FromTypeList>
   inline void collect(FromTypeList);
 
-  const StringRef Name;
+  StringRef Name;
   std::vector<MatcherDescriptor *> &Out;
 };
 
@@ -646,7 +621,7 @@ MatcherDescriptor *makeMatcherAutoMarshall(ReturnType (*Func)(),
   BuildReturnTypeVector<ReturnType>::build(RetTypes);
   return new FixedArgCountMatcherDescriptor(
       matcherMarshall0<ReturnType>, reinterpret_cast<void (*)()>(Func),
-      MatcherName, RetTypes, llvm::ArrayRef<ArgKind>());
+      MatcherName, RetTypes, None);
 }
 
 /// \brief 1-arg overload

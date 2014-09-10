@@ -25,6 +25,7 @@
 #include "clang/Sema/TemplateDeduction.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/AlignOf.h"
 #include "llvm/Support/Allocator.h"
 
 namespace clang {
@@ -262,7 +263,7 @@ namespace clang {
     StandardConversionSequence Before;
 
     /// EllipsisConversion - When this is true, it means user-defined
-    /// conversion sequence starts with a ... (elipsis) conversion, instead of 
+    /// conversion sequence starts with a ... (ellipsis) conversion, instead of
     /// a standard conversion. In this case, 'Before' field must be ignored.
     // FIXME. I much rather put this as the first field. But there seems to be
     // a gcc code gen. bug which causes a crash in a test. Putting it here seems
@@ -339,7 +340,6 @@ namespace clang {
     enum FailureKind {
       no_conversion,
       unrelated_class,
-      suppressed_user,
       bad_qualifiers,
       lvalue_ref_to_rvalue,
       rvalue_ref_to_lvalue
@@ -719,7 +719,8 @@ namespace clang {
     CandidateSetKind Kind;
 
     unsigned NumInlineSequences;
-    char InlineSpace[16 * sizeof(ImplicitConversionSequence)];
+    llvm::AlignedCharArray<llvm::AlignOf<ImplicitConversionSequence>::Alignment,
+                           16 * sizeof(ImplicitConversionSequence)> InlineSpace;
 
     OverloadCandidateSet(const OverloadCandidateSet &) LLVM_DELETED_FUNCTION;
     void operator=(const OverloadCandidateSet &) LLVM_DELETED_FUNCTION;
@@ -760,7 +761,7 @@ namespace clang {
       // available.
       if (NumConversions + NumInlineSequences <= 16) {
         ImplicitConversionSequence *I =
-          (ImplicitConversionSequence*)InlineSpace;
+            (ImplicitConversionSequence *)InlineSpace.buffer;
         C.Conversions = &I[NumInlineSequences];
         NumInlineSequences += NumConversions;
       } else {

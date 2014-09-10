@@ -846,7 +846,7 @@ public:
 
   SourceLocation getAttrLoc() const { return AttrLoc; }
   ArrayRef<const Attr*> getAttrs() const {
-    return ArrayRef<const Attr*>(getAttrArrayPtr(), NumAttrs);
+    return llvm::makeArrayRef(getAttrArrayPtr(), NumAttrs);
   }
   Stmt *getSubStmt() { return SubStmt; }
   const Stmt *getSubStmt() const { return SubStmt; }
@@ -1477,6 +1477,8 @@ public:
 
   typedef ExprIterator inputs_iterator;
   typedef ConstExprIterator const_inputs_iterator;
+  typedef llvm::iterator_range<inputs_iterator> inputs_range;
+  typedef llvm::iterator_range<const_inputs_iterator> inputs_const_range;
 
   inputs_iterator begin_inputs() {
     return &Exprs[0] + NumOutputs;
@@ -1486,6 +1488,8 @@ public:
     return &Exprs[0] + NumOutputs + NumInputs;
   }
 
+  inputs_range inputs() { return inputs_range(begin_inputs(), end_inputs()); }
+
   const_inputs_iterator begin_inputs() const {
     return &Exprs[0] + NumOutputs;
   }
@@ -1494,10 +1498,16 @@ public:
     return &Exprs[0] + NumOutputs + NumInputs;
   }
 
+  inputs_const_range inputs() const {
+    return inputs_const_range(begin_inputs(), end_inputs());
+  }
+
   // Output expr iterators.
 
   typedef ExprIterator outputs_iterator;
   typedef ConstExprIterator const_outputs_iterator;
+  typedef llvm::iterator_range<outputs_iterator> outputs_range;
+  typedef llvm::iterator_range<const_outputs_iterator> outputs_const_range;
 
   outputs_iterator begin_outputs() {
     return &Exprs[0];
@@ -1505,12 +1515,18 @@ public:
   outputs_iterator end_outputs() {
     return &Exprs[0] + NumOutputs;
   }
+  outputs_range outputs() {
+    return outputs_range(begin_outputs(), end_outputs());
+  }
 
   const_outputs_iterator begin_outputs() const {
     return &Exprs[0];
   }
   const_outputs_iterator end_outputs() const {
     return &Exprs[0] + NumOutputs;
+  }
+  outputs_const_range outputs() const {
+    return outputs_const_range(begin_outputs(), end_outputs());
   }
 
   child_range children() {
@@ -1564,18 +1580,21 @@ public:
     Kind MyKind;
     std::string Str;
     unsigned OperandNo;
+
+    // Source range for operand references.
+    CharSourceRange Range;
   public:
     AsmStringPiece(const std::string &S) : MyKind(String), Str(S) {}
-    AsmStringPiece(unsigned OpNo, char Modifier)
-      : MyKind(Operand), Str(), OperandNo(OpNo) {
-      Str += Modifier;
+    AsmStringPiece(unsigned OpNo, const std::string &S, SourceLocation Begin,
+                   SourceLocation End)
+      : MyKind(Operand), Str(S), OperandNo(OpNo),
+        Range(CharSourceRange::getCharRange(Begin, End)) {
     }
 
     bool isString() const { return MyKind == String; }
     bool isOperand() const { return MyKind == Operand; }
 
     const std::string &getString() const {
-      assert(isString());
       return Str;
     }
 
@@ -1584,12 +1603,14 @@ public:
       return OperandNo;
     }
 
+    CharSourceRange getRange() const {
+      assert(isOperand() && "Range is currently used only for Operands.");
+      return Range;
+    }
+
     /// getModifier - Get the modifier for this operand, if present.  This
     /// returns '\0' if there was no modifier.
-    char getModifier() const {
-      assert(isOperand());
-      return Str[0];
-    }
+    char getModifier() const;
   };
 
   /// AnalyzeAsmString - Analyze the asm string of the current asm, decomposing
@@ -1764,14 +1785,14 @@ public:
   //===--- Other ---===//
 
   ArrayRef<StringRef> getAllConstraints() const {
-    return ArrayRef<StringRef>(Constraints, NumInputs + NumOutputs);
+    return llvm::makeArrayRef(Constraints, NumInputs + NumOutputs);
   }
   ArrayRef<StringRef> getClobbers() const {
-    return ArrayRef<StringRef>(Clobbers, NumClobbers);
+    return llvm::makeArrayRef(Clobbers, NumClobbers);
   }
   ArrayRef<Expr*> getAllExprs() const {
-    return ArrayRef<Expr*>(reinterpret_cast<Expr**>(Exprs),
-                           NumInputs + NumOutputs);
+    return llvm::makeArrayRef(reinterpret_cast<Expr**>(Exprs),
+                              NumInputs + NumOutputs);
   }
 
   StringRef getClobber(unsigned i) const { return getClobbers()[i]; }
@@ -1918,6 +1939,31 @@ public:
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == SEHTryStmtClass;
   }
+};
+
+/// Represents a __leave statement.
+///
+class SEHLeaveStmt : public Stmt {
+  SourceLocation LeaveLoc;
+public:
+  explicit SEHLeaveStmt(SourceLocation LL)
+      : Stmt(SEHLeaveStmtClass), LeaveLoc(LL) {}
+
+  /// \brief Build an empty __leave statement.
+  explicit SEHLeaveStmt(EmptyShell Empty) : Stmt(SEHLeaveStmtClass, Empty) { }
+
+  SourceLocation getLeaveLoc() const { return LeaveLoc; }
+  void setLeaveLoc(SourceLocation L) { LeaveLoc = L; }
+
+  SourceLocation getLocStart() const LLVM_READONLY { return LeaveLoc; }
+  SourceLocation getLocEnd() const LLVM_READONLY { return LeaveLoc; }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == SEHLeaveStmtClass;
+  }
+
+  // Iterators
+  child_range children() { return child_range(); }
 };
 
 /// \brief This captures a statement into a function. For example, the following

@@ -1045,6 +1045,25 @@ llvm::Constant *CodeGenModule::EmitConstantExpr(const Expr *E,
 llvm::Constant *CodeGenModule::EmitConstantValue(const APValue &Value,
                                                  QualType DestType,
                                                  CodeGenFunction *CGF) {
+  // For an _Atomic-qualified constant, we may need to add tail padding.
+  if (auto *AT = DestType->getAs<AtomicType>()) {
+    QualType InnerType = AT->getValueType();
+    auto *Inner = EmitConstantValue(Value, InnerType, CGF);
+
+    uint64_t InnerSize = Context.getTypeSize(InnerType);
+    uint64_t OuterSize = Context.getTypeSize(DestType);
+    if (InnerSize == OuterSize)
+      return Inner;
+
+    assert(InnerSize < OuterSize && "emitted over-large constant for atomic");
+    llvm::Constant *Elts[] = {
+      Inner,
+      llvm::ConstantAggregateZero::get(
+          llvm::ArrayType::get(Int8Ty, (OuterSize - InnerSize) / 8))
+    };
+    return llvm::ConstantStruct::getAnon(Elts);
+  }
+
   switch (Value.getKind()) {
   case APValue::Uninitialized:
     llvm_unreachable("Constant expressions should be initialized.");
@@ -1113,7 +1132,8 @@ llvm::Constant *CodeGenModule::EmitConstantValue(const APValue &Value,
   case APValue::Float: {
     const llvm::APFloat &Init = Value.getFloat();
     if (&Init.getSemantics() == &llvm::APFloat::IEEEhalf &&
-         !Context.getLangOpts().NativeHalfType)
+        !Context.getLangOpts().NativeHalfType &&
+        !Context.getLangOpts().HalfArgsAndReturns)
       return llvm::ConstantInt::get(VMContext, Init.bitcastToAPInt());
     else
       return llvm::ConstantFP::get(VMContext, Init);

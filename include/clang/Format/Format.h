@@ -17,7 +17,7 @@
 
 #include "clang/Frontend/FrontendAction.h"
 #include "clang/Tooling/Refactoring.h"
-#include "llvm/Support/system_error.h"
+#include <system_error>
 
 namespace clang {
 
@@ -26,6 +26,15 @@ class SourceManager;
 class DiagnosticConsumer;
 
 namespace format {
+
+enum class ParseError { Success = 0, Error, Unsuitable };
+class ParseErrorCategory final : public std::error_category {
+public:
+  const char *name() const LLVM_NOEXCEPT override;
+  std::string message(int EV) const override;
+};
+const std::error_category &getParseCategory();
+std::error_code make_error_code(ParseError e);
 
 /// \brief The \c FormatStyle is used to configure the formatting to follow
 /// specific guidelines.
@@ -76,12 +85,22 @@ struct FormatStyle {
   /// \brief The penalty for breaking a function call after "call(".
   unsigned PenaltyBreakBeforeFirstCallParameter;
 
-  /// \brief Set whether & and * bind to the type as opposed to the variable.
-  bool PointerBindsToType;
+  /// \brief The & and * alignment style.
+  enum PointerAlignmentStyle {
+    /// Align pointer to the left.
+    PAS_Left,
+    /// Align pointer to the right.
+    PAS_Right,
+    /// Align pointer in the middle.
+    PAS_Middle
+  };
 
-  /// \brief If \c true, analyze the formatted file for the most common binding
-  /// and use \c PointerBindsToType only as fallback.
-  bool DerivePointerBinding;
+  /// Pointer and reference alignment style.
+  PointerAlignmentStyle PointerAlignment;
+
+  /// \brief If \c true, analyze the formatted file for the most common
+  /// alignment of & and *. \c PointerAlignment is then used only as fallback.
+  bool DerivePointerAlignment;
 
   /// \brief The extra indent or outdent of access modifiers, e.g. \c public:.
   int AccessModifierOffset;
@@ -106,6 +125,10 @@ struct FormatStyle {
   /// When \c false, use the same indentation level as for the switch statement.
   /// Switch statement body is always indented one level more than case labels.
   bool IndentCaseLabels;
+
+  /// \brief Indent if a function definition or declaration is wrapped after the
+  /// type.
+  bool IndentWrappedFunctionNames;
 
   /// \brief Different ways to indent namespace contents.
   enum NamespaceIndentationKind {
@@ -212,6 +235,13 @@ struct FormatStyle {
   /// initializer lists.
   unsigned ConstructorInitializerIndentWidth;
 
+  /// \brief If \c true, always break after function definition return types.
+  ///
+  /// More truthfully called 'break before the identifier following the type
+  /// in a function definition'. PenaltyReturnTypeOnItsOwnLine becomes
+  /// irrelevant.
+  bool AlwaysBreakAfterDefinitionReturnType;
+
   /// \brief If \c true, always break after the <tt>template<...></tt> of a
   /// template declaration.
   bool AlwaysBreakTemplateDeclarations;
@@ -246,7 +276,7 @@ struct FormatStyle {
     /// Like \c Attach, but break before braces on function, namespace and
     /// class definitions.
     BS_Linux,
-    /// Like \c Attach, but break before function definitions.
+    /// Like \c Attach, but break before function definitions, and 'else'.
     BS_Stroustrup,
     /// Always break before braces.
     BS_Allman,
@@ -274,16 +304,15 @@ struct FormatStyle {
   /// a zero-length name is assumed.
   bool Cpp11BracedListStyle;
 
-  /// \brief If \c true, indent when breaking function declarations which
-  /// are not also definitions after the type.
-  bool IndentFunctionDeclarationAfterType;
-
   /// \brief If \c true, spaces will be inserted after '(' and before ')'.
   bool SpacesInParentheses;
 
   /// \brief If \c true, spaces will be inserted after '<' and before '>' in
   /// template argument lists
   bool SpacesInAngles;
+
+  /// \brief If \c true, spaces will be inserted after '[' and before ']'.
+  bool SpacesInSquareBrackets;
 
   /// \brief If \c true, spaces may be inserted into '()'.
   bool SpaceInEmptyParentheses;
@@ -294,6 +323,9 @@ struct FormatStyle {
 
   /// \brief If \c true, spaces may be inserted into C style casts.
   bool SpacesInCStyleCastParentheses;
+
+  /// \brief If \c true, a space may be inserted after C style casts.
+  bool SpaceAfterCStyleCast;
 
   /// \brief Different ways to put a space before opening parentheses.
   enum SpaceBeforeParensOptions {
@@ -351,6 +383,8 @@ struct FormatStyle {
            AllowShortIfStatementsOnASingleLine ==
                R.AllowShortIfStatementsOnASingleLine &&
            AllowShortLoopsOnASingleLine == R.AllowShortLoopsOnASingleLine &&
+           AlwaysBreakAfterDefinitionReturnType ==
+               R.AlwaysBreakAfterDefinitionReturnType &&
            AlwaysBreakTemplateDeclarations ==
                R.AlwaysBreakTemplateDeclarations &&
            AlwaysBreakBeforeMultilineStrings ==
@@ -364,12 +398,11 @@ struct FormatStyle {
            ColumnLimit == R.ColumnLimit &&
            ConstructorInitializerAllOnOneLineOrOnePerLine ==
                R.ConstructorInitializerAllOnOneLineOrOnePerLine &&
-           DerivePointerBinding == R.DerivePointerBinding &&
+           DerivePointerAlignment == R.DerivePointerAlignment &&
            ExperimentalAutoDetectBinPacking ==
                R.ExperimentalAutoDetectBinPacking &&
            IndentCaseLabels == R.IndentCaseLabels &&
-           IndentFunctionDeclarationAfterType ==
-               R.IndentFunctionDeclarationAfterType &&
+           IndentWrappedFunctionNames == R.IndentWrappedFunctionNames &&
            IndentWidth == R.IndentWidth && Language == R.Language &&
            MaxEmptyLinesToKeep == R.MaxEmptyLinesToKeep &&
            KeepEmptyLinesAtTheStartOfBlocks ==
@@ -382,15 +415,17 @@ struct FormatStyle {
            PenaltyBreakString == R.PenaltyBreakString &&
            PenaltyExcessCharacter == R.PenaltyExcessCharacter &&
            PenaltyReturnTypeOnItsOwnLine == R.PenaltyReturnTypeOnItsOwnLine &&
-           PointerBindsToType == R.PointerBindsToType &&
+           PointerAlignment == R.PointerAlignment &&
            SpacesBeforeTrailingComments == R.SpacesBeforeTrailingComments &&
            Cpp11BracedListStyle == R.Cpp11BracedListStyle &&
            Standard == R.Standard && TabWidth == R.TabWidth &&
            UseTab == R.UseTab && SpacesInParentheses == R.SpacesInParentheses &&
+           SpacesInSquareBrackets == R.SpacesInSquareBrackets &&
            SpacesInAngles == R.SpacesInAngles &&
            SpaceInEmptyParentheses == R.SpaceInEmptyParentheses &&
            SpacesInContainerLiterals == R.SpacesInContainerLiterals &&
            SpacesInCStyleCastParentheses == R.SpacesInCStyleCastParentheses &&
+           SpaceAfterCStyleCast == R.SpaceAfterCStyleCast &&
            SpaceBeforeParens == R.SpaceBeforeParens &&
            SpaceBeforeAssignmentOperators == R.SpaceBeforeAssignmentOperators &&
            ContinuationIndentWidth == R.ContinuationIndentWidth &&
@@ -444,7 +479,7 @@ bool getPredefinedStyle(StringRef Name, FormatStyle::LanguageKind Language,
 ///
 /// When \c BasedOnStyle is not present, options not present in the YAML
 /// document, are retained in \p Style.
-llvm::error_code parseConfiguration(StringRef Text, FormatStyle *Style);
+std::error_code parseConfiguration(StringRef Text, FormatStyle *Style);
 
 /// \brief Gets configuration in a YAML string.
 std::string configurationAsText(const FormatStyle &Style);
@@ -452,14 +487,21 @@ std::string configurationAsText(const FormatStyle &Style);
 /// \brief Reformats the given \p Ranges in the token stream coming out of
 /// \c Lex.
 ///
+/// DEPRECATED: Do not use.
+tooling::Replacements reformat(const FormatStyle &Style, Lexer &Lex,
+                               SourceManager &SourceMgr,
+                               std::vector<CharSourceRange> Ranges);
+
+/// \brief Reformats the given \p Ranges in the file \p ID.
+///
 /// Each range is extended on either end to its next bigger logic unit, i.e.
 /// everything that might influence its formatting or might be influenced by its
 /// formatting.
 ///
 /// Returns the \c Replacements necessary to make all \p Ranges comply with
 /// \p Style.
-tooling::Replacements reformat(const FormatStyle &Style, Lexer &Lex,
-                               SourceManager &SourceMgr,
+tooling::Replacements reformat(const FormatStyle &Style,
+                               SourceManager &SourceMgr, FileID ID,
                                std::vector<CharSourceRange> Ranges);
 
 /// \brief Reformats the given \p Ranges in \p Code.
@@ -471,10 +513,8 @@ tooling::Replacements reformat(const FormatStyle &Style, StringRef Code,
 
 /// \brief Returns the \c LangOpts that the formatter expects you to set.
 ///
-/// \param Standard determines lexing mode: LC_Cpp11 and LS_Auto turn on C++11
-/// lexing mode, LS_Cpp03 - C++03 mode.
-LangOptions getFormattingLangOpts(
-    FormatStyle::LanguageStandard Standard = FormatStyle::LS_Cpp11);
+/// \param Style determines specific settings for lexing mode.
+LangOptions getFormattingLangOpts(const FormatStyle &Style = getLLVMStyle());
 
 /// \brief Description to be used for help text for a llvm::cl option for
 /// specifying format style. The description is closely related to the operation
@@ -505,5 +545,10 @@ FormatStyle getStyle(StringRef StyleName, StringRef FileName,
 
 } // end namespace format
 } // end namespace clang
+
+namespace std {
+template <>
+struct is_error_code_enum<clang::format::ParseError> : std::true_type {};
+}
 
 #endif // LLVM_CLANG_FORMAT_FORMAT_H

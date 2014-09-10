@@ -7,12 +7,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the source level debug info generator for llvm translation.
+// This is the source-level debug info generator for llvm translation.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CLANG_CODEGEN_CGDEBUGINFO_H
-#define CLANG_CODEGEN_CGDEBUGINFO_H
+#ifndef LLVM_CLANG_LIB_CODEGEN_CGDEBUGINFO_H
+#define LLVM_CLANG_LIB_CODEGEN_CGDEBUGINFO_H
 
 #include "CGBuilder.h"
 #include "clang/AST/Expr.h"
@@ -180,20 +180,24 @@ class CGDebugInfo {
 
   llvm::DIType createFieldType(StringRef name, QualType type,
                                uint64_t sizeInBitsOverride, SourceLocation loc,
-                               AccessSpecifier AS, uint64_t offsetInBits,
+                               AccessSpecifier AS,
+                               uint64_t offsetInBits,
                                llvm::DIFile tunit,
-                               llvm::DIScope scope);
+                               llvm::DIScope scope,
+                               const RecordDecl* RD = nullptr);
 
   // Helpers for collecting fields of a record.
   void CollectRecordLambdaFields(const CXXRecordDecl *CXXDecl,
                                  SmallVectorImpl<llvm::Value *> &E,
                                  llvm::DIType RecordTy);
   llvm::DIDerivedType CreateRecordStaticField(const VarDecl *Var,
-                                              llvm::DIType RecordTy);
+                                              llvm::DIType RecordTy,
+                                              const RecordDecl* RD);
   void CollectRecordNormalField(const FieldDecl *Field, uint64_t OffsetInBits,
                                 llvm::DIFile F,
                                 SmallVectorImpl<llvm::Value *> &E,
-                                llvm::DIType RecordTy);
+                                llvm::DIType RecordTy,
+                                const RecordDecl* RD);
   void CollectRecordFields(const RecordDecl *Decl, llvm::DIFile F,
                            SmallVectorImpl<llvm::Value *> &E,
                            llvm::DICompositeType RecordTy);
@@ -266,15 +270,12 @@ public:
   /// llvm.dbg.declare for the block-literal argument to a block
   /// invocation function.
   void EmitDeclareOfBlockLiteralArgVariable(const CGBlockInfo &block,
-                                            llvm::Value *Arg,
+                                            llvm::Value *Arg, unsigned ArgNo,
                                             llvm::Value *LocalAddr,
                                             CGBuilderTy &Builder);
 
   /// EmitGlobalVariable - Emit information about a global variable.
   void EmitGlobalVariable(llvm::GlobalVariable *GV, const VarDecl *Decl);
-
-  /// EmitGlobalVariable - Emit information about an objective-c interface.
-  void EmitGlobalVariable(llvm::GlobalVariable *GV, ObjCInterfaceDecl *Decl);
 
   /// EmitGlobalVariable - Emit global variable's debug info.
   void EmitGlobalVariable(const ValueDecl *VD, llvm::Constant *Init);

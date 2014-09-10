@@ -28,7 +28,28 @@ namespace {
 /// \brief Numbers things which need to correspond across multiple TUs.
 /// Typically these are things like static locals, lambdas, or blocks.
 class MicrosoftNumberingContext : public MangleNumberingContext {
+  llvm::DenseMap<const Type *, unsigned> ManglingNumbers;
+  unsigned LambdaManglingNumber;
+  unsigned StaticLocalNumber;
+
 public:
+  MicrosoftNumberingContext()
+      : MangleNumberingContext(), LambdaManglingNumber(0),
+        StaticLocalNumber(0) {}
+
+  unsigned getManglingNumber(const CXXMethodDecl *CallOperator) override {
+    return ++LambdaManglingNumber;
+  }
+
+  unsigned getManglingNumber(const BlockDecl *BD) {
+    const Type *Ty = nullptr;
+    return ++ManglingNumbers[Ty];
+  }
+
+  unsigned getStaticLocalNumber(const VarDecl *VD) override {
+    return ++StaticLocalNumber;
+  }
+
   unsigned getManglingNumber(const VarDecl *VD,
                              unsigned MSLocalManglingNumber) override {
     return MSLocalManglingNumber;
@@ -93,7 +114,7 @@ static bool usesMultipleInheritanceModel(const CXXRecordDecl *RD) {
 }
 
 MSInheritanceAttr::Spelling CXXRecordDecl::calculateInheritanceModel() const {
-  if (!hasDefinition())
+  if (!hasDefinition() || isParsingBaseSpecifiers())
     return MSInheritanceAttr::Keyword_unspecified_inheritance;
   if (getNumVBases() > 0)
     return MSInheritanceAttr::Keyword_virtual_inheritance;

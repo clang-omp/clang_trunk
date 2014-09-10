@@ -46,6 +46,10 @@ Selector NSAPI::getNSStringSelector(NSStringMethodKind MK) const {
       Sel = Ctx.Selectors.getUnarySelector(
                                        &Ctx.Idents.get("stringWithUTF8String"));
       break;
+    case NSStr_initWithUTF8String:
+      Sel = Ctx.Selectors.getUnarySelector(
+                                       &Ctx.Idents.get("initWithUTF8String"));
+      break;
     case NSStr_stringWithCStringEncoding: {
       IdentifierInfo *KeyIdents[] = {
         &Ctx.Idents.get("stringWithCString"),
@@ -115,6 +119,14 @@ Selector NSAPI::getNSArraySelector(NSArrayMethodKind MK) const {
       IdentifierInfo *KeyIdents[] = {
         &Ctx.Idents.get("replaceObjectAtIndex"),
         &Ctx.Idents.get("withObject")
+      };
+      Sel = Ctx.Selectors.getSelector(2, KeyIdents);
+      break;
+    }
+    case NSArr_initWithObjectsCount: {
+      IdentifierInfo *KeyIdents[] = {
+        &Ctx.Idents.get("initWithObjects"),
+        &Ctx.Idents.get("count")
       };
       Sel = Ctx.Selectors.getSelector(2, KeyIdents);
       break;
@@ -202,6 +214,15 @@ Selector NSAPI::getNSDictionarySelector(
         &Ctx.Idents.get("forKey")
       };
       Sel = Ctx.Selectors.getSelector(2, KeyIdents);
+      break;
+    }
+    case NSDict_initWithObjectsForKeysCount: {
+      IdentifierInfo *KeyIdents[] = {
+        &Ctx.Idents.get("initWithObjects"),
+        &Ctx.Idents.get("forKeys"),
+        &Ctx.Idents.get("count")
+      };
+      Sel = Ctx.Selectors.getSelector(3, KeyIdents);
       break;
     }
     }

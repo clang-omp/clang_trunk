@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_REWRITER_TEST_CONTEXT_H
-#define LLVM_CLANG_REWRITER_TEST_CONTEXT_H
+#ifndef LLVM_CLANG_UNITTESTS_TOOLING_REWRITERTESTCONTEXT_H
+#define LLVM_CLANG_UNITTESTS_TOOLING_REWRITERTESTCONTEXT_H
 
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticOptions.h"
@@ -48,12 +48,12 @@ class RewriterTestContext {
   ~RewriterTestContext() {}
 
   FileID createInMemoryFile(StringRef Name, StringRef Content) {
-    const llvm::MemoryBuffer *Source =
-      llvm::MemoryBuffer::getMemBuffer(Content);
+    std::unique_ptr<llvm::MemoryBuffer> Source =
+        llvm::MemoryBuffer::getMemBuffer(Content);
     const FileEntry *Entry =
       Files.getVirtualFile(Name, Source->getBufferSize(), 0);
-    Sources.overrideFileContents(Entry, Source);
-    assert(Entry != NULL);
+    Sources.overrideFileContents(Entry, std::move(Source));
+    assert(Entry != nullptr);
     return Sources.createFileID(Entry, SourceLocation(), SrcMgr::C_User);
   }
 
@@ -62,8 +62,7 @@ class RewriterTestContext {
   FileID createOnDiskFile(StringRef Name, StringRef Content) {
     SmallString<1024> Path;
     int FD;
-    llvm::error_code EC =
-        llvm::sys::fs::createTemporaryFile(Name, "", FD, Path);
+    std::error_code EC = llvm::sys::fs::createTemporaryFile(Name, "", FD, Path);
     assert(!EC);
     (void)EC;
 
@@ -71,7 +70,7 @@ class RewriterTestContext {
     OutStream << Content;
     OutStream.close();
     const FileEntry *File = Files.getFile(Path);
-    assert(File != NULL);
+    assert(File != nullptr);
 
     StringRef Found = TemporaryFiles.GetOrCreateValue(Name, Path.str()).second;
     assert(Found == Path);
@@ -103,7 +102,7 @@ class RewriterTestContext {
     // FIXME: Figure out whether there is a way to get the SourceManger to
     // reopen the file.
     std::unique_ptr<const llvm::MemoryBuffer> FileBuffer(
-        Files.getBufferForFile(Path, NULL));
+        Files.getBufferForFile(Path, nullptr));
     return FileBuffer->getBuffer();
   }
 

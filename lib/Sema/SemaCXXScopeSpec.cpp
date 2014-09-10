@@ -612,6 +612,9 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S,
        }
     }
 
+    if (auto *TD = dyn_cast_or_null<TypedefNameDecl>(SD))
+      MarkAnyDeclReferenced(TD->getLocation(), TD, /*OdrUse=*/false);
+
     // If we're just performing this lookup for error-recovery purposes,
     // don't extend the nested-name-specifier. Just return now.
     if (ErrorRecoveryLookup)
@@ -703,8 +706,13 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S,
   if (getLangOpts().MSVCCompat) {
     DeclContext *DC = LookupCtx ? LookupCtx : CurContext;
     if (DC->isDependentContext() && DC->isFunctionOrMethod()) {
-      SS.Extend(Context, &Identifier, IdentifierLoc, CCLoc);
-      return false;
+      CXXRecordDecl *ContainingClass = dyn_cast<CXXRecordDecl>(DC->getParent());
+      if (ContainingClass && ContainingClass->hasAnyDependentBases()) {
+        Diag(IdentifierLoc, diag::ext_undeclared_unqual_id_with_dependent_base)
+            << &Identifier << ContainingClass;
+        SS.Extend(Context, &Identifier, IdentifierLoc, CCLoc);
+        return false;
+      }
     }
   }
 

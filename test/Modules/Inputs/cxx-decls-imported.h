@@ -20,3 +20,30 @@ static_assert(!__is_trivial(HasNontrivialDefaultConstructor), "");
 static_assert(!__has_trivial_constructor(HasNontrivialDefaultConstructor), "");
 
 void *operator new[](__SIZE_TYPE__);
+
+extern int mergeUsedFlag;
+inline int getMergeUsedFlag() { return mergeUsedFlag; }
+
+typedef struct {
+  int n;
+  int m;
+} NameForLinkage;
+
+struct HasVirtualFunctions {
+  virtual void f();
+};
+struct OverridesVirtualFunctions : HasVirtualFunctions {
+  void f();
+};
+extern "C" void ExternCFunction();
+
+typedef struct {
+  struct Inner {
+    int n;
+  };
+} NameForLinkage2;
+auto name_for_linkage2_inner_a = NameForLinkage2::Inner();
+typedef decltype(name_for_linkage2_inner_a) NameForLinkage2Inner;
+
+namespace Aliased { extern int a; }
+namespace Alias = Aliased;

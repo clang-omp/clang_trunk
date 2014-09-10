@@ -755,7 +755,7 @@ namespace dr467 { // dr467: yes
     return k;
   }
   int g() {
-    goto later; // expected-error {{protected scope}}
+    goto later; // expected-error {{cannot jump}}
     int k = stuff(); // expected-note {{bypasses variable initialization}}
   later:
     return k;
@@ -1201,7 +1201,7 @@ namespace dr497 { // dr497: yes
     struct S {
       mutable int i;
     };
-    const S cs; // expected-error {{default initialization}}
+    const S cs; // expected-error {{default initialization}} expected-note {{add an explicit initializer}}
     int S::*pm = &S::i;
     cs.*pm = 88;
   }

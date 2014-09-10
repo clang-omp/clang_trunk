@@ -92,7 +92,7 @@ static CXSourceLocation makeLocation(const CXLoadedDiagnostic::Location *DLoc) {
   // is a persistent diagnostic.
   uintptr_t V = (uintptr_t) DLoc;
   V |= 0x1;
-  CXSourceLocation Loc = { {  (void*) V, 0 }, 0 };
+  CXSourceLocation Loc = { {  (void*) V, nullptr }, 0 };
   return Loc;
 }  
 
@@ -260,12 +260,10 @@ CXDiagnosticSet DiagLoader::load(const char *file) {
   FileSystemOptions FO;
   FileManager FileMgr(FO);
 
-  std::unique_ptr<llvm::MemoryBuffer> Buffer;
-  Buffer.reset(FileMgr.getBufferForFile(file));
-
+  std::unique_ptr<llvm::MemoryBuffer> Buffer = FileMgr.getBufferForFile(file);
   if (!Buffer) {
     reportBad(CXLoadDiag_CannotLoad, ErrStr);
-    return 0;
+    return nullptr;
   }
 
   llvm::BitstreamReader StreamFile;
@@ -282,7 +280,7 @@ CXDiagnosticSet DiagLoader::load(const char *file) {
       Stream.Read(8) != 'G') {
     reportBad(CXLoadDiag_InvalidFile,
               "Bad header in diagnostics file");
-    return 0;
+    return nullptr;
   }
 
   std::unique_ptr<CXLoadedDiagnosticSetImpl> Diags(
@@ -296,7 +294,7 @@ CXDiagnosticSet DiagLoader::load(const char *file) {
       case Read_EndOfStream:
         return (CXDiagnosticSet)Diags.release();
       case Read_Failure:
-        return 0;
+        return nullptr;
       case Read_Record:
         llvm_unreachable("Top-level does not have records");
       case Read_BlockEnd:
@@ -308,16 +306,16 @@ CXDiagnosticSet DiagLoader::load(const char *file) {
     switch (BlockID) {
       case serialized_diags::BLOCK_META:
         if (readMetaBlock(Stream))
-          return 0;
+          return nullptr;
         break;
       case serialized_diags::BLOCK_DIAG:
         if (readDiagnosticBlock(Stream, *Diags.get(), *Diags.get()))
-          return 0;
+          return nullptr;
         break;
       default:
         if (!Stream.SkipBlock()) {
           reportInvalidFile("Malformed block at top-level of diagnostics file");
-          return 0;
+          return nullptr;
         }
         break;
     }
@@ -495,7 +493,7 @@ LoadResult DiagLoader::readLocation(CXLoadedDiagnosticSetImpl &TopDiags,
   unsigned fileID = Record[offset++];
   if (fileID == 0) {
     // Sentinel value.
-    Loc.file = 0;
+    Loc.file = nullptr;
     Loc.line = 0;
     Loc.column = 0;
     Loc.offset = 0;
@@ -569,7 +567,7 @@ LoadResult DiagLoader::readDiagnosticBlock(llvm::BitstreamCursor &Stream,
         continue;
       }
       case Read_BlockEnd:
-        Diags.appendDiagnostic(D.release());
+        Diags.appendDiagnostic(std::move(D));
         return Success;
       case Read_Record:
         break;

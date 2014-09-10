@@ -194,6 +194,10 @@ class Preprocessor : public RefCountedBase<Preprocessor> {
   /// with this preprocessor.
   PragmaNamespace *PragmaHandlers;
 
+  /// \brief Pragma handlers of the original source is stored here during the
+  /// parsing of a model file.
+  PragmaNamespace *PragmaHandlersBackup;
+
   /// \brief Tracks all of the comment handlers that the client registered
   /// with this preprocessor.
   std::vector<CommentHandler *> CommentHandlers;
@@ -391,7 +395,7 @@ class Preprocessor : public RefCountedBase<Preprocessor> {
   /// \brief Cache of macro expanders to reduce malloc traffic.
   enum { TokenLexerCacheSize = 8 };
   unsigned NumCachedTokenLexers;
-  TokenLexer *TokenLexerCache[TokenLexerCacheSize];
+  std::unique_ptr<TokenLexer> TokenLexerCache[TokenLexerCacheSize];
   /// \}
 
   /// \brief Keeps macro expanded tokens for TokenLexers.
@@ -433,16 +437,11 @@ private:  // Cached tokens state.
   struct MacroInfoChain {
     MacroInfo MI;
     MacroInfoChain *Next;
-    MacroInfoChain *Prev;
   };
 
   /// MacroInfos are managed as a chain for easy disposal.  This is the head
   /// of that list.
   MacroInfoChain *MIChainHead;
-
-  /// A "freelist" of MacroInfo objects that can be reused for quick
-  /// allocation.
-  MacroInfoChain *MICache;
 
   struct DeserializedMacroInfoChain {
     MacroInfo MI;
@@ -468,6 +467,17 @@ public:
   /// \param Target is owned by the caller and must remain valid for the
   /// lifetime of the preprocessor.
   void Initialize(const TargetInfo &Target);
+
+  /// \brief Initialize the preprocessor to parse a model file
+  ///
+  /// To parse model files the preprocessor of the original source is reused to
+  /// preserver the identifier table. However to avoid some duplicate
+  /// information in the preprocessor some cleanup is needed before it is used
+  /// to parse model files. This method does that cleanup.
+  void InitializeForModelFile();
+
+  /// \brief Cleanup after model file parsing
+  void FinalizeForModelFile();
 
   /// \brief Retrieve the preprocessor options used to initialize this
   /// preprocessor.
@@ -605,13 +615,15 @@ public:
   void appendMacroDirective(IdentifierInfo *II, MacroDirective *MD);
   DefMacroDirective *appendDefMacroDirective(IdentifierInfo *II, MacroInfo *MI,
                                              SourceLocation Loc,
-                                             bool isImported) {
-    DefMacroDirective *MD = AllocateDefMacroDirective(MI, Loc, isImported);
+                                             unsigned ImportedFromModuleID,
+                                             ArrayRef<unsigned> Overrides) {
+    DefMacroDirective *MD =
+        AllocateDefMacroDirective(MI, Loc, ImportedFromModuleID, Overrides);
     appendMacroDirective(II, MD);
     return MD;
   }
   DefMacroDirective *appendDefMacroDirective(IdentifierInfo *II, MacroInfo *MI){
-    return appendDefMacroDirective(II, MI, MI->getDefinitionLoc(), false);
+    return appendDefMacroDirective(II, MI, MI->getDefinitionLoc(), 0, None);
   }
   /// \brief Set a MacroDirective that was loaded from a PCH file.
   void setLoadedMacroDirective(IdentifierInfo *II, MacroDirective *MD);
@@ -1370,17 +1382,16 @@ private:
   /// \brief Allocate a new MacroInfo object.
   MacroInfo *AllocateMacroInfo();
 
-  DefMacroDirective *AllocateDefMacroDirective(MacroInfo *MI,
-                                               SourceLocation Loc,
-                                               bool isImported);
-  UndefMacroDirective *AllocateUndefMacroDirective(SourceLocation UndefLoc);
+  DefMacroDirective *
+  AllocateDefMacroDirective(MacroInfo *MI, SourceLocation Loc,
+                            unsigned ImportedFromModuleID = 0,
+                            ArrayRef<unsigned> Overrides = None);
+  UndefMacroDirective *
+  AllocateUndefMacroDirective(SourceLocation UndefLoc,
+                              unsigned ImportedFromModuleID = 0,
+                              ArrayRef<unsigned> Overrides = None);
   VisibilityMacroDirective *AllocateVisibilityMacroDirective(SourceLocation Loc,
                                                              bool isPublic);
-
-  /// \brief Release the specified MacroInfo for re-use.
-  ///
-  /// This memory will  be reused for allocating new MacroInfo objects.
-  void ReleaseMacroInfo(MacroInfo* MI);
 
   /// \brief Lex and validate a macro name, which occurs after a
   /// \#define or \#undef. 

@@ -26,7 +26,6 @@
 #include <algorithm>
 #include <cstring>
 #include <string>
-#include <sys/stat.h>
 
 using namespace clang;
 using namespace SrcMgr;
@@ -55,8 +54,8 @@ llvm::MemoryBuffer::BufferKind ContentCache::getMemoryBufferKind() const {
   // Should be unreachable, but keep for sanity.
   if (!Buffer.getPointer())
     return llvm::MemoryBuffer::MemoryBuffer_Malloc;
-  
-  const llvm::MemoryBuffer *buf = Buffer.getPointer();
+
+  llvm::MemoryBuffer *buf = Buffer.getPointer();
   return buf->getBufferKind();
 }
 
@@ -69,8 +68,7 @@ unsigned ContentCache::getSize() const {
                              : (unsigned) ContentsEntry->getSize();
 }
 
-void ContentCache::replaceBuffer(const llvm::MemoryBuffer *B,
-                                 bool DoNotFree) {
+void ContentCache::replaceBuffer(llvm::MemoryBuffer *B, bool DoNotFree) {
   if (B && B == Buffer.getPointer()) {
     assert(0 && "Replacing with the same buffer");
     Buffer.setInt(DoNotFree? DoNotFreeFlag : 0);
@@ -83,10 +81,10 @@ void ContentCache::replaceBuffer(const llvm::MemoryBuffer *B,
   Buffer.setInt(DoNotFree? DoNotFreeFlag : 0);
 }
 
-const llvm::MemoryBuffer *ContentCache::getBuffer(DiagnosticsEngine &Diag,
-                                                  const SourceManager &SM,
-                                                  SourceLocation Loc,
-                                                  bool *Invalid) const {
+llvm::MemoryBuffer *ContentCache::getBuffer(DiagnosticsEngine &Diag,
+                                            const SourceManager &SM,
+                                            SourceLocation Loc,
+                                            bool *Invalid) const {
   // Lazily create the Buffer for ContentCaches that wrap files.  If we already
   // computed it, just return what we have.
   if (Buffer.getPointer() || !ContentsEntry) {
@@ -98,9 +96,9 @@ const llvm::MemoryBuffer *ContentCache::getBuffer(DiagnosticsEngine &Diag,
 
   std::string ErrorStr;
   bool isVolatile = SM.userFilesAreVolatile() && !IsSystemFile;
-  Buffer.setPointer(SM.getFileManager().getBufferForFile(ContentsEntry,
-                                                         &ErrorStr,
-                                                         isVolatile));
+  Buffer.setPointer(SM.getFileManager()
+                        .getBufferForFile(ContentsEntry, &ErrorStr, isVolatile)
+                        .release());
 
   // If we were unable to open the file, then we are in an inconsistent
   // situation where the content cache referenced a file which no longer
@@ -113,9 +111,9 @@ const llvm::MemoryBuffer *ContentCache::getBuffer(DiagnosticsEngine &Diag,
   // that we are in an inconsistent situation and error out as quickly as
   // possible.
   if (!Buffer.getPointer()) {
-    const StringRef FillStr("<<<MISSING SOURCE FILE>>>\n");
-    Buffer.setPointer(MemoryBuffer::getNewMemBuffer(ContentsEntry->getSize(), 
-                                                    "<invalid>"));
+    StringRef FillStr("<<<MISSING SOURCE FILE>>>\n");
+    Buffer.setPointer(MemoryBuffer::getNewMemBuffer(ContentsEntry->getSize(),
+                                                    "<invalid>").release());
     char *Ptr = const_cast<char*>(Buffer.getPointer()->getBufferStart());
     for (unsigned i = 0, e = ContentsEntry->getSize(); i != e; ++i)
       Ptr[i] = FillStr[i % FillStr.size()];
@@ -375,8 +373,7 @@ SourceManager::SourceManager(DiagnosticsEngine &Diag, FileManager &FileMgr,
   : Diag(Diag), FileMgr(FileMgr), OverridenFilesKeepOriginalName(true),
     UserFilesAreVolatile(UserFilesAreVolatile),
     ExternalSLocEntries(nullptr), LineTable(nullptr), NumLinearScans(0),
-    NumBinaryProbes(0), FakeBufferForRecovery(nullptr),
-    FakeContentCacheForRecovery(nullptr) {
+    NumBinaryProbes(0) {
   clearIDTables();
   Diag.setSourceManager(this);
 }
@@ -400,9 +397,6 @@ SourceManager::~SourceManager() {
       ContentCacheAlloc.Deallocate(I->second);
     }
   }
-  
-  delete FakeBufferForRecovery;
-  delete FakeContentCacheForRecovery;
 
   llvm::DeleteContainerSeconds(MacroArgsCacheMap);
 }
@@ -462,13 +456,13 @@ SourceManager::getOrCreateContentCache(const FileEntry *FileEnt,
 
 /// createMemBufferContentCache - Create a new ContentCache for the specified
 ///  memory buffer.  This does no caching.
-const ContentCache*
-SourceManager::createMemBufferContentCache(const MemoryBuffer *Buffer) {
+const ContentCache *SourceManager::createMemBufferContentCache(
+    std::unique_ptr<llvm::MemoryBuffer> Buffer) {
   // Add a new ContentCache to the MemBufferInfos list and return it.
   ContentCache *Entry = ContentCacheAlloc.Allocate<ContentCache>();
   new (Entry) ContentCache();
   MemBufferInfos.push_back(Entry);
-  Entry->setBuffer(Buffer);
+  Entry->setBuffer(std::move(Buffer));
   return Entry;
 }
 
@@ -505,12 +499,12 @@ SourceManager::AllocateLoadedSLocEntries(unsigned NumSLocEntries,
 
 /// \brief As part of recovering from missing or changed content, produce a
 /// fake, non-empty buffer.
-const llvm::MemoryBuffer *SourceManager::getFakeBufferForRecovery() const {
+llvm::MemoryBuffer *SourceManager::getFakeBufferForRecovery() const {
   if (!FakeBufferForRecovery)
-    FakeBufferForRecovery
-      = llvm::MemoryBuffer::getMemBuffer("<<<INVALID BUFFER>>");
-  
-  return FakeBufferForRecovery;
+    FakeBufferForRecovery =
+        llvm::MemoryBuffer::getMemBuffer("<<<INVALID BUFFER>>");
+
+  return FakeBufferForRecovery.get();
 }
 
 /// \brief As part of recovering from missing or changed content, produce a
@@ -518,11 +512,11 @@ const llvm::MemoryBuffer *SourceManager::getFakeBufferForRecovery() const {
 const SrcMgr::ContentCache *
 SourceManager::getFakeContentCacheForRecovery() const {
   if (!FakeContentCacheForRecovery) {
-    FakeContentCacheForRecovery = new ContentCache();
+    FakeContentCacheForRecovery = llvm::make_unique<SrcMgr::ContentCache>();
     FakeContentCacheForRecovery->replaceBuffer(getFakeBufferForRecovery(),
                                                /*DoNotFree=*/true);
   }
-  return FakeContentCacheForRecovery;
+  return FakeContentCacheForRecovery.get();
 }
 
 /// \brief Returns the previous in-order FileID or an invalid FileID if there
@@ -644,16 +638,15 @@ SourceManager::createExpansionLocImpl(const ExpansionInfo &Info,
   return SourceLocation::getMacroLoc(NextLocalOffset - (TokLength + 1));
 }
 
-const llvm::MemoryBuffer *
-SourceManager::getMemoryBufferForFile(const FileEntry *File,
-                                      bool *Invalid) {
+llvm::MemoryBuffer *SourceManager::getMemoryBufferForFile(const FileEntry *File,
+                                                          bool *Invalid) {
   const SrcMgr::ContentCache *IR = getOrCreateContentCache(File);
   assert(IR && "getOrCreateContentCache() cannot return NULL");
   return IR->getBuffer(Diag, *this, SourceLocation(), Invalid);
 }
 
 void SourceManager::overrideFileContents(const FileEntry *SourceFile,
-                                         const llvm::MemoryBuffer *Buffer,
+                                         llvm::MemoryBuffer *Buffer,
                                          bool DoNotFree) {
   const SrcMgr::ContentCache *IR = getOrCreateContentCache(SourceFile);
   assert(IR && "getOrCreateContentCache() cannot return NULL");
@@ -696,10 +689,9 @@ StringRef SourceManager::getBufferData(FileID FID, bool *Invalid) const {
       *Invalid = true;
     return "<<<<<INVALID SOURCE LOCATION>>>>>";
   }
-  
-  const llvm::MemoryBuffer *Buf
-    = SLoc.getFile().getContentCache()->getBuffer(Diag, *this, SourceLocation(), 
-                                                  &MyInvalid);
+
+  llvm::MemoryBuffer *Buf = SLoc.getFile().getContentCache()->getBuffer(
+      Diag, *this, SourceLocation(), &MyInvalid);
   if (Invalid)
     *Invalid = MyInvalid;
 
@@ -1117,9 +1109,8 @@ const char *SourceManager::getCharacterData(SourceLocation SL,
     
     return "<<<<INVALID BUFFER>>>>";
   }
-  const llvm::MemoryBuffer *Buffer
-    = Entry.getFile().getContentCache()
-                  ->getBuffer(Diag, *this, SourceLocation(), &CharDataInvalid);
+  llvm::MemoryBuffer *Buffer = Entry.getFile().getContentCache()->getBuffer(
+      Diag, *this, SourceLocation(), &CharDataInvalid);
   if (Invalid)
     *Invalid = CharDataInvalid;
   return Buffer->getBufferStart() + (CharDataInvalid? 0 : LocInfo.second);
@@ -1131,7 +1122,7 @@ const char *SourceManager::getCharacterData(SourceLocation SL,
 unsigned SourceManager::getColumnNumber(FileID FID, unsigned FilePos,
                                         bool *Invalid) const {
   bool MyInvalid = false;
-  const llvm::MemoryBuffer *MemBuf = getBuffer(FID, &MyInvalid);
+  llvm::MemoryBuffer *MemBuf = getBuffer(FID, &MyInvalid);
   if (Invalid)
     *Invalid = MyInvalid;
 
@@ -1205,8 +1196,7 @@ static void ComputeLineNumbers(DiagnosticsEngine &Diag, ContentCache *FI,
                                llvm::BumpPtrAllocator &Alloc,
                                const SourceManager &SM, bool &Invalid) {
   // Note that calling 'getBuffer()' may lazily page in the file.
-  const MemoryBuffer *Buffer = FI->getBuffer(Diag, SM, SourceLocation(),
-                                             &Invalid);
+  MemoryBuffer *Buffer = FI->getBuffer(Diag, SM, SourceLocation(), &Invalid);
   if (Invalid)
     return;
 
@@ -1763,7 +1753,7 @@ SourceLocation SourceManager::translateLineCol(FileID FID,
     return FileLoc.getLocWithOffset(Size);
   }
 
-  const llvm::MemoryBuffer *Buffer = Content->getBuffer(Diag, *this);
+  llvm::MemoryBuffer *Buffer = Content->getBuffer(Diag, *this);
   unsigned FilePos = Content->SourceLineCache[Line - 1];
   const char *Buf = Buffer->getBufferStart() + FilePos;
   unsigned BufLength = Buffer->getBufferSize() - FilePos;

@@ -27,6 +27,7 @@
 
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Basic/FileManager.h"
+#include "clang/Basic/FileSystemStatCache.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Lex/CodeCompletionHandler.h"
@@ -60,7 +61,7 @@ Preprocessor::Preprocessor(IntrusiveRefCntPtr<PreprocessorOptions> PPOpts,
                            ModuleLoader &TheModuleLoader,
                            IdentifierInfoLookup *IILookup, bool OwnsHeaders,
                            TranslationUnitKind TUKind)
-    : PPOpts(PPOpts), Diags(&diags), LangOpts(opts), Target(0),
+    : PPOpts(PPOpts), Diags(&diags), LangOpts(opts), Target(nullptr),
       FileMgr(Headers.getFileMgr()), SourceMgr(SM), HeaderInfo(Headers),
       TheModuleLoader(TheModuleLoader), ExternalSource(nullptr),
       Identifiers(opts, IILookup), IncrementalProcessing(false), TUKind(TUKind),
@@ -70,7 +71,7 @@ Preprocessor::Preprocessor(IntrusiveRefCntPtr<PreprocessorOptions> PPOpts,
       SkipMainFilePreamble(0, true), CurPPLexer(nullptr),
       CurDirLookup(nullptr), CurLexerKind(CLK_Lexer), CurSubmodule(nullptr),
       Callbacks(nullptr), MacroArgCache(nullptr), Record(nullptr),
-      MIChainHead(nullptr), MICache(nullptr), DeserialMIChainHead(0) {
+      MIChainHead(nullptr), DeserialMIChainHead(nullptr) {
   OwnsHeaderSearch = OwnsHeaders;
   
   ScratchBuf = new ScratchBuffer(SourceMgr);
@@ -141,19 +142,22 @@ Preprocessor::~Preprocessor() {
 
   IncludeMacroStack.clear();
 
-  // Free any macro definitions.
-  for (MacroInfoChain *I = MIChainHead ; I ; I = I->Next)
-    I->MI.Destroy();
+  // Destroy any macro definitions.
+  while (MacroInfoChain *I = MIChainHead) {
+    MIChainHead = I->Next;
+    I->~MacroInfoChain();
+  }
 
   // Free any cached macro expanders.
   // This populates MacroArgCache, so all TokenLexers need to be destroyed
   // before the code below that frees up the MacroArgCache list.
-  for (unsigned i = 0, e = NumCachedTokenLexers; i != e; ++i)
-    delete TokenLexerCache[i];
+  std::fill(TokenLexerCache, TokenLexerCache + NumCachedTokenLexers, nullptr);
   CurTokenLexer.reset();
 
-  for (DeserializedMacroInfoChain *I = DeserialMIChainHead ; I ; I = I->Next)
-    I->MI.Destroy();
+  while (DeserializedMacroInfoChain *I = DeserialMIChainHead) {
+    DeserialMIChainHead = I->Next;
+    I->~DeserializedMacroInfoChain();
+  }
 
   // Free any cached MacroArgs.
   for (MacroArgs *ArgList = MacroArgCache; ArgList;)
@@ -180,6 +184,25 @@ void Preprocessor::Initialize(const TargetInfo &Target) {
   // Initialize information about built-ins.
   BuiltinInfo.InitializeTarget(Target);
   HeaderInfo.setTarget(Target);
+}
+
+void Preprocessor::InitializeForModelFile() {
+  NumEnteredSourceFiles = 0;
+
+  // Reset pragmas
+  PragmaHandlersBackup = PragmaHandlers;
+  PragmaHandlers = new PragmaNamespace(StringRef());
+  RegisterBuiltinPragmas();
+
+  // Reset PredefinesFileID
+  PredefinesFileID = FileID();
+}
+
+void Preprocessor::FinalizeForModelFile() {
+  NumEnteredSourceFiles = 1;
+
+  delete PragmaHandlers;
+  PragmaHandlers = PragmaHandlersBackup;
 }
 
 void Preprocessor::setPTHManager(PTHManager* pm) {
@@ -375,14 +398,14 @@ bool Preprocessor::SetCodeCompletionPoint(const FileEntry *File,
     CodeCompletionFile = File;
     CodeCompletionOffset = Position - Buffer->getBufferStart();
 
-    MemoryBuffer *NewBuffer =
+    std::unique_ptr<MemoryBuffer> NewBuffer =
         MemoryBuffer::getNewUninitMemBuffer(Buffer->getBufferSize() + 1,
                                             Buffer->getBufferIdentifier());
     char *NewBuf = const_cast<char*>(NewBuffer->getBufferStart());
     char *NewPos = std::copy(Buffer->getBufferStart(), Position, NewBuf);
     *NewPos = '\0';
     std::copy(Position, Buffer->getBufferEnd(), NewPos+1);
-    SourceMgr.overrideFileContents(File, NewBuffer);
+    SourceMgr.overrideFileContents(File, std::move(NewBuffer));
   }
 
   return false;
@@ -479,10 +502,10 @@ void Preprocessor::EnterMainSourceFile() {
   }
 
   // Preprocess Predefines to populate the initial preprocessor state.
-  llvm::MemoryBuffer *SB =
+  std::unique_ptr<llvm::MemoryBuffer> SB =
     llvm::MemoryBuffer::getMemBufferCopy(Predefines, "<built-in>");
   assert(SB && "Cannot create predefined source buffer");
-  FileID FID = SourceMgr.createFileID(SB);
+  FileID FID = SourceMgr.createFileID(std::move(SB));
   assert(!FID.isInvalid() && "Could not create FileID for predefines?");
   setPredefinesFileID(FID);
 
@@ -757,7 +780,7 @@ bool Preprocessor::FinishLexStringLiteral(Token &Result, std::string &String,
   } while (Result.is(tok::string_literal));
 
   // Concatenate and parse the strings.
-  StringLiteralParser Literal(&StrToks[0], StrToks.size(), *this);
+  StringLiteralParser Literal(StrToks, *this);
   assert(Literal.isAscii() && "Didn't allow wide strings in");
 
   if (Literal.hadError)

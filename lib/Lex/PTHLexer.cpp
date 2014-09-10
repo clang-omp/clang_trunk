@@ -24,12 +24,11 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/EndianStream.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/OnDiskHashTable.h"
-#include "llvm/Support/system_error.h"
 #include <memory>
+#include <system_error>
 using namespace clang;
 
-#define DISK_TOKEN_SIZE (1+1+2+4+4)
+static const unsigned StoredTokenSize = 1 + 1 + 2 + 4 + 4;
 
 //===----------------------------------------------------------------------===//
 // PTHLexer methods.
@@ -110,7 +109,7 @@ bool PTHLexer::Lex(Token& Tok) {
   }
 
   if (TKind == tok::hash && Tok.isAtStartOfLine()) {
-    LastHashTokPtr = CurPtr - DISK_TOKEN_SIZE;
+    LastHashTokPtr = CurPtr - StoredTokenSize;
     assert(!LexingRawMode);
     PP->HandleDirective(Tok);
 
@@ -179,7 +178,7 @@ void PTHLexer::DiscardToEndOfLine() {
     if (y & Token::StartOfLine) break;
 
     // Skip to the next token.
-    p += DISK_TOKEN_SIZE;
+    p += StoredTokenSize;
   }
 
   CurPtr = p;
@@ -255,10 +254,10 @@ bool PTHLexer::SkipBlock() {
   // already points 'elif'.  Just return.
 
   if (CurPtr > HashEntryI) {
-    assert(CurPtr == HashEntryI + DISK_TOKEN_SIZE);
+    assert(CurPtr == HashEntryI + StoredTokenSize);
     // Did we reach a #endif?  If so, go ahead and consume that token as well.
     if (isEndif)
-      CurPtr += DISK_TOKEN_SIZE*2;
+      CurPtr += StoredTokenSize * 2;
     else
       LastHashTokPtr = HashEntryI;
 
@@ -274,10 +273,12 @@ bool PTHLexer::SkipBlock() {
 
   // Skip the '#' token.
   assert(((tok::TokenKind)*CurPtr) == tok::hash);
-  CurPtr += DISK_TOKEN_SIZE;
+  CurPtr += StoredTokenSize;
 
   // Did we reach a #endif?  If so, go ahead and consume that token as well.
-  if (isEndif) { CurPtr += DISK_TOKEN_SIZE*2; }
+  if (isEndif) {
+    CurPtr += StoredTokenSize * 2;
+  }
 
   return isEndif;
 }
@@ -290,7 +291,7 @@ SourceLocation PTHLexer::getSourceLocation() {
   // NOTE: This is a virtual function; hence it is defined out-of-line.
   using namespace llvm::support;
 
-  const unsigned char *OffsetPtr = CurPtr + (DISK_TOKEN_SIZE - 4);
+  const unsigned char *OffsetPtr = CurPtr + (StoredTokenSize - 4);
   uint32_t Offset = endian::readNext<uint32_t, little, aligned>(OffsetPtr);
   return FileStartLoc.getLocWithOffset(Offset);
 }
@@ -340,7 +341,9 @@ public:
   }
 };
 
-class PTHFileLookupTrait : public PTHFileLookupCommonTrait {
+} // end anonymous namespace
+
+class PTHManager::PTHFileLookupTrait : public PTHFileLookupCommonTrait {
 public:
   typedef const FileEntry* external_key_type;
   typedef PTHFileData      data_type;
@@ -363,7 +366,7 @@ public:
   }
 };
 
-class PTHStringLookupTrait {
+class PTHManager::PTHStringLookupTrait {
 public:
   typedef uint32_t data_type;
   typedef const std::pair<const char*, unsigned> external_key_type;
@@ -406,31 +409,22 @@ public:
   }
 };
 
-} // end anonymous namespace
-
-typedef llvm::OnDiskChainedHashTable<PTHFileLookupTrait>   PTHFileLookup;
-typedef llvm::OnDiskChainedHashTable<PTHStringLookupTrait> PTHStringIdLookup;
-
 //===----------------------------------------------------------------------===//
 // PTHManager methods.
 //===----------------------------------------------------------------------===//
 
-PTHManager::PTHManager(const llvm::MemoryBuffer* buf, void* fileLookup,
-                       const unsigned char* idDataTable,
-                       IdentifierInfo** perIDCache,
-                       void* stringIdLookup, unsigned numIds,
-                       const unsigned char* spellingBase,
-                       const char* originalSourceFile)
-: Buf(buf), PerIDCache(perIDCache), FileLookup(fileLookup),
-  IdDataTable(idDataTable), StringIdLookup(stringIdLookup),
-  NumIds(numIds), PP(nullptr), SpellingBase(spellingBase),
-  OriginalSourceFile(originalSourceFile) {}
+PTHManager::PTHManager(
+    std::unique_ptr<const llvm::MemoryBuffer> buf,
+    std::unique_ptr<PTHFileLookup> fileLookup, const unsigned char *idDataTable,
+    std::unique_ptr<IdentifierInfo *[], llvm::FreeDeleter> perIDCache,
+    std::unique_ptr<PTHStringIdLookup> stringIdLookup, unsigned numIds,
+    const unsigned char *spellingBase, const char *originalSourceFile)
+    : Buf(std::move(buf)), PerIDCache(std::move(perIDCache)),
+      FileLookup(std::move(fileLookup)), IdDataTable(idDataTable),
+      StringIdLookup(std::move(stringIdLookup)), NumIds(numIds), PP(nullptr),
+      SpellingBase(spellingBase), OriginalSourceFile(originalSourceFile) {}
 
 PTHManager::~PTHManager() {
-  delete Buf;
-  delete (PTHFileLookup*) FileLookup;
-  delete (PTHStringIdLookup*) StringIdLookup;
-  free(PerIDCache);
 }
 
 static void InvalidPTH(DiagnosticsEngine &Diags, const char *Msg) {
@@ -440,13 +434,15 @@ static void InvalidPTH(DiagnosticsEngine &Diags, const char *Msg) {
 PTHManager *PTHManager::Create(const std::string &file,
                                DiagnosticsEngine &Diags) {
   // Memory map the PTH file.
-  std::unique_ptr<llvm::MemoryBuffer> File;
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FileOrErr =
+      llvm::MemoryBuffer::getFile(file);
 
-  if (llvm::MemoryBuffer::getFile(file, File)) {
+  if (!FileOrErr) {
     // FIXME: Add ec.message() to this diag.
     Diags.Report(diag::err_invalid_pth_file) << file;
     return nullptr;
   }
+  std::unique_ptr<llvm::MemoryBuffer> File = std::move(FileOrErr.get());
 
   using namespace llvm::support;
 
@@ -539,10 +535,10 @@ PTHManager *PTHManager::Create(const std::string &file,
   // Pre-allocate the persistent ID -> IdentifierInfo* cache.  We use calloc()
   // so that we in the best case only zero out memory once when the OS returns
   // us new pages.
-  IdentifierInfo **PerIDCache = nullptr;
+  std::unique_ptr<IdentifierInfo *[], llvm::FreeDeleter> PerIDCache;
 
   if (NumIds) {
-    PerIDCache = (IdentifierInfo**)calloc(NumIds, sizeof(*PerIDCache));
+    PerIDCache.reset((IdentifierInfo **)calloc(NumIds, sizeof(PerIDCache[0])));
     if (!PerIDCache) {
       InvalidPTH(Diags, "Could not allocate memory for processing PTH file");
       return nullptr;
@@ -556,9 +552,9 @@ PTHManager *PTHManager::Create(const std::string &file,
   if (!len) originalSourceBase = nullptr;
 
   // Create the new PTHManager.
-  return new PTHManager(File.release(), FL.release(), IData, PerIDCache,
-                        SL.release(), NumIds, spellingBase,
-                        (const char *)originalSourceBase);
+  return new PTHManager(std::move(File), std::move(FL), IData,
+                        std::move(PerIDCache), std::move(SL), NumIds,
+                        spellingBase, (const char *)originalSourceBase);
 }
 
 IdentifierInfo* PTHManager::LazilyCreateIdentifierInfo(unsigned PersistentID) {
@@ -585,12 +581,11 @@ IdentifierInfo* PTHManager::LazilyCreateIdentifierInfo(unsigned PersistentID) {
 }
 
 IdentifierInfo* PTHManager::get(StringRef Name) {
-  PTHStringIdLookup& SL = *((PTHStringIdLookup*)StringIdLookup);
   // Double check our assumption that the last character isn't '\0'.
   assert(Name.empty() || Name.back() != '\0');
-  PTHStringIdLookup::iterator I = SL.find(std::make_pair(Name.data(),
-                                                         Name.size()));
-  if (I == SL.end()) // No identifier found?
+  PTHStringIdLookup::iterator I =
+      StringIdLookup->find(std::make_pair(Name.data(), Name.size()));
+  if (I == StringIdLookup->end()) // No identifier found?
     return nullptr;
 
   // Match found.  Return the identifier!
@@ -608,10 +603,9 @@ PTHLexer *PTHManager::CreateLexer(FileID FID) {
   // Lookup the FileEntry object in our file lookup data structure.  It will
   // return a variant that indicates whether or not there is an offset within
   // the PTH file that contains cached tokens.
-  PTHFileLookup& PFL = *((PTHFileLookup*)FileLookup);
-  PTHFileLookup::iterator I = PFL.find(FE);
+  PTHFileLookup::iterator I = FileLookup->find(FE);
 
-  if (I == PFL.end()) // No tokens available?
+  if (I == FileLookup->end()) // No tokens available?
     return nullptr;
 
   const PTHFileData& FileData = *I;
@@ -680,7 +674,7 @@ public:
 
       uint64_t File = endian::readNext<uint64_t, little, unaligned>(d);
       uint64_t Device = endian::readNext<uint64_t, little, unaligned>(d);
-      llvm::sys::fs::UniqueID UniqueID(File, Device);
+      llvm::sys::fs::UniqueID UniqueID(Device, File);
       time_t ModTime = endian::readNext<uint64_t, little, unaligned>(d);
       uint64_t Size = endian::readNext<uint64_t, little, unaligned>(d);
       return data_type(Size, ModTime, UniqueID, IsDirectory);
@@ -690,20 +684,21 @@ public:
     return data_type();
   }
 };
+} // end anonymous namespace
 
+namespace clang {
 class PTHStatCache : public FileSystemStatCache {
   typedef llvm::OnDiskChainedHashTable<PTHStatLookupTrait> CacheTy;
   CacheTy Cache;
 
 public:
-  PTHStatCache(PTHFileLookup &FL) :
-    Cache(FL.getNumBuckets(), FL.getNumEntries(), FL.getBuckets(),
-          FL.getBase()) {}
-
-  ~PTHStatCache() {}
+  PTHStatCache(PTHManager::PTHFileLookup &FL)
+      : Cache(FL.getNumBuckets(), FL.getNumEntries(), FL.getBuckets(),
+              FL.getBase()) {}
 
   LookupResult getStat(const char *Path, FileData &Data, bool isFile,
-                       vfs::File **F, vfs::FileSystem &FS) override {
+                       std::unique_ptr<vfs::File> *F,
+                       vfs::FileSystem &FS) override {
     // Do the lookup for the file's data in the PTH file.
     CacheTy::iterator I = Cache.find(Path);
 
@@ -727,8 +722,8 @@ public:
     return CacheExists;
   }
 };
-} // end anonymous namespace
+}
 
-FileSystemStatCache *PTHManager::createStatCache() {
-  return new PTHStatCache(*((PTHFileLookup*) FileLookup));
+std::unique_ptr<FileSystemStatCache> PTHManager::createStatCache() {
+  return llvm::make_unique<PTHStatCache>(*FileLookup);
 }

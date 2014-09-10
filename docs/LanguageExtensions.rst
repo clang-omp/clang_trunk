@@ -91,7 +91,7 @@ feature) or 0 if not.  They can be used like this:
 
 .. _langext-has-feature-back-compat:
 
-For backwards compatibility reasons, ``__has_feature`` can also be used to test
+For backward compatibility, ``__has_feature`` can also be used to test
 for support for non-standardized features, i.e. features not prefixed ``c_``,
 ``cxx_`` or ``objc_``.
 
@@ -357,23 +357,27 @@ The table below shows the support for each operation by vector extension.  A
 dash indicates that an operation is not accepted according to a corresponding
 specification.
 
-============================== ====== ======= === ====
-         Opeator               OpenCL AltiVec GCC NEON
-============================== ====== ======= === ====
-[]                              yes     yes   yes  --
-unary operators +, --           yes     yes   yes  --
-++, -- --                       yes     yes   yes  --
-+,--,*,/,%                      yes     yes   yes  --
-bitwise operators &,|,^,~       yes     yes   yes  --
->>,<<                           yes     yes   yes  --
-!, &&, ||                       no      --    --   --
-==, !=, >, <, >=, <=            yes     yes   --   --
-=                               yes     yes   yes yes
-:?                              yes     --    --   --
-sizeof                          yes     yes   yes yes
-============================== ====== ======= === ====
+============================== ======= ======= ======= =======
+         Opeator               OpenCL  AltiVec   GCC    NEON
+============================== ======= ======= ======= =======
+[]                               yes     yes     yes     --
+unary operators +, --            yes     yes     yes     --
+++, -- --                        yes     yes     yes     --
++,--,*,/,%                       yes     yes     yes     --
+bitwise operators &,|,^,~        yes     yes     yes     --
+>>,<<                            yes     yes     yes     --
+!, &&, ||                        yes     --      --      --
+==, !=, >, <, >=, <=             yes     yes     --      --
+=                                yes     yes     yes     yes
+:?                               yes     --      --      --
+sizeof                           yes     yes     yes     yes
+C-style cast                     yes     yes     yes     no
+reinterpret_cast                 yes     no      yes     no
+static_cast                      yes     no      yes     no
+const_cast                       no      no      no      no
+============================== ======= ======= ======= =======
 
-See also :ref:`langext-__builtin_shufflevector`.
+See also :ref:`langext-__builtin_shufflevector`, :ref:`langext-__builtin_convertvector`.
 
 Messages on ``deprecated`` and ``unavailable`` Attributes
 =========================================================
@@ -1224,8 +1228,9 @@ Builtin Functions
 Clang supports a number of builtin library functions with the same syntax as
 GCC, including things like ``__builtin_nan``, ``__builtin_constant_p``,
 ``__builtin_choose_expr``, ``__builtin_types_compatible_p``,
-``__sync_fetch_and_add``, etc.  In addition to the GCC builtins, Clang supports
-a number of builtins that GCC does not, which are listed here.
+``__builtin_assume_aligned``, ``__sync_fetch_and_add``, etc.  In addition to
+the GCC builtins, Clang supports a number of builtins that GCC does not, which
+are listed here.
 
 Please note that Clang does not and will not support all of the GCC builtins
 for vector operations.  Instead of using builtins, you should use the functions
@@ -1234,6 +1239,42 @@ portable wrappers for these.  Many of the Clang versions of these functions are
 implemented directly in terms of :ref:`extended vector support
 <langext-vectors>` instead of builtins, in order to reduce the number of
 builtins that we need to implement.
+
+``__builtin_assume``
+------------------------------
+
+``__builtin_assume`` is used to provide the optimizer with a boolean
+invariant that is defined to be true.
+
+**Syntax**:
+
+.. code-block:: c++
+
+  __builtin_assume(bool)
+
+**Example of Use**:
+
+.. code-block:: c++
+
+  int foo(int x) {
+    __builtin_assume(x != 0);
+
+    // The optimizer may short-circuit this check using the invariant.
+    if (x == 0)
+      return do_something();
+
+    return do_something_else();
+  }
+
+**Description**:
+
+The boolean argument to this function is defined to be true. The optimizer may
+analyze the form of the expression provided as the argument and deduce from
+that information used to optimize the program. If the condition is violated
+during execution, the behavior is undefined. The argument itself is never
+evaluated, so any side effects of the expression will be discarded.
+
+Query for this feature with ``__has_builtin(__builtin_assume)``.
 
 ``__builtin_readcyclecounter``
 ------------------------------
@@ -1324,6 +1365,8 @@ indices specified.
 
 Query for this feature with ``__has_builtin(__builtin_shufflevector)``.
 
+.. _langext-__builtin_convertvector:
+
 ``__builtin_convertvector``
 ---------------------------
 
@@ -1354,7 +1397,7 @@ type must have the same number of elements.
   // convert from a vector of 4 shorts to a vector of 4 floats.
   __builtin_convertvector(vs, vector4float)
   // equivalent to:
-  (vector4float) { (float) vf[0], (float) vf[1], (float) vf[2], (float) vf[3] }
+  (vector4float) { (float) vs[0], (float) vs[1], (float) vs[2], (float) vs[3] }
 
 **Description**:
 
@@ -1445,6 +1488,24 @@ object that overloads ``operator&``.
   template<typename T> constexpr T *addressof(T &value) {
     return __builtin_addressof(value);
   }
+
+``__builtin_operator_new`` and ``__builtin_operator_delete``
+------------------------------------------------------------
+
+``__builtin_operator_new`` allocates memory just like a non-placement non-class
+*new-expression*. This is exactly like directly calling the normal
+non-placement ``::operator new``, except that it allows certain optimizations
+that the C++ standard does not permit for a direct function call to
+``::operator new`` (in particular, removing ``new`` / ``delete`` pairs and
+merging allocations).
+
+Likewise, ``__builtin_operator_delete`` deallocates memory just like a
+non-class *delete-expression*, and is exactly like directly calling the normal
+``::operator delete``, except that it permits optimizations. Only the unsized
+form of ``__builtin_operator_delete`` is currently available.
+
+These builtins are intended for use in the implementation of ``std::allocator``
+and other similar allocation libraries, and are only available in C++.
 
 Multiprecision Arithmetic Builtins
 ----------------------------------
@@ -1562,7 +1623,9 @@ instructions for implementing atomic operations.
 .. code-block:: c
 
   T __builtin_arm_ldrex(const volatile T *addr);
+  T __builtin_arm_ldaex(const volatile T *addr);
   int __builtin_arm_strex(T val, volatile T *addr);
+  int __builtin_arm_stlex(T val, volatile T *addr);
   void __builtin_arm_clrex(void);
 
 The types ``T`` currently supported are:
@@ -1571,11 +1634,11 @@ The types ``T`` currently supported are:
 * Pointer types.
 
 Note that the compiler does not guarantee it will not insert stores which clear
-the exclusive monitor in between an ``ldrex`` and its paired ``strex``. In
-practice this is only usually a risk when the extra store is on the same cache
-line as the variable being modified and Clang will only insert stack stores on
-its own, so it is best not to use these operations on variables with automatic
-storage duration.
+the exclusive monitor in between an ``ldrex`` type operation and its paired
+``strex``. In practice this is only usually a risk when the extra store is on
+the same cache line as the variable being modified and Clang will only insert
+stack stores on its own, so it is best not to use these operations on variables
+with automatic storage duration.
 
 Also, loads and stores may be implicit in code written between the ``ldrex`` and
 ``strex``. Clang will not necessarily mitigate the effects of these either, so
@@ -1613,6 +1676,19 @@ Target-Specific Extensions
 ==========================
 
 Clang supports some language features conditionally on some targets.
+
+ARM/AArch64 Language Extensions
+-------------------------------
+
+Memory Barrier Intrinsics
+^^^^^^^^^^^^^^^^^^^^^^^^^
+Clang implements the ``__dmb``, ``__dsb`` and ``__isb`` intrinsics as defined
+in the `ARM C Language Extensions Release 2.0
+<http://infocenter.arm.com/help/topic/com.arm.doc.ihi0053c/IHI0053C_acle_2_0.pdf>`_.
+Note that these intrinsics are implemented as motion barriers that block
+reordering of memory accesses and side effect instructions. Other instructions
+like simple arithmatic may be reordered around the intrinsic. If you expect to
+have no reordering at all, use inline assembly instead.
 
 X86/X86-64 Language Extensions
 ------------------------------
@@ -1746,3 +1822,111 @@ The ``container`` function is also in the region and will not be optimized, but
 it causes the instantiation of ``twice`` and ``thrice`` with an ``int`` type; of
 these two instantiations, ``twice`` will be optimized (because its definition
 was outside the region) and ``thrice`` will not be optimized.
+
+Extensions for loop hint optimizations
+======================================
+
+The ``#pragma clang loop`` directive is used to specify hints for optimizing the
+subsequent for, while, do-while, or c++11 range-based for loop. The directive
+provides options for vectorization, interleaving, and unrolling. Loop hints can
+be specified before any loop and will be ignored if the optimization is not safe
+to apply.
+
+Vectorization and Interleaving
+------------------------------
+
+A vectorized loop performs multiple iterations of the original loop
+in parallel using vector instructions. The instruction set of the target
+processor determines which vector instructions are available and their vector
+widths. This restricts the types of loops that can be vectorized. The vectorizer
+automatically determines if the loop is safe and profitable to vectorize. A
+vector instruction cost model is used to select the vector width.
+
+Interleaving multiple loop iterations allows modern processors to further
+improve instruction-level parallelism (ILP) using advanced hardware features,
+such as multiple execution units and out-of-order execution. The vectorizer uses
+a cost model that depends on the register pressure and generated code size to
+select the interleaving count.
+
+Vectorization is enabled by ``vectorize(enable)`` and interleaving is enabled
+by ``interleave(enable)``. This is useful when compiling with ``-Os`` to
+manually enable vectorization or interleaving.
+
+.. code-block:: c++
+
+  #pragma clang loop vectorize(enable)
+  #pragma clang loop interleave(enable)
+  for(...) {
+    ...
+  }
+
+The vector width is specified by ``vectorize_width(_value_)`` and the interleave
+count is specified by ``interleave_count(_value_)``, where
+_value_ is a positive integer. This is useful for specifying the optimal
+width/count of the set of target architectures supported by your application.
+
+.. code-block:: c++
+
+  #pragma clang loop vectorize_width(2)
+  #pragma clang loop interleave_count(2)
+  for(...) {
+    ...
+  }
+
+Specifying a width/count of 1 disables the optimization, and is equivalent to
+``vectorize(disable)`` or ``interleave(disable)``.
+
+Loop Unrolling
+--------------
+
+Unrolling a loop reduces the loop control overhead and exposes more
+opportunities for ILP. Loops can be fully or partially unrolled. Full unrolling
+eliminates the loop and replaces it with an enumerated sequence of loop
+iterations. Full unrolling is only possible if the loop trip count is known at
+compile time. Partial unrolling replicates the loop body within the loop and
+reduces the trip count.
+
+If ``unroll(full)`` is specified the unroller will attempt to fully unroll the
+loop if the trip count is known at compile time. If the loop count is not known
+or the fully unrolled code size is greater than the limit specified by the
+`-pragma-unroll-threshold` command line option the loop will be partially
+unrolled subject to the same limit.
+
+.. code-block:: c++
+
+  #pragma clang loop unroll(full)
+  for(...) {
+    ...
+  }
+
+The unroll count can be specified explicitly with ``unroll_count(_value_)`` where
+_value_ is a positive integer. If this value is greater than the trip count the
+loop will be fully unrolled. Otherwise the loop is partially unrolled subject
+to the `-pragma-unroll-threshold` limit.
+
+.. code-block:: c++
+
+  #pragma clang loop unroll_count(8)
+  for(...) {
+    ...
+  }
+
+Unrolling of a loop can be prevented by specifying ``unroll(disable)``.
+
+Additional Information
+----------------------
+
+For convenience multiple loop hints can be specified on a single line.
+
+.. code-block:: c++
+
+  #pragma clang loop vectorize_width(4) interleave_count(8)
+  for(...) {
+    ...
+  }
+
+If an optimization cannot be applied any hints that apply to it will be ignored.
+For example, the hint ``vectorize_width(4)`` is ignored if the loop is not
+proven safe to vectorize. To identify and diagnose optimization issues use
+`-Rpass`, `-Rpass-missed`, and `-Rpass-analysis` command line options. See the
+user guide for details.

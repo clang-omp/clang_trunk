@@ -852,7 +852,7 @@ namespace dr77 { // dr77: yes
 namespace dr78 { // dr78: sup ????
   // Under DR78, this is valid, because 'k' has static storage duration, so is
   // zero-initialized.
-  const int k; // expected-error {{default initialization of an object of const}}
+  const int k; // expected-error {{default initialization of an object of const}} expected-note{{add an explicit initializer to initialize 'k'}}
 }
 
 // dr79: na
@@ -1051,18 +1051,18 @@ namespace dr98 { // dr98: yes
   void test(int n) {
     switch (n) {
       try { // expected-note 2{{bypasses}}
-        case 0: // expected-error {{protected}}
+        case 0: // expected-error {{cannot jump}}
         x:
           throw n;
       } catch (...) { // expected-note 2{{bypasses}}
-        case 1: // expected-error {{protected}}
+        case 1: // expected-error {{cannot jump}}
         y:
           throw n;
       }
       case 2:
-        goto x; // expected-error {{protected}}
+        goto x; // expected-error {{cannot jump}}
       case 3:
-        goto y; // expected-error {{protected}}
+        goto y; // expected-error {{cannot jump}}
     }
   }
 }

@@ -14,6 +14,7 @@
 
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/AST/Decl.h"
+#include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
@@ -93,6 +94,15 @@ FunctionScopeInfo::WeakObjectProfileTy::getBaseInfo(const Expr *E) {
   return BaseInfoTy(D, IsExact);
 }
 
+bool CapturingScopeInfo::isVLATypeCaptured(const VariableArrayType *VAT) const {
+  if (auto *LSI = dyn_cast<LambdaScopeInfo>(this))
+    for (auto *FD : LSI->Lambda->fields()) {
+      if (FD->hasCapturedVLAType() && FD->getCapturedVLAType() == VAT)
+        return true;
+    }
+  return false;
+}
+
 FunctionScopeInfo::WeakObjectProfileTy::WeakObjectProfileTy(
                                           const ObjCPropertyRefExpr *PropE)
     : Base(nullptr, true), Property(getBestPropertyDecl(PropE)) {
@@ -158,8 +168,14 @@ void FunctionScopeInfo::markSafeWeakUse(const Expr *E) {
 
   // Has this weak object been seen before?
   FunctionScopeInfo::WeakObjectUseMap::iterator Uses;
-  if (const ObjCPropertyRefExpr *RefExpr = dyn_cast<ObjCPropertyRefExpr>(E))
-    Uses = WeakObjectUses.find(WeakObjectProfileTy(RefExpr));
+  if (const ObjCPropertyRefExpr *RefExpr = dyn_cast<ObjCPropertyRefExpr>(E)) {
+    if (isa<OpaqueValueExpr>(RefExpr->getBase()))
+     Uses = WeakObjectUses.find(WeakObjectProfileTy(RefExpr));
+    else {
+      markSafeWeakUse(RefExpr->getBase());
+      return;
+    }
+  }
   else if (const ObjCIvarRefExpr *IvarE = dyn_cast<ObjCIvarRefExpr>(E))
     Uses = WeakObjectUses.find(WeakObjectProfileTy(IvarE));
   else if (const DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(E))

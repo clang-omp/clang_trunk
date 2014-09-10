@@ -73,7 +73,7 @@
 //       be followed by ':headername:' to state which header this function
 //       comes from.
 //  i -> this is a runtime library implemented function without the
-//       '__builtin_' prefix. It will be implemented in compiter-rt or libgcc.
+//       '__builtin_' prefix. It will be implemented in compiler-rt or libgcc.
 //  p:N: -> this is a printf-like function whose Nth argument is the format
 //          string.
 //  P:N: -> similar to the p:N: attribute, but the function is like vprintf
@@ -412,6 +412,7 @@ BUILTIN(__builtin_va_start, "vA.", "nt")
 BUILTIN(__builtin_va_end, "vA", "n")
 BUILTIN(__builtin_va_copy, "vAA", "n")
 BUILTIN(__builtin_stdarg_start, "vA.", "n")
+BUILTIN(__builtin_assume_aligned, "v*vC*z.", "nc")
 BUILTIN(__builtin_bcmp, "iv*v*z", "n")
 BUILTIN(__builtin_bcopy, "vv*v*z", "n")
 BUILTIN(__builtin_bzero, "vv*z", "nF")
@@ -679,13 +680,16 @@ BUILTIN(__builtin_rindex, "c*cC*i", "Fn")
 // Microsoft builtins.  These are only active with -fms-extensions.
 LANGBUILTIN(_alloca,      "v*z", "n", ALL_MS_LANGUAGES)
 LANGBUILTIN(__assume,     "vb",  "n", ALL_MS_LANGUAGES)
-LANGBUILTIN(__noop,       "v.",  "n", ALL_MS_LANGUAGES)
+LANGBUILTIN(__noop,       "i.",  "n", ALL_MS_LANGUAGES)
 LANGBUILTIN(__debugbreak, "v",   "n", ALL_MS_LANGUAGES)
 LANGBUILTIN(__va_start,   "vc**.", "nt", ALL_MS_LANGUAGES)
 LANGBUILTIN(_InterlockedCompareExchange, "LiLiD*LiLi", "n", ALL_MS_LANGUAGES)
+LANGBUILTIN(_InterlockedCompareExchangePointer, "v*v*D*v*v*", "n", ALL_MS_LANGUAGES)
 LANGBUILTIN(_InterlockedIncrement, "LiLiD*", "n", ALL_MS_LANGUAGES)
 LANGBUILTIN(_InterlockedDecrement, "LiLiD*", "n", ALL_MS_LANGUAGES)
 LANGBUILTIN(_InterlockedExchangeAdd, "LiLiD*Li", "n", ALL_MS_LANGUAGES)
+LANGBUILTIN(_InterlockedExchangePointer, "v*v*D*v*", "n", ALL_MS_LANGUAGES)
+LANGBUILTIN(_InterlockedExchange, "LiLiD*Li", "n", ALL_MS_LANGUAGES)
 
 // C99 library functions
 // C99 stdlib.h
@@ -1170,6 +1174,9 @@ LIBBUILTIN(_Block_object_dispose, "vvC*iC", "f", "Blocks.h", ALL_LANGUAGES)
 // Annotation function
 BUILTIN(__builtin_annotation, "v.", "tn")
 
+// Invariants
+BUILTIN(__builtin_assume, "vb", "n")
+
 // Multiprecision Arithmetic Builtins.
 BUILTIN(__builtin_addcb, "UcUcCUcCUcCUc*", "n")
 BUILTIN(__builtin_addcs, "UsUsCUsCUsCUs*", "n")
@@ -1204,6 +1211,8 @@ BUILTIN(__builtin_smulll_overflow, "bSLLiCSLLiCSLLi*", "n")
 
 // Clang builtins (not available in GCC).
 BUILTIN(__builtin_addressof, "v*v&", "nct")
+BUILTIN(__builtin_operator_new, "v*z", "c")
+BUILTIN(__builtin_operator_delete, "vv*", "n")
 
 #undef BUILTIN
 #undef LIBBUILTIN

@@ -83,9 +83,53 @@ TEST_F(FormatTestJS, UnderstandsJavaScriptOperators) {
   verifyFormat("var b = a.map((x) => x + 1);");
 }
 
+TEST_F(FormatTestJS, UnderstandsAmpAmp) {
+  verifyFormat("e && e.SomeFunction();");
+}
+
+TEST_F(FormatTestJS, LiteralOperatorsCanBeKeywords) {
+  verifyFormat("not.and.or.not_eq = 1;");
+}
+
 TEST_F(FormatTestJS, ES6DestructuringAssignment) {
   verifyFormat("var [a, b, c] = [1, 2, 3];");
   verifyFormat("var {a, b} = {a: 1, b: 2};");
+}
+
+TEST_F(FormatTestJS, ContainerLiterals) {
+  verifyFormat("return {\n"
+               "  link: function() {\n"
+               "    f();  //\n"
+               "  }\n"
+               "};");
+  verifyFormat("return {\n"
+               "  a: a,\n"
+               "  link: function() {\n"
+               "    f();  //\n"
+               "  }\n"
+               "};");
+  verifyFormat("return {\n"
+               "  a: a,\n"
+               "  link: function() {\n"
+               "    f();  //\n"
+               "  },\n"
+               "  link: function() {\n"
+               "    f();  //\n"
+               "  }\n"
+               "};");
+  verifyFormat("var stuff = {\n"
+               "  // comment for update\n"
+               "  update: false,\n"
+               "  // comment for modules\n"
+               "  modules: false,\n"
+               "  // comment for tasks\n"
+               "  tasks: false\n"
+               "};");
+  verifyFormat("return {\n"
+               "  'finish':\n"
+               "      //\n"
+               "      a\n"
+               "};");
 }
 
 TEST_F(FormatTestJS, SpacesInContainerLiterals) {
@@ -113,7 +157,19 @@ TEST_F(FormatTestJS, GoogScopes) {
                "});  // goog.scope");
 }
 
-TEST_F(FormatTestJS, Closures) {
+TEST_F(FormatTestJS, FormatsFreestandingFunctions) {
+  verifyFormat("function outer1(a, b) {\n"
+               "  function inner1(a, b) { return a; }\n"
+               "  inner1(a, b);\n"
+               "}\n"
+               "function outer2(a, b) {\n"
+               "  function inner2(a, b) { return a; }\n"
+               "  inner2(a, b);\n"
+               "}");
+}
+
+TEST_F(FormatTestJS, FunctionLiterals) {
+  verifyFormat("doFoo(function() {});");
   verifyFormat("doFoo(function() { return 1; });");
   verifyFormat("var func = function() { return 1; };");
   verifyFormat("return {\n"
@@ -137,6 +193,14 @@ TEST_F(FormatTestJS, Closures) {
                "  foo();\n"
                "  bar();\n"
                "}, this);");
+  verifyFormat("return {\n"
+               "  a: 'E',\n"
+               "  b: function() {\n"
+               "    return function() {\n"
+               "      f();  //\n"
+               "    };\n"
+               "  }\n"
+               "};");
 
   verifyFormat("var x = {a: function() { return 1; }};",
                getGoogleJSStyleWithColumns(38));
@@ -144,6 +208,46 @@ TEST_F(FormatTestJS, Closures) {
                "  a: function() { return 1; }\n"
                "};",
                getGoogleJSStyleWithColumns(37));
+
+  verifyFormat("return {\n"
+               "  a: function SomeFunction() {\n"
+               "    // ...\n"
+               "    return 1;\n"
+               "  }\n"
+               "};");
+}
+
+TEST_F(FormatTestJS, MultipleFunctionLiterals) {
+  verifyFormat("promise.then(\n"
+               "    function success() {\n"
+               "      doFoo();\n"
+               "      doBar();\n"
+               "    },\n"
+               "    function error() {\n"
+               "      doFoo();\n"
+               "      doBaz();\n"
+               "    },\n"
+               "    []);\n");
+  verifyFormat("promise.then(\n"
+               "    function success() {\n"
+               "      doFoo();\n"
+               "      doBar();\n"
+               "    },\n"
+               "    [],\n"
+               "    function error() {\n"
+               "      doFoo();\n"
+               "      doBaz();\n"
+               "    });\n");
+  // FIXME: Here, we should probably break right after the "(" for consistency.
+  verifyFormat("promise.then([],\n"
+               "             function success() {\n"
+               "               doFoo();\n"
+               "               doBar();\n"
+               "             },\n"
+               "             function error() {\n"
+               "               doFoo();\n"
+               "               doBaz();\n"
+               "             });\n");
 }
 
 TEST_F(FormatTestJS, ReturnStatements) {
@@ -162,6 +266,9 @@ TEST_F(FormatTestJS, TryCatch) {
                "} finally {\n"
                "  h();\n"
                "}");
+
+  // But, of course, "catch" is a perfectly fine function name in JavaScript.
+  verifyFormat("someObject.catch();");
 }
 
 TEST_F(FormatTestJS, StringLiteralConcatenation) {
@@ -223,6 +330,8 @@ TEST_F(FormatTestJS, RegexLiteralSpecialCharacters) {
   verifyFormat("var regex = /\\\\/g;");
   verifyFormat("var regex = /\\a\\\\/g;");
   verifyFormat("var regex = /\a\\//g;");
+  verifyFormat("var regex = /a\\//;\n"
+               "var x = 0;");
 }
 
 TEST_F(FormatTestJS, RegexLiteralModifiers) {

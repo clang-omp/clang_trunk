@@ -14,6 +14,7 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Frontend/CompilerInvocation.h"
 #include "clang/Frontend/Utils.h"
+#include "clang/AST/ASTConsumer.h"
 #include "clang/Lex/ModuleLoader.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -105,8 +106,13 @@ class CompilerInstance : public ModuleLoader {
   /// \brief The ASTReader, if one exists.
   IntrusiveRefCntPtr<ASTReader> ModuleManager;
 
+  /// \brief The module dependency collector for crashdumps
+  std::shared_ptr<ModuleDependencyCollector> ModuleDepCollector;
+
   /// \brief The dependency file generator.
   std::unique_ptr<DependencyFileGenerator> TheDependencyFileGenerator;
+
+  std::vector<std::shared_ptr<DependencyCollector>> DependencyCollectors;
 
   /// \brief The set of top-level modules that has already been loaded,
   /// along with the module map
@@ -355,7 +361,7 @@ public:
   }
   
   void resetAndLeakFileManager() {
-    BuryPointer(FileMgr.getPtr());
+    BuryPointer(FileMgr.get());
     FileMgr.resetWithoutRelease();
   }
 
@@ -375,7 +381,7 @@ public:
   }
   
   void resetAndLeakSourceManager() {
-    BuryPointer(SourceMgr.getPtr());
+    BuryPointer(SourceMgr.get());
     SourceMgr.resetWithoutRelease();
   }
 
@@ -395,7 +401,7 @@ public:
   }
 
   void resetAndLeakPreprocessor() {
-    BuryPointer(PP.getPtr());
+    BuryPointer(PP.get());
     PP.resetWithoutRelease();
   }
 
@@ -414,7 +420,7 @@ public:
   }
   
   void resetAndLeakASTContext() {
-    BuryPointer(Context.getPtr());
+    BuryPointer(Context.get());
     Context.resetWithoutRelease();
   }
 
@@ -438,11 +444,11 @@ public:
 
   /// takeASTConsumer - Remove the current AST consumer and give ownership to
   /// the caller.
-  ASTConsumer *takeASTConsumer() { return Consumer.release(); }
+  std::unique_ptr<ASTConsumer> takeASTConsumer() { return std::move(Consumer); }
 
   /// setASTConsumer - Replace the current AST consumer; the compiler instance
   /// takes ownership of \p Value.
-  void setASTConsumer(ASTConsumer *Value);
+  void setASTConsumer(std::unique_ptr<ASTConsumer> Value);
 
   /// }
   /// @name Semantic analysis
@@ -454,8 +460,8 @@ public:
     return *TheSema;
   }
 
-  Sema *takeSema() { return TheSema.release(); }
-  void resetAndLeakSema() { BuryPointer(TheSema.release()); }
+  std::unique_ptr<Sema> takeSema();
+  void resetAndLeakSema();
 
   /// }
   /// @name Module Management
@@ -463,6 +469,10 @@ public:
 
   IntrusiveRefCntPtr<ASTReader> getModuleManager() const;
   void setModuleManager(IntrusiveRefCntPtr<ASTReader> Reader);
+
+  std::shared_ptr<ModuleDependencyCollector> getModuleDepCollector() const;
+  void setModuleDepCollector(
+      std::shared_ptr<ModuleDependencyCollector> Collector);
 
   /// }
   /// @name Code Completion
@@ -474,12 +484,6 @@ public:
     assert(CompletionConsumer &&
            "Compiler instance has no code completion consumer!");
     return *CompletionConsumer;
-  }
-
-  /// takeCodeCompletionConsumer - Remove the current code completion consumer
-  /// and give ownership to the caller.
-  CodeCompleteConsumer *takeCodeCompletionConsumer() {
-    return CompletionConsumer.release();
   }
 
   /// setCodeCompletionConsumer - Replace the current code completion consumer;
@@ -637,7 +641,7 @@ public:
   /// renamed to \p OutputPath in the end.
   ///
   /// \param OutputPath - If given, the path to the output file.
-  /// \param Error [out] - On failure, the error message.
+  /// \param Error [out] - On failure, the error.
   /// \param BaseInput - If \p OutputPath is empty, the input path name to use
   /// for deriving the output path.
   /// \param Extension - The extension to use for derived output names.
@@ -654,14 +658,13 @@ public:
   /// \param TempPathName [out] - If given, the temporary file path name
   /// will be stored here on success.
   static llvm::raw_fd_ostream *
-  createOutputFile(StringRef OutputPath, std::string &Error,
-                   bool Binary, bool RemoveFileOnSignal,
-                   StringRef BaseInput,
-                   StringRef Extension,
-                   bool UseTemporary,
-                   bool CreateMissingDirectories,
-                   std::string *ResultPathName,
+  createOutputFile(StringRef OutputPath, std::error_code &Error, bool Binary,
+                   bool RemoveFileOnSignal, StringRef BaseInput,
+                   StringRef Extension, bool UseTemporary,
+                   bool CreateMissingDirectories, std::string *ResultPathName,
                    std::string *TempPathName);
+
+  llvm::raw_null_ostream *createNullOutputFile();
 
   /// }
   /// @name Initialization Utility Methods
@@ -702,6 +705,10 @@ public:
   GlobalModuleIndex *loadGlobalModuleIndex(SourceLocation TriggerLoc) override;
 
   bool lookupMissingImports(StringRef Name, SourceLocation TriggerLoc) override;
+
+  void addDependencyCollector(std::shared_ptr<DependencyCollector> Listener) {
+    DependencyCollectors.push_back(std::move(Listener));
+  }
 };
 
 } // end namespace clang
