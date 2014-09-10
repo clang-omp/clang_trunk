@@ -8,7 +8,6 @@
 
 template <class T>
 T foo(T argc) {
-  T b = T();
   T a = T();
 #pragma omp atomic
   a++;
@@ -18,13 +17,6 @@ T foo(T argc) {
   a = argc + argc;
 #pragma omp atomic update
   a = a + argc;
-#pragma omp atomic capture
-  a = b++;
-#pragma omp atomic capture
-  {
-    a = b;
-    b++;
-  }
   return T();
 }
 
@@ -37,13 +29,6 @@ T foo(T argc) {
 // CHECK-NEXT: a = argc + argc;
 // CHECK-NEXT: #pragma omp atomic update
 // CHECK-NEXT: a = a + argc;
-// CHECK-NEXT: #pragma omp atomic capture
-// CHECK-NEXT: a = b++;
-// CHECK-NEXT: #pragma omp atomic capture
-// CHECK-NEXT: {
-// CHECK-NEXT: a = b;
-// CHECK-NEXT: b++;
-// CHECK-NEXT: }
 // CHECK: T a = T();
 // CHECK-NEXT: #pragma omp atomic
 // CHECK-NEXT: a++;
@@ -53,16 +38,8 @@ T foo(T argc) {
 // CHECK-NEXT: a = argc + argc;
 // CHECK-NEXT: #pragma omp atomic update
 // CHECK-NEXT: a = a + argc;
-// CHECK-NEXT: #pragma omp atomic capture
-// CHECK-NEXT: a = b++;
-// CHECK-NEXT: #pragma omp atomic capture
-// CHECK-NEXT: {
-// CHECK-NEXT: a = b;
-// CHECK-NEXT: b++;
-// CHECK-NEXT: }
 
 int main(int argc, char **argv) {
-  int b = 0;
   int a = 0;
 // CHECK: int a = 0;
 #pragma omp atomic
@@ -73,13 +50,6 @@ int main(int argc, char **argv) {
   a = argc + argc;
 #pragma omp atomic update
   a = a + argc;
-#pragma omp atomic capture
-  a = b++;
-#pragma omp atomic capture
-  {
-    a = b;
-    b++;
-  }
   // CHECK-NEXT: #pragma omp atomic
   // CHECK-NEXT: a++;
   // CHECK-NEXT: #pragma omp atomic read
@@ -88,13 +58,6 @@ int main(int argc, char **argv) {
   // CHECK-NEXT: a = argc + argc;
   // CHECK-NEXT: #pragma omp atomic update
   // CHECK-NEXT: a = a + argc;
-  // CHECK-NEXT: #pragma omp atomic capture
-  // CHECK-NEXT: a = b++;
-  // CHECK-NEXT: #pragma omp atomic capture
-  // CHECK-NEXT: {
-  // CHECK-NEXT: a = b;
-  // CHECK-NEXT: b++;
-  // CHECK-NEXT: }
   return foo(a);
 }
 
