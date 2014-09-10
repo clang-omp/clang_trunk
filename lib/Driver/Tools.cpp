@@ -2486,6 +2486,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // FIXME: Implement custom jobs for internal actions.
   CmdArgs.push_back("-cc1");
 
+  if (Args.hasArg(options::OPT_fopenmp))
+    CmdArgs.push_back("-fopenmp");
+
   // Add the "effective" target triple.
   CmdArgs.push_back("-triple");
   std::string TripleStr = getToolChain().ComputeEffectiveClangTriple(Args);
@@ -5824,28 +5827,9 @@ void darwin::Link::ConstructJob(Compilation &C, const JobAction &JA,
 
   Args.AddAllArgs(CmdArgs, options::OPT_L);
 
-  LibOpenMP UsedOpenMPLib = LibUnknown;
-  if (Args.hasArg(options::OPT_fopenmp)) {
-    UsedOpenMPLib = LibGOMP;
-  } else if (const Arg *A = Args.getLastArg(options::OPT_fopenmp_EQ)) {
-    UsedOpenMPLib = llvm::StringSwitch<LibOpenMP>(A->getValue())
-        .Case("libgomp",  LibGOMP)
-        .Case("libiomp5", LibIOMP5)
-        .Default(LibUnknown);
-    if (UsedOpenMPLib == LibUnknown)
-      getToolChain().getDriver().Diag(diag::err_drv_unsupported_option_argument)
-        << A->getOption().getName() << A->getValue();
-  }
-  switch (UsedOpenMPLib) {
-  case LibGOMP:
-    CmdArgs.push_back("-lgomp");
-    break;
-  case LibIOMP5:
+  if (Args.hasArg(options::OPT_fopenmp))
+    // This is more complicated in gcc...
     CmdArgs.push_back("-liomp5");
-    break;
-  case LibUnknown:
-    break;
-  }
 
   AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs);
   
@@ -6139,6 +6123,40 @@ void openbsd::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (NeedsKPIC)
     addAssemblerKPIC(Args, CmdArgs);
+
+  // When building 32-bit code on OpenBSD/amd64, we have to explicitly
+  // instruct as in the base system to assemble 32-bit code.
+  if (getToolChain().getArch() == llvm::Triple::x86)
+    CmdArgs.push_back("--32");
+  else if (getToolChain().getArch() == llvm::Triple::ppc) {
+    CmdArgs.push_back("-mppc");
+    CmdArgs.push_back("-many");
+  } else if (getToolChain().getArch() == llvm::Triple::mips64 ||
+             getToolChain().getArch() == llvm::Triple::mips64el) {
+    StringRef CPUName;
+    StringRef ABIName;
+    mips::getMipsCPUAndABI(Args, getToolChain().getTriple(), CPUName, ABIName);
+
+    CmdArgs.push_back("-mabi");
+    CmdArgs.push_back(getGnuCompatibleMipsABIName(ABIName).data());
+
+    if (getToolChain().getArch() == llvm::Triple::mips64)
+      CmdArgs.push_back("-EB");
+    else
+      CmdArgs.push_back("-EL");
+
+    Arg *LastPICArg = Args.getLastArg(options::OPT_fPIC, options::OPT_fno_PIC,
+                                      options::OPT_fpic, options::OPT_fno_pic,
+                                      options::OPT_fPIE, options::OPT_fno_PIE,
+                                      options::OPT_fpie, options::OPT_fno_pie);
+    if (LastPICArg &&
+        (LastPICArg->getOption().matches(options::OPT_fPIC) ||
+         LastPICArg->getOption().matches(options::OPT_fpic) ||
+         LastPICArg->getOption().matches(options::OPT_fPIE) ||
+         LastPICArg->getOption().matches(options::OPT_fpie))) {
+      CmdArgs.push_back("-KPIC");
+    }
+  }
 
   Args.AddAllArgValues(CmdArgs, options::OPT_Wa_COMMA,
                        options::OPT_Xassembler);
@@ -7460,36 +7478,14 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
       if (Args.hasArg(options::OPT_static))
         CmdArgs.push_back("--start-group");
 
-      LibOpenMP UsedOpenMPLib = LibUnknown;
-      if (Args.hasArg(options::OPT_fopenmp)) {
-        UsedOpenMPLib = LibGOMP;
-      } else if (const Arg *A = Args.getLastArg(options::OPT_fopenmp_EQ)) {
-        UsedOpenMPLib = llvm::StringSwitch<LibOpenMP>(A->getValue())
-            .Case("libgomp",  LibGOMP)
-            .Case("libiomp5", LibIOMP5)
-            .Default(LibUnknown);
-        if (UsedOpenMPLib == LibUnknown)
-          D.Diag(diag::err_drv_unsupported_option_argument)
-            << A->getOption().getName() << A->getValue();
-      }
-      switch (UsedOpenMPLib) {
-      case LibGOMP:
-        CmdArgs.push_back("-lgomp");
-
-        // FIXME: Exclude this for platforms with libgomp that don't require
-        // librt. Most modern Linux platforms require it, but some may not.
-        CmdArgs.push_back("-lrt");
-        break;
-      case LibIOMP5:
+      bool OpenMP = Args.hasArg(options::OPT_fopenmp);
+      if (OpenMP) {
         CmdArgs.push_back("-liomp5");
-        break;
-      case LibUnknown:
-        break;
       }
       AddRunTimeLibs(ToolChain, D, CmdArgs, Args);
 
       if ((Args.hasArg(options::OPT_pthread) ||
-           Args.hasArg(options::OPT_pthreads) || UsedOpenMPLib != LibUnknown) &&
+           Args.hasArg(options::OPT_pthreads) || OpenMP) &&
           !isAndroid)
         CmdArgs.push_back("-lpthread");
 

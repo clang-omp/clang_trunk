@@ -2037,9 +2037,11 @@ private:
   /// \brief The number of variable captured, including 'this'.
   unsigned NumCaptures;
 
-  /// \brief The pointer part is the implicit the outlined function and the 
-  /// int part is the captured region kind, 'CR_Default' etc.
-  llvm::PointerIntPair<CapturedDecl *, 1, CapturedRegionKind> CapDeclAndKind;
+  /// \brief The implicit outlined function.
+  CapturedDecl *TheCapturedDecl;
+
+  /// \brief The kind of this statement, including 'CR_Default', etc.
+  CapturedRegionKind RegionKind;
 
   /// \brief The record for captured variables, a RecordDecl or CXXRecordDecl.
   RecordDecl *TheRecordDecl;
@@ -2076,7 +2078,7 @@ public:
   }
 
   /// \brief Retrieve the outlined function declaration.
-  CapturedDecl *getCapturedDecl() { return CapDeclAndKind.getPointer(); }
+  CapturedDecl *getCapturedDecl() { return TheCapturedDecl; }
   const CapturedDecl *getCapturedDecl() const {
     return const_cast<CapturedStmt *>(this)->getCapturedDecl();
   }
@@ -2084,17 +2086,17 @@ public:
   /// \brief Set the outlined function declaration.
   void setCapturedDecl(CapturedDecl *D) {
     assert(D && "null CapturedDecl");
-    CapDeclAndKind.setPointer(D);
+    TheCapturedDecl = D;
   }
 
   /// \brief Retrieve the captured region kind.
   CapturedRegionKind getCapturedRegionKind() const {
-    return CapDeclAndKind.getInt();
+    return RegionKind;
   }
 
   /// \brief Set the captured region kind.
   void setCapturedRegionKind(CapturedRegionKind Kind) {
-    CapDeclAndKind.setInt(Kind);
+    RegionKind = Kind;
   }
 
   /// \brief Retrieve the record declaration for captured variables.
