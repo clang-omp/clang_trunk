@@ -178,16 +178,15 @@ def AsTypeExpr : DStmt<Expr>;
 
 // OpenMP Directives.
 def OMPExecutableDirective : Stmt<1>;
-def OMPLoopDirective : DStmt<OMPExecutableDirective, 1>;
 def OMPParallelDirective : DStmt<OMPExecutableDirective>;
-def OMPSimdDirective : DStmt<OMPLoopDirective>;
-def OMPForDirective : DStmt<OMPLoopDirective>;
+def OMPSimdDirective : DStmt<OMPExecutableDirective>;
+def OMPForDirective : DStmt<OMPExecutableDirective>;
 def OMPSectionsDirective : DStmt<OMPExecutableDirective>;
 def OMPSectionDirective : DStmt<OMPExecutableDirective>;
 def OMPSingleDirective : DStmt<OMPExecutableDirective>;
 def OMPMasterDirective : DStmt<OMPExecutableDirective>;
 def OMPCriticalDirective : DStmt<OMPExecutableDirective>;
-def OMPParallelForDirective : DStmt<OMPLoopDirective>;
+def OMPParallelForDirective : DStmt<OMPExecutableDirective>;
 def OMPParallelSectionsDirective : DStmt<OMPExecutableDirective>;
 def OMPTaskDirective : DStmt<OMPExecutableDirective>;
 def OMPTaskyieldDirective : DStmt<OMPExecutableDirective>;
