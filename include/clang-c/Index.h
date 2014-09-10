@@ -2201,13 +2201,9 @@ enum CXCursorKind {
    */
   CXCursor_SEHLeaveStmt                  = 247,
 
-  /** \brief OpenMP ordered directive.
+  /** \brief Windows Structured Exception Handling's leave statement.
    */
-  CXCursor_OMPOrderedDirective           = 248,
-
-  /** \brief OpenMP atomic directive.
-   */
-  CXCursor_OMPAtomicDirective            = 249,
+  CXCursor_SEHLeaveStmt                  = 248,
 
   CXCursor_LastStmt                      = CXCursor_OMPAtomicDirective,
 
