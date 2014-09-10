@@ -7549,9 +7549,6 @@ public:
   /// \brief Called on well-formed 'capture' clause.
   OMPClause *ActOnOpenMPCaptureClause(SourceLocation StartLoc,
                                       SourceLocation EndLoc);
-  /// \brief Called on well-formed 'seq_cst' clause.
-  OMPClause *ActOnOpenMPSeqCstClause(SourceLocation StartLoc,
-                                     SourceLocation EndLoc);
 
   OMPClause *
   ActOnOpenMPVarListClause(OpenMPClauseKind Kind, ArrayRef<Expr *> Vars,
