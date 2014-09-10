@@ -268,7 +268,6 @@ bool clang::isAllowedClauseForDirective(OpenMPDirectiveKind DKind,
   case OMPD_taskyield:
   case OMPD_barrier:
   case OMPD_taskwait:
-  case OMPD_ordered:
     break;
   }
   return false;

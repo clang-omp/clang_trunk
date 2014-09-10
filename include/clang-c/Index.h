@@ -2201,10 +2201,6 @@ enum CXCursorKind {
    */
   CXCursor_SEHLeaveStmt                  = 247,
 
-  /** \brief Windows Structured Exception Handling's leave statement.
-   */
-  CXCursor_SEHLeaveStmt                  = 248,
-
   CXCursor_LastStmt                      = CXCursor_OMPAtomicDirective,
 
   /**
