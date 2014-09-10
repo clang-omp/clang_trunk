@@ -15,8 +15,6 @@ T foo(T argc) {
   a = argc;
 #pragma omp atomic write
   a = argc + argc;
-#pragma omp atomic update
-  a = a + argc;
   return T();
 }
 
@@ -27,8 +25,6 @@ T foo(T argc) {
 // CHECK-NEXT: a = argc;
 // CHECK-NEXT: #pragma omp atomic write
 // CHECK-NEXT: a = argc + argc;
-// CHECK-NEXT: #pragma omp atomic update
-// CHECK-NEXT: a = a + argc;
 // CHECK: T a = T();
 // CHECK-NEXT: #pragma omp atomic
 // CHECK-NEXT: a++;
@@ -36,8 +32,6 @@ T foo(T argc) {
 // CHECK-NEXT: a = argc;
 // CHECK-NEXT: #pragma omp atomic write
 // CHECK-NEXT: a = argc + argc;
-// CHECK-NEXT: #pragma omp atomic update
-// CHECK-NEXT: a = a + argc;
 
 int main(int argc, char **argv) {
   int a = 0;
@@ -48,16 +42,12 @@ int main(int argc, char **argv) {
   a = argc;
 #pragma omp atomic write
   a = argc + argc;
-#pragma omp atomic update
-  a = a + argc;
   // CHECK-NEXT: #pragma omp atomic
   // CHECK-NEXT: a++;
   // CHECK-NEXT: #pragma omp atomic read
   // CHECK-NEXT: a = argc;
   // CHECK-NEXT: #pragma omp atomic write
   // CHECK-NEXT: a = argc + argc;
-  // CHECK-NEXT: #pragma omp atomic update
-  // CHECK-NEXT: a = a + argc;
   return foo(a);
 }
 
