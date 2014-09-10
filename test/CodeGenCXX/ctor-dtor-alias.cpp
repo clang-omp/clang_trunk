@@ -7,9 +7,6 @@
 // RUN: FileCheck --check-prefix=CHECK4 --input-file=%t %s
 // RUN: FileCheck --check-prefix=CHECK5 --input-file=%t %s
 
-// RUN: %clang_cc1 -cc1 -triple x86_64--netbsd -emit-llvm \
-// RUN: -mconstructor-aliases -O2 %s -o - | FileCheck --check-prefix=CHECK-RAUW %s
-
 namespace test1 {
 // test that we don't produce an alias when the destructor is weak_odr. The
 // reason to avoid it that another TU might have no explicit template
