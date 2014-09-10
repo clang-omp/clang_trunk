@@ -1,6 +1,6 @@
-// RUN: %clang_cc1 -verify -fopenmp -ast-print %s | FileCheck %s
-// RUN: %clang_cc1 -fopenmp -x c++ -std=c++11 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
+// RUN: %clang_cc1 -verify -fopenmp=libiomp5 -ast-print %s | FileCheck %s
+// RUN: %clang_cc1 -fopenmp=libiomp5 -x c++ -std=c++11 -emit-pch -o %t %s
+// RUN: %clang_cc1 -fopenmp=libiomp5 -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
 // expected-no-diagnostics
 
 #ifndef HEADER
@@ -17,15 +17,15 @@ struct S {
 
 // CHECK:      template <class T = int> struct S {
 // CHECK:        static int TS;
-// CHECK-NEXT:   #pragma omp threadprivate(TS)
+// CHECK-NEXT:   #pragma omp threadprivate(S<int>::TS)
 // CHECK-NEXT: }
 // CHECK:      template <class T = long> struct S {
 // CHECK:        static long TS;
-// CHECK-NEXT:   #pragma omp threadprivate(TS)
+// CHECK-NEXT:   #pragma omp threadprivate(S<long>::TS)
 // CHECK-NEXT: }
 // CHECK:      template <class T> struct S {
 // CHECK:        static T TS;
-// CHECK-NEXT:   #pragma omp threadprivate(TS)
+// CHECK-NEXT:   #pragma omp threadprivate(S::TS)
 // CHECK:      };
 
 template <typename T, int C>
@@ -41,6 +41,7 @@ T tmain(T argc, T *argv) {
   foo();
   return 0;
 }
+
 // CHECK: template <typename T = int, int C = 5> int tmain(int argc, int *argv) {
 // CHECK-NEXT: int b = argc, c, d, e, f, g;
 // CHECK-NEXT: static int a;
@@ -78,13 +79,15 @@ int main (int argc, char **argv) {
   long x;
   int b = argc, c, d, e, f, g;
   static int a;
-// CHECK: static int a;
+  #pragma omp threadprivate(a)
+  Enum ee;
+// CHECK: Enum ee;
 #pragma omp parallel
 // CHECK-NEXT: #pragma omp parallel
   a=2;
 // CHECK-NEXT: a = 2;
-#pragma omp parallel if(a) num_threads(a), default(none), private(argc,b),firstprivate(argv, c),shared(d,f),reduction(+:e) reduction(min : g) proc_bind(master)
-// CHECK: #pragma omp parallel if(a) num_threads(a) default(none) private(argc,b) firstprivate(argv,c) shared(d,f) reduction(+: e) reduction(min: g) proc_bind(master)
+#pragma omp parallel default(none), private(argc,b) firstprivate(argv) if (argc > 0) num_threads(ee) copyin(a) proc_bind(spread)
+// CHECK-NEXT: #pragma omp parallel default(none) private(argc,b) firstprivate(argv) if(argc > 0) num_threads(ee) copyin(a) proc_bind(spread)
   foo();
 // CHECK-NEXT: foo();
   return tmain<int, 5>(b, &b) + tmain<long, 1>(x, &x);

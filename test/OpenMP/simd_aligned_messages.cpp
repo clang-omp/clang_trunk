@@ -10,32 +10,21 @@ namespace X {
 constexpr int bfoo() { return 4; }
 
 int **z;
-// expected-note@+1 {{'C1' declared here}}
 const int C1 = 1;
 const int C2 = 2;
 void test_aligned_colons(int *&rp)
 {
   int *B = 0;
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{unexpected ':' in nested name specifier; did you mean '::'?}}
   #pragma omp simd aligned(B:bfoo())
   for (int i = 0; i < 10; ++i) ;
-  // expected-error@+3 {{integral constant expression must have integral or unscoped enumeration type, not 'int *'}}
-  // expected-error@+2 {{expected ')'}}
-  // expected-note@+1 {{to match this '('}}
+  // expected-error@+1 {{unexpected ':' in nested name specifier; did you mean '::'}}
   #pragma omp simd aligned(B::ib:B:bfoo())
   for (int i = 0; i < 10; ++i) ;
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{unexpected ':' in nested name specifier; did you mean '::'?}}
   #pragma omp simd aligned(B:B::bfoo())
   for (int i = 0; i < 10; ++i) ;
-  // expected-error@+3 {{integral constant expression must have integral or unscoped enumeration type, not 'int *'}}
-  // expected-error@+2 {{expected ')'}}
-  // expected-note@+1 {{to match this '('}}
+  // expected-error@+1 {{unexpected ':' in nested name specifier; did you mean '::'?}}
   #pragma omp simd aligned(z:B:bfoo())
   for (int i = 0; i < 10; ++i) ;
-  // expected-error@+2 {{expected variable name}}
-  // expected-error@+1 {{unexpected ':' in nested name specifier; did you mean '::'?}}
   #pragma omp simd aligned(B:B::bfoo())
   for (int i = 0; i < 10; ++i) ;
   // expected-error@+2 {{integral constant expression must have integral or unscoped enumeration type, not 'int **'}}
@@ -50,9 +39,6 @@ void test_aligned_colons(int *&rp)
   // expected-error@+1 {{expected variable name}}
   #pragma omp simd aligned(B::bfoo())
   for (int i = 0; i < 10; ++i) ;
-  // expected-error@+3 {{expected variable name}}
-  // expected-error@+2 {{no member named 'C1' in 'B'; did you mean simply 'C1'?}}
-  // expected-error@+1 {{unexpected ':' in nested name specifier; did you mean '::'?}}
   #pragma omp simd aligned(B::ib,B:C1+C2)
   for (int i = 0; i < 10; ++i) ;
 }
@@ -123,80 +109,48 @@ template<class I, class C> int foomain(I argc, C **argv) {
   // expected-note@+2 {{declared here}}
   // expected-note@+1 {{reference to 'i' is not a constant expression}}
   int &j = i;
-  #pragma omp simd aligned // expected-error {{expected '(' after 'aligned'}} expected-error {{expected expression}}
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
+  #pragma omp simd aligned // expected-error {{expected '(' after 'aligned'}}
   for (I k = 0; k < argc; ++k) ++k;
   #pragma omp simd aligned ( // expected-error {{expected expression}} expected-error {{expected ')'}} expected-note {{to match this '('}}
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) ++k;
   #pragma omp simd aligned () // expected-error {{expected expression}}
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) ++k;
   #pragma omp simd aligned (argc // expected-error {{expected ')'}} expected-note {{to match this '('}}
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) ++k;
   #pragma omp simd aligned (argc, // expected-error {{expected expression}} expected-error {{expected ')'}} expected-note {{to match this '('}}
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) ++k;
   #pragma omp simd aligned (argc > 0 ? argv[1] : argv[2]) // expected-error {{expected variable name}}
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) ++k;
   #pragma omp simd aligned (argc : 5)
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) ++k;
   #pragma omp simd aligned (S1) // expected-error {{'S1' does not refer to a value}}
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) ++k;
   #pragma omp simd aligned (argv[1]) // expected-error {{expected variable name}}
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) ++k;
   #pragma omp simd aligned(e, g)
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) ++k;
   // expected-error@+1 {{argument of aligned clause should be array, pointer, reference to array or reference to pointer, not 'S3'}}
   #pragma omp simd aligned(h)
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) ++k;
   // expected-error@+1 {{argument of aligned clause should be array, pointer, reference to array or reference to pointer, not 'int'}}
   #pragma omp simd aligned(i)
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) ++k;
   #pragma omp parallel
   {
     int *v = 0;
     I i;
     #pragma omp simd aligned(v:16)
-    // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-    // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
     for (I k = 0; k < argc; ++k) { i = k; v += 2; }
   }
   float *f;
   #pragma omp simd aligned(f)
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) ++k;
   int v = 0;
   // expected-note@+2 {{initializer of 'j' is not a constant expression}}
   // expected-error@+1 {{expression is not an integral constant expression}}
   #pragma omp simd aligned(f:j)
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) { ++k; v += j; }
   #pragma omp simd aligned(f)
-  // expected-error@+2 {{iteration variable is not of a random access iterator type}}
-  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'int')}}
   for (I k = 0; k < argc; ++k) ++k;
   return 0;
 }
@@ -212,7 +166,7 @@ int main(int argc, char **argv) {
 
   int i;
   int &j = i;
-  #pragma omp simd aligned // expected-error {{expected '(' after 'aligned'}} expected-error {{expected expression}}
+  #pragma omp simd aligned // expected-error {{expected '(' after 'aligned'}}
   for (int k = 0; k < argc; ++k) ++k;
   #pragma omp simd aligned ( // expected-error {{expected expression}} expected-error {{expected ')'}} expected-note {{to match this '('}}
   for (int k = 0; k < argc; ++k) ++k;
@@ -240,7 +194,6 @@ int main(int argc, char **argv) {
   #pragma omp simd aligned(h)
   for (int k = 0; k < argc; ++k) ++k;
   int *pargc = &argc;
-  // expected-note@+1 {{in instantiation of function template specialization 'foomain<int *, char>' requested here}}
   foomain<int*,char>(pargc,argv);
   return 0;
 }

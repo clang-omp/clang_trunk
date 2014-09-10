@@ -1617,31 +1617,6 @@ Sema::BuildDeclRefExpr(ValueDecl *D, QualType Ty, ExprValueKind VK,
   return BuildDeclRefExpr(D, Ty, VK, NameInfo, SS);
 }
 
-static bool CheckOMPDeclareReductionVar(Sema &S, ValueDecl *D,
-                                        SourceLocation Loc) {
-  if (S.CurrentInstantiationScope) return true;
-  if (!D || !isa<VarDecl>(D)) return true;
-  if (!S.getCurScope() || !S.getCurScope()->getEntity()) return true;
-  if (S.getCurScope()->getEntity() != S.CurContext) return true;
-  DeclContext *Parent =
-    static_cast<DeclContext *>(S.getCurScope()->getEntity());
-  if (FunctionDecl *FD = dyn_cast_or_null<FunctionDecl>(Parent)) {
-    Parent = FD->getDeclContext();
-    if (OMPDeclareReductionDecl *OMPDR =
-          dyn_cast_or_null<OMPDeclareReductionDecl>(Parent)) {
-      if (D->getDeclContext() != FD) {
-        S.Diag(Loc,
-               (FD->getDeclName() == OMPDR->getDeclName()) ?
-                                       diag::err_omp_wrong_var_in_combiner :
-                                       diag::err_omp_wrong_var_in_initializer)
-          << cast<NamedDecl>(D);
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
 /// BuildDeclRefExpr - Build an expression that references a
 /// declaration that does not require a closure capture.
 ExprResult
@@ -1649,13 +1624,6 @@ Sema::BuildDeclRefExpr(ValueDecl *D, QualType Ty, ExprValueKind VK,
                        const DeclarationNameInfo &NameInfo,
                        const CXXScopeSpec *SS, NamedDecl *FoundD,
                        const TemplateArgumentListInfo *TemplateArgs) {
-  // Check that only 'omp_in' and 'omp_out' can be used in
-  // 'omp declare reduction' combiner.
-  // Check that only 'omp_priv' and 'omp_orig' can be used in
-  // 'omp declare reduction' initializer.
-  if (!CheckOMPDeclareReductionVar(*this, D, NameInfo.getLoc()))
-    return ExprError();
-
   if (getLangOpts().CUDA)
     if (const FunctionDecl *Caller = dyn_cast<FunctionDecl>(CurContext))
       if (const FunctionDecl *Callee = dyn_cast<FunctionDecl>(D)) {
@@ -11537,8 +11505,6 @@ static bool isVariableCapturable(CapturingScopeInfo *CSI, VarDecl *Var,
   bool IsBlock = isa<BlockScopeInfo>(CSI);
   bool IsLambda = isa<LambdaScopeInfo>(CSI);
 
-  if (Var->hasAttr<OMPLocalAttr>()) return false;
-
   // Lambdas are not allowed to capture unnamed variables
   // (e.g. anonymous unions).
   // FIXME: The C++11 rule don't actually state this explicitly, but I'm
@@ -11551,122 +11517,8 @@ static bool isVariableCapturable(CapturingScopeInfo *CSI, VarDecl *Var,
     return false;
   }
 
-  if (Var->getType()->isVariablyModifiedType() && !IsBlock && !IsLambda) {
-    // We're going to walk down into the type and look for VLA
-    // expressions.
-    QualType type = Var->getType();
-    if (ParmVarDecl *PVD = dyn_cast_or_null<ParmVarDecl>(Var))
-      type = PVD->getOriginalType();
-    do {
-      const Type *ty = type.getTypePtr();
-      switch (ty->getTypeClass()) {
-
-#define TYPE(Class, Base)
-#define ABSTRACT_TYPE(Class, Base)
-#define NON_CANONICAL_TYPE(Class, Base)
-#define DEPENDENT_TYPE(Class, Base) case Type::Class:
-#define NON_CANONICAL_UNLESS_DEPENDENT_TYPE(Class, Base)
-#include "clang/AST/TypeNodes.def"
-          type = QualType();
-          break;
-
-      // These types are never variably-modified.
-      case Type::Builtin:
-      case Type::Complex:
-      case Type::Vector:
-      case Type::ExtVector:
-      case Type::Record:
-      case Type::Enum:
-      case Type::Elaborated:
-      case Type::TemplateSpecialization:
-      case Type::ObjCObject:
-      case Type::ObjCInterface:
-      case Type::ObjCObjectPointer:
-        llvm_unreachable("type class is never variably-modified!");
-
-      case Type::Adjusted:
-        type = cast<AdjustedType>(ty)->getAdjustedType();
-        break;
-
-      case Type::Decayed:
-        type = cast<DecayedType>(ty)->getPointeeType();
-        break;
-
-      case Type::Pointer:
-        type = cast<PointerType>(ty)->getPointeeType();
-        break;
-
-      case Type::BlockPointer:
-        type = cast<BlockPointerType>(ty)->getPointeeType();
-        break;
-
-      case Type::LValueReference:
-      case Type::RValueReference:
-        type = cast<ReferenceType>(ty)->getPointeeType();
-        break;
-
-      case Type::MemberPointer:
-        type = cast<MemberPointerType>(ty)->getPointeeType();
-        break;
-
-      case Type::ConstantArray:
-      case Type::IncompleteArray:
-        // Losing element qualification here is fine.
-        type = cast<ArrayType>(ty)->getElementType();
-        break;
-
-      case Type::VariableArray: {
-        // Losing element qualification here is fine.
-        const VariableArrayType *vat = cast<VariableArrayType>(ty);
-
-        // Unknown size indication requires no size computation.
-        // Otherwise, evaluate and record it.
-        if (Expr *size = vat->getSizeExpr()) {
-          S.MarkDeclarationsReferencedInExpr(size);
-        }
-        type = vat->getElementType();
-        break;
-      }
-
-      case Type::FunctionProto:
-      case Type::FunctionNoProto:
-        type = cast<FunctionType>(ty)->getReturnType();
-        break;
-
-      case Type::Paren:
-      case Type::TypeOf:
-      case Type::UnaryTransform:
-      case Type::Attributed:
-      case Type::SubstTemplateTypeParm:
-      case Type::PackExpansion:
-        // Keep walking after single level desugaring.
-        type = type.getSingleStepDesugaredType(S.getASTContext());
-        break;
-
-      case Type::Typedef:
-          type = cast<TypedefType>(ty)->desugar();
-          break;
-      case Type::Decltype:
-          type = cast<DecltypeType>(ty)->desugar();
-          break;
-      case Type::Auto:
-          type = cast<AutoType>(ty)->getDeducedType();
-          break;
-
-      case Type::TypeOfExpr:
-        type = cast<TypeOfExprType>(ty)->getUnderlyingExpr()->getType();
-        break;
-
-      case Type::Atomic:
-        type = cast<AtomicType>(ty)->getValueType();
-        break;
-      }
-    } while (!type.isNull() && type->isVariablyModifiedType());
-  }
-
-  // Prohibit variably-modified types in blocks and lambdas ;
-  // they're difficult to deal with.
-  if (Var->getType()->isVariablyModifiedType() && (IsBlock || IsLambda)) {
+  // Prohibit variably-modified types; they're difficult to deal with.
+  if (Var->getType()->isVariablyModifiedType()) {
     if (Diagnose) {
       if (IsBlock)
         S.Diag(Loc, diag::err_ref_vm_type);
@@ -12441,11 +12293,6 @@ void Sema::MarkVariableReferenced(SourceLocation Loc, VarDecl *Var) {
 
 static void MarkExprReferenced(Sema &SemaRef, SourceLocation Loc,
                                Decl *D, Expr *E, bool OdrUse) {
-
-  if (SemaRef.IsDeclContextInOpenMPTarget(SemaRef.CurContext)) {
-    SemaRef.CheckDeclIsAllowedInOpenMPTarget(E, D);
-  }
-
   if (VarDecl *Var = dyn_cast<VarDecl>(D)) {
     DoMarkVarDeclReferenced(SemaRef, Loc, Var, E);
     return;

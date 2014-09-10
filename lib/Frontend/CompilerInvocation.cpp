@@ -1497,8 +1497,6 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     Opts.OpenMP = llvm::StringSwitch<bool>(A->getValue())
         .Case("libiomp5", true)
         .Default(false);
-  } else if (Args.hasArg(OPT_fopenmp)) {
-    Opts.OpenMP = true;
   }
 
   // Record whether the __DEPRECATED define was requested.

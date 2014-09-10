@@ -26,13 +26,11 @@ add_clang_library(clangCodeGen
   CGCXX.cpp
   CGCXXABI.cpp
   CGCall.cpp
-  CGElementalFunction.cpp
   CGClass.cpp
   CGCleanup.cpp
   CGDebugInfo.cpp
   CGDecl.cpp
   CGDeclCXX.cpp
-  CGDeclOpenMP.cpp
   CGException.cpp
   CGExpr.cpp
   CGExprAgg.cpp
@@ -51,7 +49,6 @@ add_clang_library(clangCodeGen
   CGRecordLayoutBuilder.cpp
   CGStmt.cpp
   CGStmtOpenMP.cpp
-  CGVTables.cpp
   CGVTT.cpp
   CGVTables.cpp
   CodeGenABITypes.cpp

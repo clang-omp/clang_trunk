@@ -3774,26 +3774,6 @@ CompareQualificationConversions(Sema &S,
   return Result;
 }
 
-/// MarkAsImplicitConversion - Create an ImplicitCastExpr as the parent of
-/// Arg if Arg is a CXXConstructExpr. This function is called when
-/// constructors are called as part of an implicit conversion. This serves
-/// as a marker to be able to distinguish between implicitly generated
-/// constructor calls and explicit constructor calls.
-static Expr *MarkAsImplicitConversion(ASTContext &Context, ExprResult &Arg) {
-  Expr *ArgExpr = Arg.getAs<Expr>();
-  Expr *E = ArgExpr;
-
-  if (CXXBindTemporaryExpr *BE = dyn_cast<CXXBindTemporaryExpr>(E))
-    E = BE->getSubExpr();
-
-  if (isa<CXXConstructExpr>(E))
-    return ImplicitCastExpr::Create(Context, ArgExpr->getType(),
-                                    CK_ConstructorConversion, ArgExpr,
-                                    0, ArgExpr->getValueKind());
-  else
-    return ArgExpr;
-}
-
 /// CompareDerivedToBaseConversions - Compares two standard conversion
 /// sequences to determine whether they can be ranked based on their
 /// various kinds of derived-to-base conversions (C++
@@ -11022,11 +11002,8 @@ Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
               SourceLocation(), Args[1]);
           if (Arg1.isInvalid())
             return ExprError();
-
-          // Mark the arguments as having an implicit conversion if a
-          // CXXConstructExpr was implicitly created.
-          Args[0] = LHS = MarkAsImplicitConversion(Context, Arg0);
-          Args[1] = RHS = MarkAsImplicitConversion(Context, Arg1);
+          Args[0] = LHS = Arg0.getAs<Expr>();
+          Args[1] = RHS = Arg1.getAs<Expr>();
         }
 
         // Build the actual expression node.

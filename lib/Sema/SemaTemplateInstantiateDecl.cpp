@@ -1492,14 +1492,6 @@ Decl *TemplateDeclInstantiator::VisitFunctionDecl(FunctionDecl *D,
     PrincipalDecl->setNonMemberOperator();
 
   assert(!D->isDefaulted() && "only methods should be defaulted");
-  if (FunctionTemplate) {
-    OMPDeclareSimdDecl *DSimd = SemaRef.OMPDSimdMap[FunctionTemplate];
-    if (DSimd) {
-      OMPDeclareSimdDecl *TD = cast<OMPDeclareSimdDecl>(
-        TouchOMPDeclareSimdDecl(DSimd, Function, DC));
-      SemaRef.PendingOMP[Function] = TD;
-    }
-  }
   return Function;
 }
 
@@ -1770,20 +1762,7 @@ TemplateDeclInstantiator::VisitCXXMethodDecl(CXXMethodDecl *D,
   } else if (!IsClassScopeSpecialization) {
     Owner->addDecl(Method);
   }
-  // Check for #omp declare simd in old record and add it into new record
-  // with our new method.
-  CXXRecordDecl *Parent = D->getParent();
-  for (DeclContext::decl_iterator DI = Parent->decls_begin(),
-                                  DE = Parent->decls_end();
-                                  DI != DE; ++DI) {
-    if (OMPDeclareSimdDecl *DSimd =
-        dyn_cast_or_null<OMPDeclareSimdDecl>(*DI)) {
-      if (dyn_cast_or_null<FunctionDecl>(DSimd->getFunction()) == D) {
-        TouchOMPDeclareSimdDecl(DSimd, Method,
-          SemaRef.CurContext);
-      }
-    }
-  }
+
   return Method;
 }
 
@@ -2346,11 +2325,6 @@ Decl *TemplateDeclInstantiator::VisitOMPThreadPrivateDecl(
   return TD;
 }
 
-Decl *
-TemplateDeclInstantiator::VisitOMPDeclareTargetDecl(OMPDeclareTargetDecl *D) {
-  llvm_unreachable("OpenMP declare target cannot be instantiated");
-}
-
 Decl *TemplateDeclInstantiator::VisitFunctionDecl(FunctionDecl *D) {
   return VisitFunctionDecl(D, nullptr);
 }
@@ -2604,214 +2578,6 @@ Decl *TemplateDeclInstantiator::VisitFriendTemplateDecl(FriendTemplateDecl *D) {
 
 Decl *TemplateDeclInstantiator::VisitDecl(Decl *D) {
   llvm_unreachable("Unexpected decl");
-}
-
-Decl *TemplateDeclInstantiator::VisitOMPDeclareSimdDecl(
-                                     OMPDeclareSimdDecl *D) {
-  return TouchOMPDeclareSimdDecl(D, D->getFunction(), Owner);
-}
-
-void TemplateDeclInstantiator::TouchOMPVarlist(
-                                     llvm::MutableArrayRef<clang::Expr*> VL,
-                                     SmallVector<Expr *, 4> &NewVL,
-                                     Decl *FuncDecl) {
-  for (llvm::MutableArrayRef<clang::Expr*>::iterator I = VL.begin(),
-                                                     E = VL.end();
-                                                     I != E; ++I) {
-    const DeclRefExpr *DRE = dyn_cast_or_null<DeclRefExpr>(*I);
-    assert(DRE);
-    DeclarationNameInfo DNI = DRE->getNameInfo();
-    Expr *NewV = SemaRef.FindOpenMPDeclarativeClauseParameter(
-                           DNI.getAsString(),
-                           DNI.getLoc(),
-                           FuncDecl);
-    assert(NewV);
-    NewVL.push_back(NewV);
-  }
-}
-
-Decl *TemplateDeclInstantiator::TouchOMPDeclareSimdDecl(
-                                     OMPDeclareSimdDecl *D,
-                                     Decl *NewFunc,
-                                     DeclContext *DC) {
-  SmallVector<SourceRange, 4> SrcRanges;
-  SmallVector<unsigned, 4> BeginIdx;
-  SmallVector<unsigned, 4> EndIdx;
-  // Perform AOS->SOA (will be done backward in CheckOMPDeclareSimdDecl).
-  for (ArrayRef<OMPDeclareSimdDecl::SimdVariant>::iterator
-      I = D->simd_variants_begin(),
-      E = D->simd_variants_end();
-      I != E; ++I) {
-    SrcRanges.push_back(I->SrcRange);
-    BeginIdx.push_back(I->BeginIdx);
-    EndIdx.push_back(I->EndIdx);
-  }
-  // Substitute the necessary stuff into the clauses.
-  SmallVector<OMPClause *, 4> CL;
-  for (OMPDeclareSimdDecl::clauses_iterator
-      J = D->clauses_begin(),
-      F = D->clauses_end();
-      J != F; ++J) {
-    if (OMPLinearClause *C = dyn_cast_or_null<OMPLinearClause>(*J)) {
-      Expr *Step = C->getStep();
-      Step = SemaRef.SubstExpr(Step, TemplateArgs).get();
-      SmallVector<Expr *, 4> NewVars;
-      TouchOMPVarlist(C->getVars(), NewVars, NewFunc);
-      OMPClause *NC = SemaRef.ActOnOpenMPDeclarativeLinearClause(
-          NewVars,
-          C->getLocStart(),
-          C->getLocEnd(),
-          Step,
-          C->getColonLoc());
-      CL.push_back(NC);
-    }
-    else if (OMPAlignedClause *C = dyn_cast_or_null<OMPAlignedClause>(*J)) {
-      Expr *Alignment = C->getAlignment();
-      Alignment = SemaRef.SubstExpr(Alignment, TemplateArgs).get();
-      SmallVector<Expr *, 4> NewVars;
-      TouchOMPVarlist(C->getVars(), NewVars, NewFunc);
-      OMPClause *NC = SemaRef.ActOnOpenMPDeclarativeAlignedClause(
-        NewVars,
-        C->getLocStart(),
-        C->getLocEnd(),
-        Alignment,
-        C->getColonLoc());
-      CL.push_back(NC);
-    }
-    else if (OMPUniformClause *C = dyn_cast_or_null<OMPUniformClause>(*J)) {
-      SmallVector<Expr *, 4> NewVars;
-      TouchOMPVarlist(C->getVars(), NewVars, NewFunc);
-      OMPClause *NC = SemaRef.ActOnOpenMPDeclarativeUniformClause(
-        NewVars,
-        C->getLocStart(),
-        C->getLocEnd());
-      CL.push_back(NC);
-    }
-    else if (OMPSimdlenClause *C = dyn_cast_or_null<OMPSimdlenClause>(*J)) {
-      Expr *Length = C->getSimdlen();
-      Length = SemaRef.SubstExpr(Length, TemplateArgs).get();
-      OMPClause *NC = SemaRef.ActOnOpenMPSimdlenClause(
-          Length,
-          C->getLocStart(),
-          SourceLocation(),
-          C->getLocEnd());
-      CL.push_back(NC);
-    }
-    else {
-      // May push NULL here -- CheckOMPDeclareSimdDecl will clean up.
-      CL.push_back(*J);
-    }
-  }
-
-  OMPDeclareSimdDecl *TD =
-    SemaRef.CheckOMPDeclareSimdDecl(D->getLocation(), NewFunc,
-              SrcRanges, BeginIdx, EndIdx, CL, DC);
-  TD->setAccess(AS_public);
-  DC->addDecl(TD);
-  return TD;
-}
-
-
-Decl *TemplateDeclInstantiator::VisitOMPDeclareReductionDecl(
-                                     OMPDeclareReductionDecl *D) {
-  if (D->isInvalidDecl()) return D;
-  SmallVector<QualType, 16> Types;
-  SmallVector<SourceRange, 16> TyRanges;
-  bool IsValid = true;
-  for (ArrayRef<OMPDeclareReductionDecl::ReductionData>::iterator
-                                               I = D->datalist_begin(),
-                                               E = D->datalist_end();
-       I != E; ++I) {
-    if (I->QTy.isNull()) {
-      Types.push_back(QualType());
-      TyRanges.push_back(SourceRange());
-      IsValid = false;
-      continue;
-    }
-    QualType ResQTy = SemaRef.SubstType(I->QTy, TemplateArgs,
-                                        D->getLocation(), DeclarationName());
-    if (!ResQTy.isNull() &&
-        SemaRef.IsOMPDeclareReductionTypeAllowed(I->TyRange, ResQTy,
-                                                 Types, TyRanges)) {
-      Types.push_back(ResQTy);
-      TyRanges.push_back(I->TyRange);
-    } else {
-      Types.push_back(QualType());
-      TyRanges.push_back(SourceRange());
-      IsValid = false;
-    }
-  }
-  if (!IsValid) return 0;
-
-  SmallVector<Expr *, 16> Combiners;
-  SmallVector<Expr *, 16> Inits;
-  Decl *NewDR;
-  {
-    Sema::OMPDeclareReductionRAII RAII(SemaRef, 0, Owner,
-                                       D->getLocation(), D->getDeclName(),
-                                       D->datalist_size(), D->getAccess());
-    NewDR = RAII.getDecl();
-    DeclContext *NewOwner = cast<DeclContext>(NewDR);
-    SemaRef.OMPInstantiatedDecls.clear();
-
-    LocalInstantiationScope Scope(SemaRef);
-    Scope.InstantiatedLocal(D, NewDR);
-    for (DeclContext::decl_iterator I = D->decls_begin(), E = D->decls_end();
-         I != E; ++I) {
-      if ((*I)->getDeclContext() != D) continue;
-      if ((*I)->isInvalidDecl()) {
-        RAII.getDecl()->setInvalidDecl();
-        continue;
-      }
-      Decl *NewD = SemaRef.SubstDecl(*I, NewOwner, TemplateArgs);
-      if (!NewD || NewD->isInvalidDecl()) {
-        NewDR->setInvalidDecl();
-        return NewDR;
-      }
-      if (FunctionDecl *FD = cast<FunctionDecl>(NewD)) {
-        if ((*I)->hasBody()) {
-          SemaRef.InstantiateFunctionDefinition(SourceLocation(),
-                                                FD, false, true);
-        } else {
-          Sema::ContextRAII S(SemaRef, FD);
-          // Only init function may have just a declaration.
-          ParmVarDecl *ParLHS = FD->getParamDecl(0);
-          // The first parameter is a pointer.
-          QualType QTy = (ParLHS->getType())->getPointeeType();
-          VarDecl *OmpPriv =
-            VarDecl::Create(SemaRef.Context, FD, SourceLocation(),
-                            SourceLocation(),
-                            &SemaRef.Context.Idents.get("omp_priv_inst"),
-                            QTy, SemaRef.Context.getTrivialTypeSourceInfo(QTy),
-                            SC_Auto);
-          FD->addDecl(OmpPriv);
-          SemaRef.CreateDefaultDeclareReductionInitFunctionBody(FD, OmpPriv,
-                                                                ParLHS);
-        }
-      }
-      NewOwner->addDecl(NewD);
-      SemaRef.OMPInstantiatedDecls[*I] = NewD;
-    }
-
-    SmallVectorImpl<QualType>::iterator IT = Types.begin();
-    for (ArrayRef<OMPDeclareReductionDecl::ReductionData>::iterator
-                                                 I = D->datalist_begin(),
-                                                 E = D->datalist_end();
-         I != E; ++I, ++IT) {
-      if (!IT->isNull()) {
-        Combiners.push_back(SemaRef.SubstExpr(I->CombinerFunction,
-                                              TemplateArgs).get());
-        Inits.push_back(SemaRef.SubstExpr(I->InitFunction, TemplateArgs).get());
-      }
-    }
-
-    SemaRef.OMPInstantiatedDecls.clear();
-  }
-
-  SemaRef.CompleteOMPDeclareReductionDecl(
-                         cast<OMPDeclareReductionDecl>(NewDR),
-                         Types, TyRanges, Combiners, Inits);
-  return NewDR;
 }
 
 Decl *Sema::SubstDecl(Decl *D, DeclContext *Owner,
@@ -3695,12 +3461,6 @@ void Sema::InstantiateFunctionDefinition(SourceLocation PointOfInstantiation,
 
   DeclGroupRef DG(Function);
   Consumer.HandleTopLevelDecl(DG);
-
-  PendingOMPInstMap::iterator IOMP = PendingOMP.find(Function);
-  if (IOMP != PendingOMP.end()) {
-    DeclGroupRef DGOMP(IOMP->second);
-    Consumer.HandleTopLevelDecl(DGOMP);
-  }
 
   // This class may have local implicit instantiations that need to be
   // instantiation within this scope.
@@ -4783,9 +4543,7 @@ NamedDecl *Sema::FindInstantiatedDecl(SourceLocation Loc, NamedDecl *D,
     }
 
     NamedDecl *Result = nullptr;
-    if (isa<OMPDeclareReductionDecl>(ParentDC) && isa<FunctionDecl>(D)) {
-      Result = cast<NamedDecl>(OMPInstantiatedDecls[D]);
-    } else if (D->getDeclName()) {
+    if (D->getDeclName()) {
       DeclContext::lookup_result Found = ParentDC->lookup(D->getDeclName());
       Result = findInstantiationOf(Context, D, Found.begin(), Found.end());
     } else {

@@ -346,7 +346,7 @@ Retry:
 
   case tok::annot_pragma_openmp:
     ProhibitAttributes(Attrs);
-    return ParseOpenMPDeclarativeOrExecutableDirective(!OnlyStatement);
+    return ParseOpenMPDeclarativeOrExecutableDirective();
 
   case tok::annot_pragma_ms_pointers_to_members:
     ProhibitAttributes(Attrs);

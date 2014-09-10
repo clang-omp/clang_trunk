@@ -2131,38 +2131,15 @@ enum CXCursorKind {
    */
   CXCursor_DeclStmt                      = 231,
 
-  /** \brief OpenMP directives.
+  /** \brief OpenMP parallel directive.
    */
   CXCursor_OMPParallelDirective          = 232,
-  CXCursor_OMPForDirective               = 233,
-  CXCursor_OMPSectionsDirective          = 234,
-  CXCursor_OMPSectionDirective           = 235,
-  CXCursor_OMPSingleDirective            = 236,
-  CXCursor_OMPTaskDirective              = 237,
-  CXCursor_OMPTaskyieldDirective         = 238,
-  CXCursor_OMPMasterDirective            = 239,
-  CXCursor_OMPCriticalDirective          = 240,
-  CXCursor_OMPBarrierDirective           = 241,
-  CXCursor_OMPTaskwaitDirective          = 242,
-  CXCursor_OMPTaskgroupDirective         = 243,
-  CXCursor_OMPAtomicDirective            = 244,
-  CXCursor_OMPFlushDirective             = 245,
-  CXCursor_OMPOrderedDirective           = 246,
-  CXCursor_OMPSimdDirective              = 247,
-  CXCursor_OMPForSimdDirective           = 248,
-  CXCursor_OMPTeamsDirective             = 249,
-  CXCursor_OMPCancelDirective            = 250,
-  CXCursor_OMPCancellationPointDirective = 251,
-  CXCursor_OMPDistributeDirective        = 252,
-  CXCursor_OMPDistributeSimdDirective    = 253,
-  CXCursor_OMPParallelForDirective       = 254,
-  CXCursor_OMPParallelForSimdDirective   = 255,
-  CXCursor_OMPParallelSectionsDirective  = 256,
-  CXCursor_OMPDistributeParallelForDirective = 257,
-  CXCursor_OMPDistributeParallelForSimdDirective = 258,
-  CXCursor_OMPTargetDirective            = 259,
 
-  CXCursor_LastStmt                      = CXCursor_OMPTargetDirective,
+  /** \brief OpenMP simd directive.
+   */
+  CXCursor_OMPSimdDirective              = 233,
+
+  CXCursor_LastStmt                      = CXCursor_OMPSimdDirective,
 
   /**
    * \brief Cursor that represents the translation unit itself.

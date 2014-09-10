@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple x86_64-apple-macos10.7.0 -verify -fopenmp -ferror-limit 100 -o - %s
+// RUN: %clang_cc1 -verify -fopenmp=libiomp5 -ferror-limit 100 %s
 
 void foo() {
 }
@@ -11,7 +11,7 @@ struct S1; // expected-note {{declared here}}
 
 template <class T, class S> // expected-note {{declared here}}
 int tmain(T argc, S **argv) {
-  #pragma omp parallel if // expected-error {{expected '(' after 'if'}} expected-error {{expected expression}}
+  #pragma omp parallel if // expected-error {{expected '(' after 'if'}}
   #pragma omp parallel if ( // expected-error {{expected expression}} expected-error {{expected ')'}} expected-note {{to match this '('}}
   #pragma omp parallel if () // expected-error {{expected expression}}
   #pragma omp parallel if (argc // expected-error {{expected ')'}} expected-note {{to match this '('}}
@@ -28,7 +28,7 @@ int tmain(T argc, S **argv) {
 }
 
 int main(int argc, char **argv) {
-  #pragma omp parallel if // expected-error {{expected '(' after 'if'}} expected-error {{expected expression}}
+  #pragma omp parallel if // expected-error {{expected '(' after 'if'}}
   #pragma omp parallel if ( // expected-error {{expected expression}} expected-error {{expected ')'}} expected-note {{to match this '('}}
   #pragma omp parallel if () // expected-error {{expected expression}}
   #pragma omp parallel if (argc // expected-error {{expected ')'}} expected-note {{to match this '('}}
@@ -44,4 +44,3 @@ int main(int argc, char **argv) {
 
   return tmain(argc, argv);
 }
-

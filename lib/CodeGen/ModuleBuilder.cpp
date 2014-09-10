@@ -17,7 +17,6 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/Expr.h"
-#include "clang/AST/DeclOpenMP.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/CodeGenOptions.h"
@@ -105,12 +104,6 @@ namespace {
         return;
 
       Builder->UpdateCompletedType(D);
-      
-      if (Ctx->getLangOpts().CPlusPlus && !D->isDependentContext()) {
-        for (auto *M : D->decls())
-          if (OMPThreadPrivateDecl *TD = dyn_cast<OMPThreadPrivateDecl>(M))
-            Builder->EmitTopLevelDecl(TD);
-      }
     }
 
     void HandleTagDeclRequiredDefinition(const TagDecl *D) override {

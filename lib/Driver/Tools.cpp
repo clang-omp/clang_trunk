@@ -2235,9 +2235,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // FIXME: Implement custom jobs for internal actions.
   CmdArgs.push_back("-cc1");
 
-  if (Args.hasArg(options::OPT_fopenmp))
-    CmdArgs.push_back("-fopenmp");
-
   // Add the "effective" target triple.
   CmdArgs.push_back("-triple");
   std::string TripleStr = getToolChain().ComputeEffectiveClangTriple(Args);
@@ -5483,7 +5480,7 @@ void darwin::Link::ConstructJob(Compilation &C, const JobAction &JA,
 
   LibOpenMP UsedOpenMPLib = LibUnknown;
   if (Args.hasArg(options::OPT_fopenmp)) {
-    UsedOpenMPLib = LibIOMP5;
+    UsedOpenMPLib = LibGOMP;
   } else if (const Arg *A = Args.getLastArg(options::OPT_fopenmp_EQ)) {
     UsedOpenMPLib = llvm::StringSwitch<LibOpenMP>(A->getValue())
         .Case("libgomp",  LibGOMP)
@@ -7160,7 +7157,7 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
 
       LibOpenMP UsedOpenMPLib = LibUnknown;
       if (Args.hasArg(options::OPT_fopenmp)) {
-        UsedOpenMPLib = LibIOMP5;
+        UsedOpenMPLib = LibGOMP;
       } else if (const Arg *A = Args.getLastArg(options::OPT_fopenmp_EQ)) {
         UsedOpenMPLib = llvm::StringSwitch<LibOpenMP>(A->getValue())
             .Case("libgomp",  LibGOMP)

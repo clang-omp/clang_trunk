@@ -175,37 +175,7 @@ def MSDependentExistsStmt : Stmt;
 // OpenCL Extensions.
 def AsTypeExpr : DStmt<Expr>;
 
-// Extended array notation index for OpenMP.
-def CEANIndexExpr : DStmt<Expr>;
-
 // OpenMP Directives.
 def OMPExecutableDirective : Stmt<1>;
 def OMPParallelDirective : DStmt<OMPExecutableDirective>;
-def OMPParallelForDirective : DStmt<OMPExecutableDirective>;
-def OMPParallelForSimdDirective : DStmt<OMPExecutableDirective>;
-def OMPForDirective : DStmt<OMPExecutableDirective>;
 def OMPSimdDirective : DStmt<OMPExecutableDirective>;
-def OMPForSimdDirective : DStmt<OMPExecutableDirective>;
-def OMPDistributeSimdDirective : DStmt<OMPExecutableDirective>;
-def OMPDistributeParallelForDirective : DStmt<OMPExecutableDirective>;
-def OMPDistributeParallelForSimdDirective : DStmt<OMPExecutableDirective>;
-def OMPSectionsDirective : DStmt<OMPExecutableDirective>;
-def OMPParallelSectionsDirective : DStmt<OMPExecutableDirective>;
-def OMPSectionDirective : DStmt<OMPExecutableDirective>;
-def OMPSingleDirective : DStmt<OMPExecutableDirective>;
-def OMPTaskDirective : DStmt<OMPExecutableDirective>;
-def OMPTaskyieldDirective : DStmt<OMPExecutableDirective>;
-def OMPMasterDirective : DStmt<OMPExecutableDirective>;
-def OMPCriticalDirective : DStmt<OMPExecutableDirective>;
-def OMPBarrierDirective : DStmt<OMPExecutableDirective>;
-def OMPTaskwaitDirective : DStmt<OMPExecutableDirective>;
-def OMPTaskgroupDirective : DStmt<OMPExecutableDirective>;
-def OMPAtomicDirective : DStmt<OMPExecutableDirective>;
-def OMPFlushDirective : DStmt<OMPExecutableDirective>;
-def OMPOrderedDirective : DStmt<OMPExecutableDirective>;
-def OMPTeamsDirective : DStmt<OMPExecutableDirective>;
-def OMPDistributeDirective : DStmt<OMPExecutableDirective>;
-def OMPCancelDirective : DStmt<OMPExecutableDirective>;
-def OMPCancellationPointDirective : DStmt<OMPExecutableDirective>;
-def OMPTargetDirective : DStmt<OMPExecutableDirective>;
-
