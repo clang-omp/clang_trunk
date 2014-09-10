@@ -1987,8 +1987,6 @@ void OMPClauseEnqueue::VisitOMPMergeableClause(const OMPMergeableClause *) {}
 
 void OMPClauseEnqueue::VisitOMPReadClause(const OMPReadClause *) {}
 
-void OMPClauseEnqueue::VisitOMPWriteClause(const OMPWriteClause *) {}
-
 template<typename T>
 void OMPClauseEnqueue::VisitOMPClauseList(T *Node) {
   for (const auto *I : Node->varlists())

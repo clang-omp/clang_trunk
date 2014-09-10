@@ -7540,9 +7540,6 @@ public:
   /// \brief Called on well-formed 'read' clause.
   OMPClause *ActOnOpenMPReadClause(SourceLocation StartLoc,
                                    SourceLocation EndLoc);
-  /// \brief Called on well-formed 'write' clause.
-  OMPClause *ActOnOpenMPWriteClause(SourceLocation StartLoc,
-                                    SourceLocation EndLoc);
 
   OMPClause *
   ActOnOpenMPVarListClause(OpenMPClauseKind Kind, ArrayRef<Expr *> Vars,

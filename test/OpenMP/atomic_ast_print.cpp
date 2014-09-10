@@ -7,47 +7,37 @@
 #define HEADER
 
 template <class T>
-T foo(T argc) {
-  T a = T();
+T foo(T arg) {
+  T a;
 #pragma omp atomic
   a++;
 #pragma omp atomic read
-  a = argc;
-#pragma omp atomic write
-  a = argc + argc;
+  a = arg;
   return T();
 }
 
-// CHECK: int a = int();
+// CHECK: int a;
 // CHECK-NEXT: #pragma omp atomic
 // CHECK-NEXT: a++;
 // CHECK-NEXT: #pragma omp atomic read
-// CHECK-NEXT: a = argc;
-// CHECK-NEXT: #pragma omp atomic write
-// CHECK-NEXT: a = argc + argc;
-// CHECK: T a = T();
+// CHECK-NEXT: a = arg;
+// CHECK: T a;
 // CHECK-NEXT: #pragma omp atomic
 // CHECK-NEXT: a++;
 // CHECK-NEXT: #pragma omp atomic read
-// CHECK-NEXT: a = argc;
-// CHECK-NEXT: #pragma omp atomic write
-// CHECK-NEXT: a = argc + argc;
+// CHECK-NEXT: a = arg;
 
 int main(int argc, char **argv) {
-  int a = 0;
-// CHECK: int a = 0;
+  int a;
+// CHECK: int a;
 #pragma omp atomic
   a++;
 #pragma omp atomic read
   a = argc;
-#pragma omp atomic write
-  a = argc + argc;
   // CHECK-NEXT: #pragma omp atomic
   // CHECK-NEXT: a++;
   // CHECK-NEXT: #pragma omp atomic read
   // CHECK-NEXT: a = argc;
-  // CHECK-NEXT: #pragma omp atomic write
-  // CHECK-NEXT: a = argc + argc;
   return foo(a);
 }
 
