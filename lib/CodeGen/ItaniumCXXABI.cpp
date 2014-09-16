@@ -274,6 +274,8 @@ public:
   classifyRTTIUniqueness(QualType CanTy,
                          llvm::GlobalValue::LinkageTypes Linkage) const;
   friend class ItaniumRTTIBuilder;
+
+  void emitCXXStructor(const CXXMethodDecl *MD, StructorType Type) override;
 };
 
 class ARMCXXABI : public ItaniumCXXABI {
@@ -2995,4 +2997,55 @@ ItaniumCXXABI::RTTIUniquenessKind ItaniumCXXABI::classifyRTTIUniqueness(
   // enable string-comparisons.
   assert(Linkage == llvm::GlobalValue::WeakODRLinkage);
   return RUK_NonUniqueVisible;
+}
+
+static void emitCXXConstructor(CodeGenModule &CGM,
+                               const CXXConstructorDecl *ctor,
+                               StructorType ctorType) {
+  if (!ctor->getParent()->getNumVBases() &&
+      (ctorType == StructorType::Complete || ctorType == StructorType::Base)) {
+    // The complete constructor is equivalent to the base constructor
+    // for classes with no virtual bases.  Try to emit it as an alias.
+    bool ProducedAlias = !CGM.TryEmitDefinitionAsAlias(
+        GlobalDecl(ctor, Ctor_Complete), GlobalDecl(ctor, Ctor_Base), true);
+    if (ctorType == StructorType::Complete && ProducedAlias)
+      return;
+  }
+
+  CGM.codegenCXXStructor(ctor, ctorType);
+}
+
+static void emitCXXDestructor(CodeGenModule &CGM, const CXXDestructorDecl *dtor,
+                              StructorType dtorType) {
+  // The complete destructor is equivalent to the base destructor for
+  // classes with no virtual bases, so try to emit it as an alias.
+  if (!dtor->getParent()->getNumVBases() &&
+      (dtorType == StructorType::Complete || dtorType == StructorType::Base)) {
+    bool ProducedAlias = !CGM.TryEmitDefinitionAsAlias(
+        GlobalDecl(dtor, Dtor_Complete), GlobalDecl(dtor, Dtor_Base), true);
+    if (ProducedAlias) {
+      if (dtorType == StructorType::Complete)
+        return;
+      if (dtor->isVirtual())
+        CGM.getVTables().EmitThunks(GlobalDecl(dtor, Dtor_Complete));
+    }
+  }
+
+  // The base destructor is equivalent to the base destructor of its
+  // base class if there is exactly one non-virtual base class with a
+  // non-trivial destructor, there are no fields with a non-trivial
+  // destructor, and the body of the destructor is trivial.
+  if (dtorType == StructorType::Base && !CGM.TryEmitBaseDestructorAsAlias(dtor))
+    return;
+
+  CGM.codegenCXXStructor(dtor, dtorType);
+}
+
+void ItaniumCXXABI::emitCXXStructor(const CXXMethodDecl *MD,
+                                    StructorType Type) {
+  if (auto *CD = dyn_cast<CXXConstructorDecl>(MD)) {
+    emitCXXConstructor(CGM, CD, Type);
+    return;
+  }
+  emitCXXDestructor(CGM, cast<CXXDestructorDecl>(MD), Type);
 }
