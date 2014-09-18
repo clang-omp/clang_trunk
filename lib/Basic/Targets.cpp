@@ -21,6 +21,7 @@
 #include "clang/Basic/TargetOptions.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Triple.h"
@@ -1899,6 +1900,9 @@ public:
   }
   bool validateAsmConstraint(const char *&Name,
                                      TargetInfo::ConstraintInfo &info) const override;
+
+  bool validateInputSize(StringRef Constraint, unsigned Size) const override;
+
   std::string convertConstraint(const char *&Constraint) const override;
   const char *getClobbers() const override {
     return "~{dirflag},~{fpsr},~{flags}";
@@ -3049,6 +3053,21 @@ X86TargetInfo::validateAsmConstraint(const char *&Name,
   }
 }
 
+bool X86TargetInfo::validateInputSize(StringRef Constraint,
+                                      unsigned Size) const {
+  switch (Constraint[0]) {
+  default: break;
+  case 'y':
+    return Size <= 64;
+  case 'x':
+  case 'f':
+  case 't':
+  case 'u':
+    return Size <= 128;
+  }
+
+  return true;
+}
 
 std::string
 X86TargetInfo::convertConstraint(const char *&Constraint) const {
@@ -3109,14 +3128,21 @@ public:
                          unsigned Size) const override {
     switch (Constraint[0]) {
     default: break;
+    case 'R':
+    case 'q':
+    case 'Q':
     case 'a':
     case 'b':
     case 'c':
     case 'd':
+    case 'S':
+    case 'D':
       return Size <= 32;
+    case 'A':
+      return Size <= 64;
     }
 
-    return true;
+    return X86TargetInfo::validateInputSize(Constraint, Size);
   }
 };
 } // end anonymous namespace
@@ -3569,6 +3595,14 @@ class ARMTargetInfo : public TargetInfo {
   unsigned CRC : 1;
   unsigned Crypto : 1;
 
+  // ACLE 6.5.1 Hardware floating point
+  enum {
+    HW_FP_HP = (1 << 1), /// half (16-bit)
+    HW_FP_SP = (1 << 2), /// single (32-bit)
+    HW_FP_DP = (1 << 3), /// double (64-bit)
+  };
+  uint32_t HW_FP;
+
   static const Builtin::Info BuiltinInfo[];
 
   static bool shouldUseInlineAtomic(const llvm::Triple &T) {
@@ -3730,7 +3764,7 @@ class ARMTargetInfo : public TargetInfo {
 public:
   ARMTargetInfo(const llvm::Triple &Triple, bool IsBigEndian)
       : TargetInfo(Triple), CPU("arm1136j-s"), FPMath(FP_Default),
-        IsAAPCS(true) {
+        IsAAPCS(true), HW_FP(0) {
     BigEndian = IsBigEndian;
 
     switch (getTriple().getOS()) {
@@ -3841,29 +3875,38 @@ public:
     Crypto = 0;
     SoftFloat = SoftFloatABI = false;
     HWDiv = 0;
-    for (unsigned i = 0, e = Features.size(); i != e; ++i) {
-      if (Features[i] == "+soft-float")
+
+    for (const auto &Feature : Features) {
+      if (Feature == "+soft-float") {
         SoftFloat = true;
-      else if (Features[i] == "+soft-float-abi")
+      } else if (Feature == "+soft-float-abi") {
         SoftFloatABI = true;
-      else if (Features[i] == "+vfp2")
+      } else if (Feature == "+vfp2") {
         FPU |= VFP2FPU;
-      else if (Features[i] == "+vfp3")
+        HW_FP = HW_FP_SP | HW_FP_DP;
+      } else if (Feature == "+vfp3") {
         FPU |= VFP3FPU;
-      else if (Features[i] == "+vfp4")
+        HW_FP = HW_FP_SP | HW_FP_DP;
+      } else if (Feature == "+vfp4") {
         FPU |= VFP4FPU;
-      else if (Features[i] == "+fp-armv8")
+        HW_FP = HW_FP_SP | HW_FP_DP | HW_FP_HP;
+      } else if (Feature == "+fp-armv8") {
         FPU |= FPARMV8;
-      else if (Features[i] == "+neon")
+        HW_FP = HW_FP_SP | HW_FP_DP | HW_FP_HP;
+      } else if (Feature == "+neon") {
         FPU |= NeonFPU;
-      else if (Features[i] == "+hwdiv")
+        HW_FP = HW_FP_SP | HW_FP_DP;
+      } else if (Feature == "+hwdiv") {
         HWDiv |= HWDivThumb;
-      else if (Features[i] == "+hwdiv-arm")
+      } else if (Feature == "+hwdiv-arm") {
         HWDiv |= HWDivARM;
-      else if (Features[i] == "+crc")
+      } else if (Feature == "+crc") {
         CRC = 1;
-      else if (Features[i] == "+crypto")
+      } else if (Feature == "+crypto") {
         Crypto = 1;
+      } else if (Feature == "+fp-only-sp") {
+        HW_FP &= ~HW_FP_DP;
+      }
     }
 
     if (!(FPU & NeonFPU) && FPMath == FP_Neon) {
@@ -3877,13 +3920,13 @@ public:
       Features.push_back("-neonfp");
 
     // Remove front-end specific options which the backend handles differently.
-    std::vector<std::string>::iterator it;
-    it = std::find(Features.begin(), Features.end(), "+soft-float");
-    if (it != Features.end())
-      Features.erase(it);
-    it = std::find(Features.begin(), Features.end(), "+soft-float-abi");
-    if (it != Features.end())
-      Features.erase(it);
+    const StringRef FrontEndFeatures[] = { "+soft-float", "+soft-float-abi" };
+    for (const auto &FEFeature : FrontEndFeatures) {
+      auto Feature = std::find(Features.begin(), Features.end(), FEFeature);
+      if (Feature != Features.end())
+        Features.erase(Feature);
+    }
+
     return true;
   }
 
@@ -3972,9 +4015,8 @@ public:
 
     StringRef CPUArch = getCPUDefineSuffix(CPU);
     unsigned int CPUArchVer;
-    if(CPUArch.substr(0, 1).getAsInteger<unsigned int>(10, CPUArchVer)) {
+    if (CPUArch.substr(0, 1).getAsInteger<unsigned int>(10, CPUArchVer))
       llvm_unreachable("Invalid char for architecture version number");
-    }
     Builder.defineMacro("__ARM_ARCH_" + CPUArch + "__");
 
     // ACLE 6.4.1 ARM/Thumb instruction set architecture
@@ -4011,6 +4053,10 @@ public:
     // __ARM_ARCH_PROFILE is defined as 'A', 'R', 'M' or 'S', or unset.
     if (!CPUProfile.empty())
       Builder.defineMacro("__ARM_ARCH_PROFILE", "'" + CPUProfile + "'");
+
+    // ACLE 6.5.1 Hardware Floating Point
+    if (HW_FP)
+      Builder.defineMacro("__ARM_FP", "0x" + llvm::utohexstr(HW_FP));
 
     // ACLE predefines.
     Builder.defineMacro("__ARM_ACLE", "200");
