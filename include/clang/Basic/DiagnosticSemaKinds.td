@@ -454,6 +454,10 @@ def warn_assume_side_effects : Warning<
   "the argument to %0 has side effects that will be discarded">,
   InGroup<DiagGroup<"assume">>;
 
+def warn_memcpy_chk_overflow : Warning<
+  "%0 will always overflow destination buffer">,
+  InGroup<DiagGroup<"builtin-memcpy-chk-size">>;
+
 /// main()
 // static main() is not an error in C, just in C++.
 def warn_static_main : Warning<"'main' should not be declared static">,
@@ -6047,6 +6051,8 @@ let CategoryName = "Inline Assembly Issue" in {
   def err_asm_bad_register_type : Error<"bad type for named register variable">;
   def err_asm_invalid_input_size : Error<
     "invalid input size for constraint '%0'">;
+  def err_asm_invalid_output_size : Error<
+    "invalid output size for constraint '%0'">;
   def err_invalid_asm_cast_lvalue : Error<
     "invalid use of a cast in a inline asm context requiring an l-value: "
     "remove the cast or build with -fheinous-gnu-extensions">;
