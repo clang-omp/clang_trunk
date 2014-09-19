@@ -3079,11 +3079,13 @@ bool X86TargetInfo::validateOperandSize(StringRef Constraint,
   default: break;
   case 'y':
     return Size <= 64;
-  case 'x':
   case 'f':
   case 't':
   case 'u':
     return Size <= 128;
+  case 'x':
+    // 256-bit ymm registers can be used if target supports AVX.
+    return Size <= (SSELevel >= AVX ? 256 : 128);
   }
 
   return true;
