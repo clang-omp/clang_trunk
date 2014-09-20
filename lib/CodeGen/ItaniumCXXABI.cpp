@@ -1666,6 +1666,15 @@ void ItaniumCXXABI::EmitGuardedInit(CodeGenFunction &CGF,
     // If the variable is thread-local, so is its guard variable.
     guard->setThreadLocalMode(var->getThreadLocalMode());
 
+    // The ABI says: It is suggested that it be emitted in the same COMDAT group
+    // as the associated data object
+    if (!D.isLocalVarDecl() && var->isWeakForLinker() && CGM.supportsCOMDAT()) {
+      llvm::Comdat *C = CGM.getModule().getOrInsertComdat(var->getName());
+      guard->setComdat(C);
+      var->setComdat(C);
+      CGF.CurFn->setComdat(C);
+    }
+
     CGM.setStaticLocalDeclGuardAddress(&D, guard);
   }
 
@@ -3068,7 +3077,7 @@ static void emitConstructorDestructorAlias(CodeGenModule &CGM,
   }
 
   // Finally, set up the alias with its proper name and attributes.
-  CGM.SetCommonAttributes(cast<NamedDecl>(AliasDecl.getDecl()), Alias);
+  CGM.setAliasAttributes(cast<NamedDecl>(AliasDecl.getDecl()), Alias);
 }
 
 void ItaniumCXXABI::emitCXXStructor(const CXXMethodDecl *MD,
