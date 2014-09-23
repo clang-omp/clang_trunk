@@ -5691,7 +5691,8 @@ llvm::Value* MipsABIInfo::EmitVAArg(llvm::Value *VAListAddr, QualType Ty,
   CGBuilderTy &Builder = CGF.Builder;
   llvm::Value *VAListAddrAsBPP = Builder.CreateBitCast(VAListAddr, BPP, "ap");
   llvm::Value *Addr = Builder.CreateLoad(VAListAddrAsBPP, "ap.cur");
-  int64_t TypeAlign = getContext().getTypeAlign(Ty) / 8;
+  int64_t TypeAlign =
+      std::min(getContext().getTypeAlign(Ty) / 8, StackAlignInBytes);
   llvm::Type *PTy = llvm::PointerType::getUnqual(CGF.ConvertType(Ty));
   llvm::Value *AddrTyped;
   unsigned PtrWidth = getTarget().getPointerWidth(0);
@@ -6874,6 +6875,14 @@ const llvm::Triple &CodeGenModule::getTriple() const {
 
 bool CodeGenModule::supportsCOMDAT() const {
   return !getTriple().isOSBinFormatMachO();
+}
+
+bool CodeGenModule::supportsCOMDATInitializers() const {
+  // We can only put initializers in comdat groups on ELF with .init_array and
+  // COFF with .CRT$XCU.
+  return supportsCOMDAT() &&
+         ((getTriple().isOSBinFormatELF() && getCodeGenOpts().UseInitArray) ||
+          (getTriple().isWindowsMSVCEnvironment()));
 }
 
 const TargetCodeGenInfo &CodeGenModule::getTargetCodeGenInfo() {
