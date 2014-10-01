@@ -8408,8 +8408,7 @@ namespace {
     }
 
     void VisitImplicitCastExpr(ImplicitCastExpr *E) {
-      if (E->getCastKind() == CK_LValueToRValue ||
-          (isRecordType && E->getCastKind() == CK_NoOp)) {
+      if (E->getCastKind() == CK_LValueToRValue) {
         HandleValue(E->getSubExpr());
         return;
       }
@@ -8477,9 +8476,15 @@ namespace {
 
     void VisitCXXConstructExpr(CXXConstructExpr *E) {
       if (E->getConstructor()->isCopyConstructor()) {
-        if (DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(E->getArg(0))) {
-          HandleDeclRefExpr(DRE);
-        }
+        Expr *ArgExpr = E->getArg(0);
+        if (InitListExpr *ILE = dyn_cast<InitListExpr>(ArgExpr))
+          if (ILE->getNumInits() == 1)
+            ArgExpr = ILE->getInit(0);
+        if (ImplicitCastExpr *ICE = dyn_cast<ImplicitCastExpr>(ArgExpr))
+          if (ICE->getCastKind() == CK_NoOp)
+            ArgExpr = ICE->getSubExpr();
+        HandleValue(ArgExpr);
+        return;
       }
       Inherited::VisitCXXConstructExpr(E);
     }
