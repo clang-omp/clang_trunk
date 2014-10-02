@@ -2781,29 +2781,27 @@ void CGDebugInfo::EmitDeclare(const VarDecl *VD, llvm::dwarf::LLVMConstants Tag,
   if (!Name.empty()) {
     if (VD->hasAttr<BlocksAttr>()) {
       CharUnits offset = CharUnits::fromQuantity(32);
-      SmallVector<llvm::Value *, 9> addr;
-      llvm::Type *Int64Ty = CGM.Int64Ty;
-      addr.push_back(llvm::ConstantInt::get(Int64Ty, llvm::DIBuilder::OpPlus));
+      SmallVector<int64_t, 9> addr;
+      addr.push_back(llvm::dwarf::DW_OP_plus);
       // offset of __forwarding field
       offset = CGM.getContext().toCharUnitsFromBits(
         CGM.getTarget().getPointerWidth(0));
-      addr.push_back(llvm::ConstantInt::get(Int64Ty, offset.getQuantity()));
-      addr.push_back(llvm::ConstantInt::get(Int64Ty, llvm::DIBuilder::OpDeref));
-      addr.push_back(llvm::ConstantInt::get(Int64Ty, llvm::DIBuilder::OpPlus));
+      addr.push_back(offset.getQuantity());
+      addr.push_back(llvm::dwarf::DW_OP_deref);
+      addr.push_back(llvm::dwarf::DW_OP_plus);
       // offset of x field
       offset = CGM.getContext().toCharUnitsFromBits(XOffset);
-      addr.push_back(llvm::ConstantInt::get(Int64Ty, offset.getQuantity()));
+      addr.push_back(offset.getQuantity());
 
       // Create the descriptor for the variable.
       llvm::DIVariable D =
-        DBuilder.createComplexVariable(Tag,
-                                       llvm::DIDescriptor(Scope),
-                                       VD->getName(), Unit, Line, Ty,
-                                       addr, ArgNo);
+        DBuilder.createLocalVariable(Tag, llvm::DIDescriptor(Scope),
+                                     VD->getName(), Unit, Line, Ty, ArgNo);
 
       // Insert an llvm.dbg.declare into the current block.
       llvm::Instruction *Call =
-        DBuilder.insertDeclare(Storage, D, Builder.GetInsertBlock());
+        DBuilder.insertDeclare(Storage, D, DBuilder.createExpression(addr),
+                               Builder.GetInsertBlock());
       Call->setDebugLoc(llvm::DebugLoc::get(Line, Column, Scope));
       return;
     } else if (isa<VariableArrayType>(VD->getType()))
@@ -2830,7 +2828,8 @@ void CGDebugInfo::EmitDeclare(const VarDecl *VD, llvm::dwarf::LLVMConstants Tag,
 
         // Insert an llvm.dbg.declare into the current block.
         llvm::Instruction *Call =
-          DBuilder.insertDeclare(Storage, D, Builder.GetInsertBlock());
+          DBuilder.insertDeclare(Storage, D, DBuilder.createExpression(),
+                                 Builder.GetInsertBlock());
         Call->setDebugLoc(llvm::DebugLoc::get(Line, Column, Scope));
       }
       return;
@@ -2845,7 +2844,8 @@ void CGDebugInfo::EmitDeclare(const VarDecl *VD, llvm::dwarf::LLVMConstants Tag,
 
   // Insert an llvm.dbg.declare into the current block.
   llvm::Instruction *Call =
-    DBuilder.insertDeclare(Storage, D, Builder.GetInsertBlock());
+    DBuilder.insertDeclare(Storage, D, DBuilder.createExpression(),
+                           Builder.GetInsertBlock());
   Call->setDebugLoc(llvm::DebugLoc::get(Line, Column, Scope));
 }
 
@@ -2904,35 +2904,35 @@ void CGDebugInfo::EmitDeclareOfBlockDeclRefVariable(const VarDecl *VD,
     target.getStructLayout(blockInfo.StructureType)
           ->getElementOffset(blockInfo.getCapture(VD).getIndex()));
 
-  SmallVector<llvm::Value *, 9> addr;
-  llvm::Type *Int64Ty = CGM.Int64Ty;
+  SmallVector<int64_t, 9> addr;
   if (isa<llvm::AllocaInst>(Storage))
-    addr.push_back(llvm::ConstantInt::get(Int64Ty, llvm::DIBuilder::OpDeref));
-  addr.push_back(llvm::ConstantInt::get(Int64Ty, llvm::DIBuilder::OpPlus));
-  addr.push_back(llvm::ConstantInt::get(Int64Ty, offset.getQuantity()));
+    addr.push_back(llvm::dwarf::DW_OP_deref);
+  addr.push_back(llvm::dwarf::DW_OP_plus);
+  addr.push_back(offset.getQuantity());
   if (isByRef) {
-    addr.push_back(llvm::ConstantInt::get(Int64Ty, llvm::DIBuilder::OpDeref));
-    addr.push_back(llvm::ConstantInt::get(Int64Ty, llvm::DIBuilder::OpPlus));
+    addr.push_back(llvm::dwarf::DW_OP_deref);
+    addr.push_back(llvm::dwarf::DW_OP_plus);
     // offset of __forwarding field
     offset = CGM.getContext()
                 .toCharUnitsFromBits(target.getPointerSizeInBits(0));
-    addr.push_back(llvm::ConstantInt::get(Int64Ty, offset.getQuantity()));
-    addr.push_back(llvm::ConstantInt::get(Int64Ty, llvm::DIBuilder::OpDeref));
-    addr.push_back(llvm::ConstantInt::get(Int64Ty, llvm::DIBuilder::OpPlus));
+    addr.push_back(offset.getQuantity());
+    addr.push_back(llvm::dwarf::DW_OP_deref);
+    addr.push_back(llvm::dwarf::DW_OP_plus);
     // offset of x field
     offset = CGM.getContext().toCharUnitsFromBits(XOffset);
-    addr.push_back(llvm::ConstantInt::get(Int64Ty, offset.getQuantity()));
+    addr.push_back(offset.getQuantity());
   }
 
   // Create the descriptor for the variable.
   llvm::DIVariable D =
-    DBuilder.createComplexVariable(llvm::dwarf::DW_TAG_auto_variable,
-                                   llvm::DIDescriptor(LexicalBlockStack.back()),
-                                   VD->getName(), Unit, Line, Ty, addr);
+    DBuilder.createLocalVariable(llvm::dwarf::DW_TAG_auto_variable,
+                                 llvm::DIDescriptor(LexicalBlockStack.back()),
+                                 VD->getName(), Unit, Line, Ty);
 
   // Insert an llvm.dbg.declare into the current block.
   llvm::Instruction *Call =
-    DBuilder.insertDeclare(Storage, D, Builder.GetInsertPoint());
+    DBuilder.insertDeclare(Storage, D, DBuilder.createExpression(addr),
+                           Builder.GetInsertPoint());
   Call->setDebugLoc(llvm::DebugLoc::get(Line, Column,
                                         LexicalBlockStack.back()));
 }
@@ -3096,13 +3096,15 @@ void CGDebugInfo::EmitDeclareOfBlockLiteralArgVariable(const CGBlockInfo &block,
     // Insert an llvm.dbg.value into the current block.
     llvm::Instruction *DbgVal =
       DBuilder.insertDbgValueIntrinsic(LocalAddr, 0, debugVar,
+                                       DBuilder.createExpression(),
                                        Builder.GetInsertBlock());
     DbgVal->setDebugLoc(llvm::DebugLoc::get(line, column, scope));
   }
 
   // Insert an llvm.dbg.declare into the current block.
   llvm::Instruction *DbgDecl =
-    DBuilder.insertDeclare(Arg, debugVar, Builder.GetInsertBlock());
+    DBuilder.insertDeclare(Arg, debugVar, DBuilder.createExpression(),
+                           Builder.GetInsertBlock());
   DbgDecl->setDebugLoc(llvm::DebugLoc::get(line, column, scope));
 }
 

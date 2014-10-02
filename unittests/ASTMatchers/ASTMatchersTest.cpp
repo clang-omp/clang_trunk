@@ -654,6 +654,20 @@ TEST(DeclarationMatcher, HasDescendantMemoization) {
   EXPECT_TRUE(matches("void f() { int i; }", CannotMemoize));
 }
 
+TEST(DeclarationMatcher, HasDescendantMemoizationUsesRestrictKind) {
+  auto Name = hasName("i");
+  auto VD = internal::Matcher<VarDecl>(Name).dynCastTo<Decl>();
+  auto RD = internal::Matcher<RecordDecl>(Name).dynCastTo<Decl>();
+  // Matching VD first should not make a cache hit for RD.
+  EXPECT_TRUE(notMatches("void f() { int i; }",
+                         decl(hasDescendant(VD), hasDescendant(RD))));
+  EXPECT_TRUE(notMatches("void f() { int i; }",
+                         decl(hasDescendant(RD), hasDescendant(VD))));
+  // Not matching RD first should not make a cache hit for VD either.
+  EXPECT_TRUE(matches("void f() { int i; }",
+                      decl(anyOf(hasDescendant(RD), hasDescendant(VD)))));
+}
+
 TEST(DeclarationMatcher, HasAttr) {
   EXPECT_TRUE(matches("struct __attribute__((warn_unused)) X {};",
                       decl(hasAttr(clang::attr::WarnUnused))));
@@ -711,7 +725,7 @@ public:
     EXPECT_EQ("", Name);
   }
 
-  virtual bool run(const BoundNodes *Nodes) {
+  virtual bool run(const BoundNodes *Nodes) override {
     const BoundNodes::IDToNodeMap &M = Nodes->getMap();
     if (Nodes->getNodeAs<T>(Id)) {
       ++Count;
@@ -733,7 +747,7 @@ public:
     return false;
   }
 
-  virtual bool run(const BoundNodes *Nodes, ASTContext *Context) {
+  virtual bool run(const BoundNodes *Nodes, ASTContext *Context) override {
     return run(Nodes);
   }
 
