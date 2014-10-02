@@ -5233,9 +5233,18 @@ OMPClause *Sema::ActOnOpenMPDeclarativeAlignedClause(
   // The optional parameter of the aligned clause, alignment, must be
   // a constant positive integer expression.
   if (Alignment) {
+    Expr *OrigAlignment = Alignment;
     Alignment = ActOnConstantPositiveSubExpressionInClause(Alignment);
     if (!Alignment)
       return 0;
+
+    if (IntegerLiteral *IL = dyn_cast<IntegerLiteral>(Alignment)) {
+      if (!IL->getValue().isPowerOf2()) {
+        Diag(AlignmentLoc, diag::warn_omp_alignment_not_power_of_two)
+          << OrigAlignment->getSourceRange();
+        return 0;
+      }
+    }
   }
   return OMPAlignedClause::Create(Context, StartLoc, EndLoc, VarList, Alignment,
                                   AlignmentLoc);
@@ -7619,9 +7628,18 @@ OMPClause *Sema::ActOnOpenMPAlignedClause(ArrayRef<Expr *> VarList,
   // The optional parameter of the aligned clause, alignment, must be
   // a constant positive integer expression.
   if (Alignment) {
+    Expr *OrigAlignment = Alignment;
     Alignment = ActOnConstantPositiveSubExpressionInClause(Alignment);
     if (!Alignment)
       return 0;
+
+    if (IntegerLiteral *IL = dyn_cast<IntegerLiteral>(Alignment)) {
+      if (!IL->getValue().isPowerOf2()) {
+        Diag(AlignmentLoc, diag::warn_omp_alignment_not_power_of_two)
+          << OrigAlignment->getSourceRange();
+        return 0;
+      }
+    }
   }
 
   return OMPAlignedClause::Create(Context, StartLoc, EndLoc, Vars, Alignment,

@@ -7170,6 +7170,9 @@ def err_omp_at_most_one_uniform_or_linear : Error<
   "each argument may be in at most one uniform or linear clause">;
 def err_omp_at_most_one_aligned : Error<
   "each argument may be in at most one aligned clause">;
+def warn_omp_alignment_not_power_of_two : Warning<
+  "aligned clause will be ignored because the requested alignment is not a power of 2">,
+  InGroup<SourceUsesOpenMP>, DefaultWarn;
 def err_omp_inbranch : Error<
   "declare simd variant cannot be inbranch and notinbranch at the same time">;
 def err_omp_arg_not_found : Error<

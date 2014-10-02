@@ -15,6 +15,7 @@
 #include "CGDebugInfo.h"
 #include "CGOpenCLRuntime.h"
 #include "CodeGenModule.h"
+#include "TargetInfo.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/CharUnits.h"
 #include "clang/AST/Decl.h"
@@ -5541,6 +5542,32 @@ Stmt *CodeGenFunction::CGPragmaOmpSimd::extractLoopBody(Stmt *S) const {
   return Body;
 }
 
+static void EmitOMPAlignedClause(CodeGenFunction &CGF, CodeGenModule &CGM,
+                                 OMPAlignedClause &Clause) {
+  unsigned ClauseAlignment = 0;
+  if (auto AlignmentExpr = Clause.getAlignment()) {
+    auto AlignmentCI =
+        cast<llvm::ConstantInt>(CGF.EmitScalarExpr(AlignmentExpr));
+    ClauseAlignment = static_cast<unsigned>(AlignmentCI->getZExtValue());
+  }
+  for (auto E : Clause.varlists()) {
+    unsigned Alignment = ClauseAlignment;
+    if (Alignment == 0) {
+      // OpenMP [2.8.1, Description]
+      // If no optional parameter isspecified, implementation-defined default
+      // alignments for SIMD instructions on the target platforms are assumed.
+      Alignment = CGM.getTargetCodeGenInfo().getOpenMPSimdDefaultAlignment(
+          E->getType());
+    }
+    assert((Alignment == 0 || llvm::isPowerOf2_32(Alignment)) &&
+           "alignment is not power of 2");
+    if (Alignment != 0) {
+      llvm::Value *PtrValue = CGF.EmitScalarExpr(E);
+      CGF.EmitAlignmentAssumption(PtrValue, Alignment);
+    }
+  }
+}
+
 // Simd wrappers implementation for '#pragma omp simd'.
 bool CodeGenFunction::CGPragmaOmpSimd::emitSafelen(CodeGenFunction *CGF) const {
   bool SeparateLastIter = false;
@@ -5567,6 +5594,9 @@ bool CodeGenFunction::CGPragmaOmpSimd::emitSafelen(CodeGenFunction *CGF) const {
       SeparateLastIter = true;
       break;
     }
+    case OMPC_aligned:
+      EmitOMPAlignedClause(*CGF, CGF->CGM, cast<OMPAlignedClause>(*C));
+      break;
     default:
       // Not handled yet
       ;
