@@ -136,14 +136,6 @@ void LoopInfoStack::InsertHelper(llvm::Instruction *I) const {
     }
     else if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(I)) {
       LI->setMetadata("llvm.mem.parallel_loop_access", L.GetLoopID());
-      if (int Align = GetAligned(LI->getOperand(0))) {
-        llvm::Value *AlignVal = llvm::ConstantInt::get(
-            llvm::Type::getInt32Ty(LI->getContext()), Align);
-        llvm::SmallVector<llvm::Value *, 4> Args;
-        Args.push_back(AlignVal);
-        llvm::MDNode *Node = llvm::MDNode::get(LI->getContext(), Args);
-        LI->setMetadata("llvm.mem.aligned", Node);
-      }
     }
   }
 }
