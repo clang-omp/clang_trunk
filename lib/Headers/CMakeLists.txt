@@ -33,8 +33,10 @@ set(files
   smmintrin.h
   stdalign.h
   stdarg.h
+  stdatomic.h
   stdbool.h
   stddef.h
+  __stddef_max_align_t.h
   stdint.h
   stdnoreturn.h
   tbmintrin.h

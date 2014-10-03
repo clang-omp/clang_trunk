@@ -5088,6 +5088,10 @@ public:
 
   /// CheckOverrideControl - Check C++11 override control semantics.
   void CheckOverrideControl(NamedDecl *D);
+    
+  /// DiagnoseAbsenseOfOverrideControl - Diagnose if override control was
+  /// not used in the; otherwise, overriding method.
+  void DiagnoseAbsenseOfOverrideControl(NamedDecl *D);
 
   /// CheckForFunctionMarkedFinal - Checks whether a virtual member function
   /// overrides a virtual member function marked 'final', according to
@@ -7371,6 +7375,11 @@ public:
   /// declaration.
   void AddAssumeAlignedAttr(SourceRange AttrRange, Decl *D, Expr *E, Expr *OE,
                             unsigned SpellingListIndex);
+
+  /// AddAlignValueAttr - Adds an align_value attribute to a particular
+  /// declaration.
+  void AddAlignValueAttr(SourceRange AttrRange, Decl *D, Expr *E,
+                         unsigned SpellingListIndex);
 
   // OpenMP directives and clauses.
 private:
