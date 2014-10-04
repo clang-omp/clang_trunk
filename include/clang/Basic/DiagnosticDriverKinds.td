@@ -22,6 +22,8 @@ def err_drv_unknown_stdin_type_clang_cl : Error<
 def err_drv_unknown_language : Error<"language not recognized: '%0'">;
 def err_drv_invalid_arch_name : Error<
   "invalid arch name '%0'">;
+def err_drv_invalid_thread_model_for_target : Error<
+  "invalid thread model '%0' in '%1' for this target">;
 def err_drv_invalid_linker_name : Error<
   "invalid linker name in argument '%0'">;
 def err_drv_invalid_rtlib_name : Error<
@@ -146,12 +148,6 @@ def warn_drv_clang_unsupported : Warning<
   "the clang compiler does not support '%0'">;
 def warn_drv_assuming_mfloat_abi_is : Warning<
   "unknown platform, assuming -mfloat-abi=%0">;
-def warn_drv_implied_soft_float_assumed : Warning<
-  "%0 implies soft-float, ignoring conflicting option '%1'">,
-  InGroup<DiagGroup<"implied-soft-float-assumed">>;
-def warn_drv_implied_soft_float_conflict : Warning<
-  "%0 implies soft-float, which conflicts with option '%1'">,
-  InGroup<DiagGroup<"implied-soft-float-conflict">>, DefaultError;
 def warn_ignoring_ftabstop_value : Warning<
   "ignoring invalid -ftabstop value '%0', using default value %1">;
 def warn_drv_overriding_flag_option : Warning<

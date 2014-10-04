@@ -1689,9 +1689,6 @@ def override_keyword_hides_virtual_member_function : Error<
   "%select{function|functions}1">;
 def err_function_marked_override_not_overriding : Error<
   "%0 marked 'override' but does not override any member functions">;
-def warn_function_marked_not_override_overriding : Warning <
-  "%0 overrides a member function but is not marked 'override'">,
-  InGroup<CXX11WarnOverrideMethod>;
 def err_class_marked_final_used_as_base : Error<
   "base %0 is marked '%select{final|sealed}1'">;
 def warn_abstract_final_class : Warning<
@@ -2164,6 +2161,8 @@ def err_declspec_thread_on_thread_variable : Error<
   "thread-local storage specifier">;
 def err_attribute_dll_not_extern : Error<
   "%q0 must have external linkage when declared %q1">;
+def err_attribute_dll_thread_local : Error<
+  "%q0 cannot be thread local when declared %q1">;
 def warn_attribute_invalid_on_definition : Warning<
   "'%0' attribute cannot be specified on a definition">,
   InGroup<IgnoredAttributes>;
