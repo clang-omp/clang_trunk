@@ -2618,7 +2618,7 @@ public:
   ObjCProtocolDecl *LookupProtocol(IdentifierInfo *II, SourceLocation IdLoc,
                                    RedeclarationKind Redecl
                                      = NotForRedeclaration);
-  void LookupInSuper(LookupResult &R, CXXRecordDecl *Class);
+  bool LookupInSuper(LookupResult &R, CXXRecordDecl *Class);
 
   void LookupOverloadedOperatorName(OverloadedOperatorKind Op, Scope *S,
                                     QualType T1, QualType T2,
