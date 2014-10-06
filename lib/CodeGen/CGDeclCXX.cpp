@@ -602,8 +602,7 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
         getContext().VoidPtrTy, Args, FunctionType::ExtInfo(), false);
     llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
     llvm::Function *Fn =
-           CreateGlobalInitOrDestructFunction(*this, FTy,
-                                              Twine("__kmpc_ctor_",
+           CreateGlobalInitOrDestructFunction(FTy, Twine("__kmpc_ctor_",
                                                     getMangledName(Var)));
     CGF.StartFunction(GlobalDecl(), getContext().VoidPtrTy, Fn, FI,
                       Args, SourceLocation());
@@ -657,8 +656,7 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
                                                 FunctionType::ExtInfo(), false);
     llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
     llvm::Function *Fn =
-            CreateGlobalInitOrDestructFunction(*this, FTy,
-                                               Twine("__kmpc_cctor_",
+            CreateGlobalInitOrDestructFunction(FTy, Twine("__kmpc_cctor_",
                                                      Var->getName()));
     CGF.StartFunction(GlobalDecl(), getContext().VoidPtrTy, Fn, FI,
                       Args, SourceLocation());
@@ -681,8 +679,7 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
         getContext().VoidPtrTy, Args, FunctionType::ExtInfo(), false);
     llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
     llvm::Function *Fn =
-           CreateGlobalInitOrDestructFunction(*this, FTy,
-                                              Twine("__kmpc_dtor_",
+           CreateGlobalInitOrDestructFunction(FTy, Twine("__kmpc_dtor_",
                                                     getMangledName(Var)));
     CGF.StartFunction(GlobalDecl(), getContext().VoidPtrTy, Fn, FI,
                       Args, SourceLocation());
@@ -734,7 +731,7 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
     }
     llvm::FunctionType *FTy = llvm::FunctionType::get(VoidTy, false);
     InitFunction =
-              CreateGlobalInitOrDestructFunction(*this, FTy,
+              CreateGlobalInitOrDestructFunction(FTy,
                                                  Twine("__omp_threadprivate_",
                                                        getMangledName(Var)));
   }
@@ -778,8 +775,7 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
         getContext().VoidPtrTy, Args, FunctionType::ExtInfo(), false);
     llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
     llvm::Function *Fn =
-           CreateGlobalInitOrDestructFunction(*this, FTy,
-                                              Twine("__kmpc_ctor_vec_",
+           CreateGlobalInitOrDestructFunction(FTy, Twine("__kmpc_ctor_vec_",
                                                     getMangledName(Var)));
     CodeGenFunction CGF(*this);
     CGF.StartFunction(GlobalDecl(), getContext().VoidPtrTy, Fn, FI,
@@ -833,8 +829,7 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
                                                 FunctionType::ExtInfo(), false);
     llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
     llvm::Function *Fn =
-            CreateGlobalInitOrDestructFunction(*this, FTy,
-                                               Twine("__kmpc_cctor_",
+            CreateGlobalInitOrDestructFunction(FTy, Twine("__kmpc_cctor_",
                                                      Var->getName()));
     CGF.StartFunction(GlobalDecl(), getContext().VoidPtrTy, Fn, FI,
                       Args, SourceLocation());
@@ -854,8 +849,7 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
         getContext().VoidPtrTy, Args, FunctionType::ExtInfo(), false);
     llvm::FunctionType *FTy = getTypes().GetFunctionType(FI);
     llvm::Function *Fn =
-           CreateGlobalInitOrDestructFunction(*this, FTy,
-                                              Twine("__kmpc_dtor_vec_",
+           CreateGlobalInitOrDestructFunction(FTy, Twine("__kmpc_dtor_vec_",
                                                     getMangledName(Var)));
     CodeGenFunction CGF(*this);
     CGF.StartFunction(GlobalDecl(), getContext().VoidPtrTy, Fn, FI,
@@ -909,7 +903,7 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
     }
     llvm::FunctionType *FTy = llvm::FunctionType::get(VoidTy, false);
     InitFunction =
-              CreateGlobalInitOrDestructFunction(*this, FTy,
+              CreateGlobalInitOrDestructFunction(FTy,
                                                  Twine("__omp_threadprivate_vec_",
                                                        getMangledName(Var)));
   }
