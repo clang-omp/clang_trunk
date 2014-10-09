@@ -2760,7 +2760,8 @@ GenerateStringLiteral(llvm::Constant *C, llvm::GlobalValue::LinkageTypes LT,
 /// GetAddrOfConstantStringFromLiteral - Return a pointer to a
 /// constant array for the given string literal.
 llvm::GlobalVariable *
-CodeGenModule::GetAddrOfConstantStringFromLiteral(const StringLiteral *S) {
+CodeGenModule::GetAddrOfConstantStringFromLiteral(const StringLiteral *S,
+                                                  StringRef Name) {
   auto Alignment =
       getContext().getAlignOfGlobalVarInChars(S->getType()).getQuantity();
 
@@ -2792,7 +2793,7 @@ CodeGenModule::GetAddrOfConstantStringFromLiteral(const StringLiteral *S) {
     GlobalVariableName = MangledNameBuffer;
   } else {
     LT = llvm::GlobalValue::PrivateLinkage;
-    GlobalVariableName = ".str";
+    GlobalVariableName = Name;
   }
 
   auto GV = GenerateStringLiteral(C, LT, *this, GlobalVariableName, Alignment);
