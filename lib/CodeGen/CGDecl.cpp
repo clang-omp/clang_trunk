@@ -965,6 +965,7 @@ CodeGenFunction::EmitAutoVarAlloca(const VarDecl &D) {
           ->setDoesNotThrow();
       } else {
         assert(!emission.useLifetimeMarkers());
+      }
     }
   } else {
     EnsureInsertPoint();
