@@ -913,6 +913,15 @@ void Clang::AddAArch64TargetArgs(const ArgList &Args,
       CmdArgs.push_back("-aarch64-no-strict-align");
   }
 
+  if (Arg *A = Args.getLastArg(options::OPT_mfix_cortex_a53_835769,
+                               options::OPT_mno_fix_cortex_a53_835769)) {
+    CmdArgs.push_back("-backend-option");
+    if (A->getOption().matches(options::OPT_mfix_cortex_a53_835769))
+      CmdArgs.push_back("-aarch64-fix-cortex-a53-835769=1");
+    else
+      CmdArgs.push_back("-aarch64-fix-cortex-a53-835769=0");
+  }
+
   // Setting -mno-global-merge disables the codegen global merge pass. Setting
   // -mglobal-merge has no effect as the pass is enabled by default.
   if (Arg *A = Args.getLastArg(options::OPT_mglobal_merge,
@@ -5361,7 +5370,7 @@ const char *arm::getLLVMArchSuffixForARM(StringRef CPU) {
     .Cases("arm1176jzf-s",  "mpcorenovfp",  "mpcore", "v6")
     .Cases("arm1156t2-s",  "arm1156t2f-s", "v6t2")
     .Cases("cortex-a5", "cortex-a7", "cortex-a8", "cortex-a9-mp", "v7")
-    .Cases("cortex-a9", "cortex-a12", "cortex-a15", "krait", "v7")
+    .Cases("cortex-a9", "cortex-a12", "cortex-a15", "cortex-a17", "krait", "v7")
     .Cases("cortex-r4", "cortex-r5", "v7r")
     .Case("cortex-m0", "v6m")
     .Case("cortex-m3", "v7m")
