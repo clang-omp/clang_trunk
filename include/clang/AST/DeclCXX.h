@@ -2860,7 +2860,7 @@ public:
 /// \code
 ///    using someNameSpace::someIdentifier;
 /// \endcode
-class UsingDecl : public NamedDecl {
+class UsingDecl : public NamedDecl, public Mergeable<UsingDecl> {
   void anchor() override;
 
   /// \brief The source location of the 'using' keyword itself.
@@ -2984,6 +2984,10 @@ public:
 
   SourceRange getSourceRange() const override LLVM_READONLY;
 
+  /// Retrieves the canonical declaration of this declaration.
+  UsingDecl *getCanonicalDecl() override { return getFirstDecl(); }
+  const UsingDecl *getCanonicalDecl() const { return getFirstDecl(); }
+
   static bool classof(const Decl *D) { return classofKind(D->getKind()); }
   static bool classofKind(Kind K) { return K == Using; }
 
@@ -3002,7 +3006,8 @@ public:
 ///   using Base<T>::foo;
 /// };
 /// \endcode
-class UnresolvedUsingValueDecl : public ValueDecl {
+class UnresolvedUsingValueDecl : public ValueDecl,
+                                 public Mergeable<UnresolvedUsingValueDecl> {
   void anchor() override;
 
   /// \brief The source location of the 'using' keyword
@@ -3058,6 +3063,14 @@ public:
 
   SourceRange getSourceRange() const override LLVM_READONLY;
 
+  /// Retrieves the canonical declaration of this declaration.
+  UnresolvedUsingValueDecl *getCanonicalDecl() override {
+    return getFirstDecl();
+  }
+  const UnresolvedUsingValueDecl *getCanonicalDecl() const {
+    return getFirstDecl();
+  }
+
   static bool classof(const Decl *D) { return classofKind(D->getKind()); }
   static bool classofKind(Kind K) { return K == UnresolvedUsingValue; }
 
@@ -3076,7 +3089,9 @@ public:
 ///
 /// The type associated with an unresolved using typename decl is
 /// currently always a typename type.
-class UnresolvedUsingTypenameDecl : public TypeDecl {
+class UnresolvedUsingTypenameDecl
+    : public TypeDecl,
+      public Mergeable<UnresolvedUsingTypenameDecl> {
   void anchor() override;
 
   /// \brief The source location of the 'typename' keyword
@@ -3119,6 +3134,14 @@ public:
 
   static UnresolvedUsingTypenameDecl *
   CreateDeserialized(ASTContext &C, unsigned ID);
+
+  /// Retrieves the canonical declaration of this declaration.
+  UnresolvedUsingTypenameDecl *getCanonicalDecl() override {
+    return getFirstDecl();
+  }
+  const UnresolvedUsingTypenameDecl *getCanonicalDecl() const {
+    return getFirstDecl();
+  }
 
   static bool classof(const Decl *D) { return classofKind(D->getKind()); }
   static bool classofKind(Kind K) { return K == UnresolvedUsingTypename; }
