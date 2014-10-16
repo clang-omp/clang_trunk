@@ -319,8 +319,7 @@ void CGRecordLowering::lowerUnion() {
         getAlignment(FieldType) >  getAlignment(StorageType) ||
         (getAlignment(FieldType) == getAlignment(StorageType) &&
         getSize(FieldType) > getSize(StorageType)))
-      if (!InitializingMemberIsNonZero)
-        StorageType = FieldType;
+      StorageType = FieldType;
   }
   // If we have no storage type just pad to the appropriate size and return.
   if (!StorageType)
