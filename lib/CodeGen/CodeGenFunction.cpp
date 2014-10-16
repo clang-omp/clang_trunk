@@ -37,9 +37,10 @@ CodeGenFunction::CodeGenFunction(CodeGenModule &cgm, bool suppressNewContext)
     : CodeGenTypeCache(cgm), CGM(cgm), Target(cgm.getTarget()),
       Builder(cgm.getModule().getContext(), llvm::ConstantFolder(),
               CGBuilderInserterTy(this)), OpenMPRoot(0),
-      CapturedStmtInfo(nullptr), SanOpts(&CGM.getLangOpts().Sanitize),
-      IsSanitizerScope(false), CurFuncIsThunk(false), AutoreleaseResult(false),
-      SawAsmBlock(false), BlockInfo(nullptr), BlockPointer(nullptr),
+      CurFn(nullptr), CapturedStmtInfo(nullptr),
+      SanOpts(&CGM.getLangOpts().Sanitize), IsSanitizerScope(false),
+      CurFuncIsThunk(false), AutoreleaseResult(false), SawAsmBlock(false),
+      BlockInfo(nullptr), BlockPointer(nullptr),
       LambdaThisCaptureField(nullptr), NormalCleanupDest(nullptr),
       NextCleanupDestIndex(1), FirstBlockInfo(nullptr), EHResumeBlock(nullptr),
       ExceptionSlot(nullptr), EHSelectorSlot(nullptr),
@@ -567,6 +568,9 @@ void CodeGenFunction::StartFunction(GlobalDecl GD,
                                     const FunctionArgList &Args,
                                     SourceLocation Loc,
                                     SourceLocation StartLoc) {
+  assert(!CurFn &&
+         "Do not use a CodeGenFunction object for more than one function");
+
   const Decl *D = GD.getDecl();
 
   DidCallStackSave = false;
