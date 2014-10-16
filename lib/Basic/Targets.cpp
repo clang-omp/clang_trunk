@@ -1288,18 +1288,25 @@ public:
     IntMaxType = SignedLong;
     Int64Type = SignedLong;
 
-    if (getTriple().getOS() == llvm::Triple::FreeBSD) {
+    if ((Triple.getArch() == llvm::Triple::ppc64le)) {
+      DescriptionString = "e-m:e-i64:64-n32:64";
+      ABI = "elfv2";
+    } else {
+      DescriptionString = "E-m:e-i64:64-n32:64";
+      ABI = "elfv1";
+    }
+
+    switch (getTriple().getOS()) {
+    case llvm::Triple::FreeBSD:
       LongDoubleWidth = LongDoubleAlign = 64;
       LongDoubleFormat = &llvm::APFloat::IEEEdouble;
-      DescriptionString = "E-m:e-i64:64-n32:64";
-    } else {
-      if ((Triple.getArch() == llvm::Triple::ppc64le)) {
-        DescriptionString = "e-m:e-i64:64-n32:64";
-        ABI = "elfv2";
-      } else {
-        DescriptionString = "E-m:e-i64:64-n32:64";
-        ABI = "elfv1";
-      }
+      break;
+    case llvm::Triple::NetBSD:
+      IntMaxType = SignedLongLong;
+      Int64Type = SignedLongLong;
+      break;
+    default:
+      break;
     }
 
     // PPC64 supports atomics up to 8 bytes.
