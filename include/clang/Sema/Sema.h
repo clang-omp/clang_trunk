@@ -4040,7 +4040,8 @@ public:
 
   /// \brief Check the given exception-specification and update the
   /// exception specification information with the results.
-  void checkExceptionSpecification(ExceptionSpecificationType EST,
+  void checkExceptionSpecification(bool IsTopLevel,
+                                   ExceptionSpecificationType EST,
                                    ArrayRef<ParsedType> DynamicExceptions,
                                    ArrayRef<SourceRange> DynamicExceptionRanges,
                                    Expr *NoexceptExpr,
@@ -6108,6 +6109,8 @@ public:
   bool DeduceReturnType(FunctionDecl *FD, SourceLocation Loc,
                         bool Diagnose = true);
 
+  TypeLoc getReturnTypeLoc(FunctionDecl *FD) const;
+
   bool DeduceFunctionTypeFromReturnExpr(FunctionDecl *FD,
                                         SourceLocation ReturnLoc,
                                         Expr *&RetExpr, AutoType *AT);
@@ -6682,6 +6685,8 @@ public:
                                         DeclarationName Entity,
                                         CXXRecordDecl *ThisContext,
                                         unsigned ThisTypeQuals);
+  void SubstExceptionSpec(FunctionDecl *New, const FunctionProtoType *Proto,
+                          const MultiLevelTemplateArgumentList &Args);
   ParmVarDecl *SubstParmVarDecl(ParmVarDecl *D,
                             const MultiLevelTemplateArgumentList &TemplateArgs,
                                 int indexAdjustment,
@@ -7227,29 +7232,6 @@ public:
     PSK_CodeSeg,
   };
 
-  enum PragmaSectionFlag : unsigned {
-    PSF_None = 0,
-    PSF_Read = 0x1,
-    PSF_Write = 0x2,
-    PSF_Execute = 0x4,
-    PSF_Implicit = 0x8,
-    PSF_Invalid = 0x80000000U,
-  };
-
-  struct SectionInfo {
-    DeclaratorDecl *Decl;
-    SourceLocation PragmaSectionLocation;
-    int SectionFlags;
-    SectionInfo() {}
-    SectionInfo(DeclaratorDecl *Decl,
-                SourceLocation PragmaSectionLocation,
-                int SectionFlags)
-      : Decl(Decl),
-        PragmaSectionLocation(PragmaSectionLocation),
-        SectionFlags(SectionFlags) {}
-  };
-
-  llvm::StringMap<SectionInfo> SectionInfos;
   bool UnifySection(StringRef SectionName,
                     int SectionFlags,
                     DeclaratorDecl *TheDecl);

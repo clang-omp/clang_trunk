@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 #include "clang/Basic/SanitizerBlacklist.h"
-#include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Module.h"
 
@@ -29,26 +28,33 @@ static StringRef GetGlobalTypeString(const llvm::GlobalValue &G) {
   return "<unknown type>";
 }
 
-SanitizerBlacklist::SanitizerBlacklist(const std::string &BlacklistPath)
-    : SCL(llvm::SpecialCaseList::createOrDie(BlacklistPath)) {}
-
-bool SanitizerBlacklist::isIn(const llvm::Module &M,
-                              StringRef Category) const {
-  return SCL->inSection("src", M.getModuleIdentifier(), Category);
-}
-
-bool SanitizerBlacklist::isIn(const llvm::Function &F) const {
-  return isIn(*F.getParent()) ||
-         SCL->inSection("fun", F.getName(), "");
-}
+SanitizerBlacklist::SanitizerBlacklist(StringRef BlacklistPath,
+                                       SourceManager &SM)
+    : SCL(llvm::SpecialCaseList::createOrDie(BlacklistPath)), SM(SM) {}
 
 bool SanitizerBlacklist::isIn(const llvm::GlobalVariable &G,
                               StringRef Category) const {
-  return isIn(*G.getParent(), Category) ||
+  return isBlacklistedFile(G.getParent()->getModuleIdentifier(), Category) ||
          SCL->inSection("global", G.getName(), Category) ||
          SCL->inSection("type", GetGlobalTypeString(G), Category);
 }
 
-bool SanitizerBlacklist::isBlacklistedType(StringRef MangledTypeName) const {
-  return SCL->inSection("type", MangledTypeName);
+bool SanitizerBlacklist::isBlacklistedType(StringRef MangledTypeName,
+                                           StringRef Category) const {
+  return SCL->inSection("type", MangledTypeName, Category);
 }
+
+bool SanitizerBlacklist::isBlacklistedFunction(StringRef FunctionName) const {
+  return SCL->inSection("fun", FunctionName);
+}
+
+bool SanitizerBlacklist::isBlacklistedFile(StringRef FileName,
+                                           StringRef Category) const {
+  return SCL->inSection("src", FileName, Category);
+}
+
+bool SanitizerBlacklist::isBlacklistedLocation(SourceLocation Loc,
+                                               StringRef Category) const {
+  return !Loc.isInvalid() && isBlacklistedFile(SM.getFilename(Loc), Category);
+}
+

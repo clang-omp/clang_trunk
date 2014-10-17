@@ -920,6 +920,10 @@ void Clang::AddAArch64TargetArgs(const ArgList &Args,
       CmdArgs.push_back("-aarch64-fix-cortex-a53-835769=1");
     else
       CmdArgs.push_back("-aarch64-fix-cortex-a53-835769=0");
+  } else if (Triple.getEnvironment() == llvm::Triple::Android) {
+    // Enabled A53 errata (835769) workaround by default on android
+    CmdArgs.push_back("-backend-option");
+    CmdArgs.push_back("-aarch64-fix-cortex-a53-835769=1");
   }
 
   // Setting -mno-global-merge disables the codegen global merge pass. Setting
@@ -3825,13 +3829,11 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   // -fmodule-name specifies the module that is currently being built (or
   // used for header checking by -fmodule-maps).
-  if (Arg *A = Args.getLastArg(options::OPT_fmodule_name))
-    A->render(Args, CmdArgs);
+  Args.AddLastArg(CmdArgs, options::OPT_fmodule_name);
 
-  // -fmodule-map-file can be used to specify a file containing module
+  // -fmodule-map-file can be used to specify files containing module
   // definitions.
-  if (Arg *A = Args.getLastArg(options::OPT_fmodule_map_file))
-    A->render(Args, CmdArgs);
+  Args.AddAllArgs(CmdArgs, options::OPT_fmodule_map_file);
 
   // -fmodule-cache-path specifies where our module files should be written.
   SmallString<128> ModuleCachePath;
@@ -3866,9 +3868,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(Args.MakeArgString(VFSDir));
   }
 
-  if (Arg *A = Args.getLastArg(options::OPT_fmodules_user_build_path))
-    if (HaveModules)
-      A->render(Args, CmdArgs);
+  if (HaveModules)
+    Args.AddLastArg(CmdArgs, options::OPT_fmodules_user_build_path);
 
   // Pass through all -fmodules-ignore-macro arguments.
   Args.AddAllArgs(CmdArgs, options::OPT_fmodules_ignore_macro);

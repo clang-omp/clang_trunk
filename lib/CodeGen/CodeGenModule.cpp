@@ -739,7 +739,7 @@ void CodeGenModule::SetLLVMFunctionAttributesForDefinition(const Decl *D,
     B.addAttribute(llvm::Attribute::StackProtectReq);
 
   // Add sanitizer attributes if function is not blacklisted.
-  if (!getSanitizerBlacklist().isIn(*F)) {
+  if (!isInSanitizerBlacklist(F, D->getLocation())) {
     // When AddressSanitizer is enabled, set SanitizeAddress attribute
     // unless __attribute__((no_sanitize_address)) is used.
     if (LangOpts.Sanitize.Address && !D->hasAttr<NoSanitizeAddressAttr>())
@@ -1172,6 +1172,24 @@ void CodeGenModule::AddGlobalAnnotations(const ValueDecl *D,
   // Get the struct elements for these annotations.
   for (const auto *I : D->specific_attrs<AnnotateAttr>())
     Annotations.push_back(EmitAnnotateAttr(GV, I, D->getLocation()));
+}
+
+bool CodeGenModule::isInSanitizerBlacklist(llvm::Function *Fn,
+                                           SourceLocation Loc) const {
+  const auto &SanitizerBL = getContext().getSanitizerBlacklist();
+  // Blacklist by function name.
+  if (SanitizerBL.isBlacklistedFunction(Fn->getName()))
+    return true;
+  // Blacklist by location.
+  if (!Loc.isInvalid())
+    return SanitizerBL.isBlacklistedLocation(Loc);
+  // If location is unknown, this may be a compiler-generated function. Assume
+  // it's located in the main file.
+  auto &SM = Context.getSourceManager();
+  if (const auto *MainFile = SM.getFileEntryForID(SM.getMainFileID())) {
+    return SanitizerBL.isBlacklistedFile(MainFile->getName());
+  }
+  return false;
 }
 
 bool CodeGenModule::MayDeferGeneration(const ValueDecl *Global) {
@@ -1947,6 +1965,13 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D) {
   // If it is safe to mark the global 'constant', do so now.
   GV->setConstant(!NeedsGlobalCtor && !NeedsGlobalDtor &&
                   isTypeConstant(D->getType(), true));
+
+  // If it is in a read-only section, mark it 'constant'.
+  if (const SectionAttr *SA = D->getAttr<SectionAttr>()) {
+    const ASTContext::SectionInfo &SI = Context.SectionInfos[SA->getName()];
+    if ((SI.SectionFlags & ASTContext::PSF_Write) == 0)
+      GV->setConstant(true);
+  }
 
   GV->setAlignment(getContext().getDeclAlign(D).getQuantity());
 

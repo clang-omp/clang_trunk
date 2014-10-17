@@ -1395,6 +1395,7 @@ public:
   void EmitLambdaBlockInvokeBody();
   void EmitLambdaDelegatingInvokeBody(const CXXMethodDecl *MD);
   void EmitLambdaStaticInvokeFunction(const CXXMethodDecl *MD);
+  void EmitAsanPrologueOrEpilogue(bool Prologue);
 
   /// EmitReturnBlock - Emit the unified return block, trying to avoid its
   /// emission when possible.
