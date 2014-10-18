@@ -378,9 +378,10 @@ bool Type::isInterfaceType() const {
   return false;
 }
 bool Type::isStructureOrClassType() const {
-  if (const RecordType *RT = getAs<RecordType>())
-    return RT->getDecl()->isStruct() || RT->getDecl()->isClass() ||
-      RT->getDecl()->isInterface();
+  if (const RecordType *RT = getAs<RecordType>()) {
+    RecordDecl *RD = RT->getDecl();
+    return RD->isStruct() || RD->isClass() || RD->isInterface();
+  }
   return false;
 }
 bool Type::isVoidPointerType() const {
@@ -1623,9 +1624,9 @@ FunctionProtoType::FunctionProtoType(QualType result, ArrayRef<QualType> params,
     QualType *exnSlot = argSlot + NumParams;
     unsigned I = 0;
     for (QualType ExceptionType : epi.ExceptionSpec.Exceptions) {
-      // Note that a dependent exception specification does *not* make
-      // a type dependent; it's not even part of the C++ type system.
-      if (ExceptionType->isInstantiationDependentType())
+      if (ExceptionType->isDependentType())
+        setDependent();
+      else if (ExceptionType->isInstantiationDependentType())
         setInstantiationDependent();
 
       if (ExceptionType->containsUnexpandedParameterPack())
@@ -1639,12 +1640,11 @@ FunctionProtoType::FunctionProtoType(QualType result, ArrayRef<QualType> params,
     *noexSlot = epi.ExceptionSpec.NoexceptExpr;
 
     if (epi.ExceptionSpec.NoexceptExpr) {
-      if (epi.ExceptionSpec.NoexceptExpr->isValueDependent() ||
-          epi.ExceptionSpec.NoexceptExpr->isInstantiationDependent())
+      if (epi.ExceptionSpec.NoexceptExpr->isValueDependent() 
+          || epi.ExceptionSpec.NoexceptExpr->isTypeDependent())
+        setDependent();
+      else if (epi.ExceptionSpec.NoexceptExpr->isInstantiationDependent())
         setInstantiationDependent();
-
-      if (epi.ExceptionSpec.NoexceptExpr->containsUnexpandedParameterPack())
-        setContainsUnexpandedParameterPack();
     }
   } else if (getExceptionSpecType() == EST_Uninstantiated) {
     // Store the function decl from which we will resolve our
@@ -1668,18 +1668,6 @@ FunctionProtoType::FunctionProtoType(QualType result, ArrayRef<QualType> params,
     for (unsigned i = 0; i != NumParams; ++i)
       consumedParams[i] = epi.ConsumedParameters[i];
   }
-}
-
-bool FunctionProtoType::hasDependentExceptionSpec() const {
-  if (Expr *NE = getNoexceptExpr())
-    return NE->isValueDependent();
-  for (QualType ET : exceptions())
-    // A pack expansion with a non-dependent pattern is still dependent,
-    // because we don't know whether the pattern is in the exception spec
-    // or not (that depends on whether the pack has 0 expansions).
-    if (ET->isDependentType() || ET->getAs<PackExpansionType>())
-      return true;
-  return false;
 }
 
 FunctionProtoType::NoexceptResult
@@ -1992,32 +1980,14 @@ anyDependentTemplateArguments(const TemplateArgumentLoc *Args, unsigned N,
   return false;
 }
 
-#ifndef NDEBUG
-static bool 
-anyDependentTemplateArguments(const TemplateArgument *Args, unsigned N,
-                              bool &InstantiationDependent) {
-  for (unsigned i = 0; i != N; ++i) {
-    if (Args[i].isDependent()) {
-      InstantiationDependent = true;
-      return true;
-    }
-    
-    if (Args[i].isInstantiationDependent())
-      InstantiationDependent = true;
-  }
-  return false;
-}
-#endif
-
 TemplateSpecializationType::
 TemplateSpecializationType(TemplateName T,
                            const TemplateArgument *Args, unsigned NumArgs,
                            QualType Canon, QualType AliasedType)
   : Type(TemplateSpecialization,
          Canon.isNull()? QualType(this, 0) : Canon,
-         Canon.isNull()? T.isDependent() : Canon->isDependentType(),
-         Canon.isNull()? T.isDependent() 
-                       : Canon->isInstantiationDependentType(),
+         Canon.isNull()? true : Canon->isDependentType(),
+         Canon.isNull()? true : Canon->isInstantiationDependentType(),
          false,
          T.containsUnexpandedParameterPack()),
     Template(T), NumArgs(NumArgs), TypeAlias(!AliasedType.isNull()) {
@@ -2027,18 +1997,11 @@ TemplateSpecializationType(TemplateName T,
           T.getKind() == TemplateName::SubstTemplateTemplateParm ||
           T.getKind() == TemplateName::SubstTemplateTemplateParmPack) &&
          "Unexpected template name for TemplateSpecializationType");
-  bool InstantiationDependent;
-  (void)InstantiationDependent;
-  assert((!Canon.isNull() ||
-          T.isDependent() || 
-          ::anyDependentTemplateArguments(Args, NumArgs, 
-                                          InstantiationDependent)) &&
-         "No canonical type for non-dependent class template specialization");
 
   TemplateArgument *TemplateArgs
     = reinterpret_cast<TemplateArgument *>(this + 1);
   for (unsigned Arg = 0; Arg < NumArgs; ++Arg) {
-    // Update dependent and variably-modified bits.
+    // Update instantiation-dependent and variably-modified bits.
     // If the canonical type exists and is non-dependent, the template
     // specialization type can be non-dependent even if one of the type
     // arguments is. Given:
@@ -2046,17 +2009,13 @@ TemplateSpecializationType(TemplateName T,
     // U<T> is always non-dependent, irrespective of the type T.
     // However, U<Ts> contains an unexpanded parameter pack, even though
     // its expansion (and thus its desugared type) doesn't.
-    if (Canon.isNull() && Args[Arg].isDependent())
-      setDependent();
-    else if (Args[Arg].isInstantiationDependent())
+    if (Args[Arg].isInstantiationDependent())
       setInstantiationDependent();
-    
     if (Args[Arg].getKind() == TemplateArgument::Type &&
         Args[Arg].getAsType()->isVariablyModifiedType())
       setVariablyModified();
     if (Args[Arg].containsUnexpandedParameterPack())
       setContainsUnexpandedParameterPack();
-
     new (&TemplateArgs[Arg]) TemplateArgument(Args[Arg]);
   }
 

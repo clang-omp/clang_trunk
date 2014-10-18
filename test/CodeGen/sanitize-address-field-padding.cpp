@@ -1,8 +1,8 @@
 // Test -fsanitize-address-field-padding
 // RUN: echo 'type:SomeNamespace::BlacklistedByName=field-padding' > %t.type.blacklist
 // RUN: echo 'src:*sanitize-address-field-padding.cpp=field-padding' > %t.file.blacklist
-// RUN: %clang_cc1 -fsanitize=address -fsanitize-address-field-padding=1 -fsanitize-blacklist=%t.type.blacklist -Rsanitize-address -emit-llvm -o - %s 2>&1 | FileCheck %s
-// RUN: %clang_cc1 -fsanitize=address -fsanitize-address-field-padding=1 -fsanitize-blacklist=%t.file.blacklist -Rsanitize-address -emit-llvm -o - %s 2>&1 | FileCheck %s --check-prefix=FILE_BLACKLIST
+// RUN: %clang_cc1 -triple x86_64-unknown-unknown -fsanitize=address -fsanitize-address-field-padding=1 -fsanitize-blacklist=%t.type.blacklist -Rsanitize-address -emit-llvm -o - %s 2>&1 | FileCheck %s
+// RUN: %clang_cc1 -triple x86_64-unknown-unknown -fsanitize=address -fsanitize-address-field-padding=1 -fsanitize-blacklist=%t.file.blacklist -Rsanitize-address -emit-llvm -o - %s 2>&1 | FileCheck %s --check-prefix=FILE_BLACKLIST
 // RUN: %clang_cc1 -fsanitize=address -emit-llvm -o - %s 2>&1 | FileCheck %s --check-prefix=NO_PADDING
 // REQUIRES: shell
 //
@@ -38,6 +38,23 @@ class Positive1 {
 Positive1 positive1;
 // Positive1 with extra paddings
 // CHECK: type { i32, [12 x i8], i8, [15 x i8], i32, [12 x i8], [6 x i16], [12 x i8], i64, [8 x i8] }
+
+struct VirtualBase {
+  int foo;
+};
+
+class ClassWithVirtualBase : public virtual VirtualBase {
+ public:
+  ClassWithVirtualBase() {}
+  ~ClassWithVirtualBase() {}
+  int make_it_non_standard_layout;
+ private:
+  char x[7];
+  char y[9];
+};
+
+ClassWithVirtualBase class_with_virtual_base;
+
 
 class Negative1 {
  public:
@@ -120,7 +137,7 @@ class ExternCStruct {
 ExternCStruct extern_C_struct;
 
 // CTOR
-// CHECK-LABEL: define linkonce_odr void {{.*}}Positive1
+// CHECK-LABEL: define {{.*}}Positive1C1Ev
 // CHECK: call void @__asan_poison_intra_object_redzone({{.*}}12)
 // CHECK: call void @__asan_poison_intra_object_redzone({{.*}}15)
 // CHECK: call void @__asan_poison_intra_object_redzone({{.*}}12)
@@ -137,3 +154,12 @@ ExternCStruct extern_C_struct;
 // CHECK: call void @__asan_unpoison_intra_object_redzone({{.*}}8)
 // CHECK-NOT: __asan_unpoison_intra_object_redzone
 // CHECK: ret void
+//
+//
+// CHECK-LABEL: define linkonce_odr void @_ZN20ClassWithVirtualBaseC1Ev
+// CHECK: call void @__asan_poison_intra_object_redzone({{.*}} 12)
+// CHECK: call void @__asan_poison_intra_object_redzone({{.*}} 9)
+// CHECK: call void @__asan_poison_intra_object_redzone({{.*}} 15)
+// CHECK-NOT: __asan_poison_intra_object_redzone
+// CHECK: ret void
+//

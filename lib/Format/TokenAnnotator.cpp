@@ -1791,6 +1791,12 @@ bool TokenAnnotator::mustBreakBefore(const AnnotatedLine &Line,
 bool TokenAnnotator::canBreakBefore(const AnnotatedLine &Line,
                                     const FormatToken &Right) {
   const FormatToken &Left = *Right.Previous;
+
+  if (Style.Language == FormatStyle::LK_Java) {
+    if (Left.is(tok::identifier) && Left.TokenText == "throws")
+      return false;
+  }
+
   if (Left.is(tok::at))
     return false;
   if (Left.Tok.getObjCKeywordID() == tok::objc_interface)
@@ -1896,7 +1902,7 @@ bool TokenAnnotator::canBreakBefore(const AnnotatedLine &Line,
     return true;
   return Left.isOneOf(tok::comma, tok::coloncolon, tok::semi, tok::l_brace,
                       tok::kw_class, tok::kw_struct) ||
-         Right.isMemberAccess() ||
+         Right.isMemberAccess() || Right.Type == TT_TrailingReturnArrow ||
          Right.isOneOf(tok::lessless, tok::colon, tok::l_square, tok::at) ||
          (Left.is(tok::r_paren) &&
           Right.isOneOf(tok::identifier, tok::kw_const)) ||
