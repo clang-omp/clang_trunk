@@ -170,3 +170,14 @@ void g30() {
   // CHECK: @g30.a = internal global %struct.anon.1 <{ i8 undef, i32 0 }>, align 1
 #pragma pack()
 }
+
+void g31() {
+#pragma pack(4)
+  static struct {
+    short a;
+    long x;
+    short z;
+  } a = {23122, -12312731, -312};
+#pragma pack()
+  // CHECK: @g31.a = internal global %struct.anon.2 { i16 23122, i32 -12312731, i16 -312 }, align 4
+}
