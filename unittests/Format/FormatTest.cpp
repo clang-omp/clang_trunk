@@ -8924,6 +8924,11 @@ TEST_F(FormatTest, BreakConstructorInitializersBeforeComma) {
                Style);
 }
 
+TEST_F(FormatTest, Destructors) {
+  verifyFormat("void F(int &i) { i.~int(); }");
+  verifyFormat("void F(int &i) { i->~int(); }");
+}
+
 TEST_F(FormatTest, FormatsWithWebKitStyle) {
   FormatStyle Style = getWebKitStyle();
 
@@ -9157,6 +9162,7 @@ TEST_F(FormatTest, FormatsBlocks) {
 
   verifyFormat("foo(^{ bar(); });");
   verifyFormat("foo(a, ^{ bar(); });");
+  verifyFormat("{ void (^block)(Object *x); }");
 
   verifyFormat("[operation setCompletionBlock:^{ [self onOperationDone]; }];");
   verifyFormat("int i = {[operation setCompletionBlock:^{ [self "
