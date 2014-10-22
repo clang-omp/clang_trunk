@@ -413,6 +413,11 @@ private:
       } else if (Contexts.size() == 1 &&
                  !Line.First->isOneOf(tok::kw_enum, tok::kw_case)) {
         Tok->Type = TT_InheritanceColon;
+      } else if (Tok->Previous->is(tok::identifier) && Tok->Next &&
+                 Tok->Next->isOneOf(tok::r_paren, tok::comma)) {
+        // This handles a special macro in ObjC code where selectors including
+        // the colon are passed as macro arguments.
+        Tok->Type = TT_ObjCMethodExpr;
       } else if (Contexts.back().ContextKind == tok::l_paren) {
         Tok->Type = TT_InlineASMColon;
       }
@@ -1035,11 +1040,7 @@ static int PrecedenceArrowAndPeriod = prec::PointerToMember + 2;
 /// operator precedence.
 class ExpressionParser {
 public:
-  ExpressionParser(AnnotatedLine &Line) : Current(Line.First) {
-    // Skip leading "}", e.g. in "} else if (...) {".
-    if (Current->is(tok::r_brace))
-      next();
-  }
+  ExpressionParser(AnnotatedLine &Line) : Current(Line.First) {}
 
   /// \brief Parse expressions with the given operatore precedence.
   void parse(int Precedence = 0) {
@@ -1086,7 +1087,7 @@ public:
 
       // At the end of the line or when an operator with higher precedence is
       // found, insert fake parenthesis and return.
-      if (!Current || Current->closesScope() ||
+      if (!Current || (Current->closesScope() && Current->MatchingParen) ||
           (CurrentPrecedence != -1 && CurrentPrecedence < Precedence)) {
         if (LatestOperator) {
           LatestOperator->LastOperator = true;
@@ -1697,6 +1698,10 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
     return true;
   if (Tok.Previous->Type == TT_TemplateCloser && Tok.is(tok::l_paren))
     return Style.SpaceBeforeParens == FormatStyle::SBPO_Always;
+  if (Tok.Type == TT_TemplateOpener && Tok.Previous->is(tok::r_paren) &&
+      Tok.Previous->MatchingParen &&
+      Tok.Previous->MatchingParen->Type == TT_OverloadedOperatorLParen)
+    return false;
   if (Tok.is(tok::less) && Tok.Previous->isNot(tok::l_paren) &&
       Line.First->is(tok::hash))
     return true;

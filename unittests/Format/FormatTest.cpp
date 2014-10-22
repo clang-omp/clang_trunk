@@ -2311,6 +2311,16 @@ TEST_F(FormatTest, NestedStaticInitializers) {
       "                 {kOsWin, \"Windows\"},\n"
       "                 {kOsLinux, \"Linux\"},\n"
       "                 {kOsCrOS, \"Chrome OS\"}};");
+  verifyFormat(
+      "struct {\n"
+      "  unsigned bit;\n"
+      "  const char *const name;\n"
+      "} kBitsToOs[] = {\n"
+      "    {kOsMac, \"Mac\"},\n"
+      "    {kOsWin, \"Windows\"},\n"
+      "    {kOsLinux, \"Linux\"},\n"
+      "    {kOsCrOS, \"Chrome OS\"},\n"
+      "};");
 }
 
 TEST_F(FormatTest, FormatsSmallMacroDefinitionsInSingleLine) {
@@ -4834,6 +4844,7 @@ TEST_F(FormatTest, UnderstandsOverloadedOperators) {
                "  return left.group < right.group;\n"
                "}");
   verifyFormat("SomeType &operator=(const SomeType &S);");
+  verifyFormat("f.template operator()<int>();");
 
   verifyGoogleFormat("operator void*();");
   verifyGoogleFormat("operator SomeType<SomeType<int>>();");
@@ -6529,6 +6540,7 @@ TEST_F(FormatTest, FormatObjCMethodExpr) {
   verifyFormat("return in[42];");
   verifyFormat("for (id foo in [self getStuffFor:bla]) {\n"
                "}");
+  verifyFormat("[self aaaaa:MACRO(a, b:, c:)];");
 
   verifyFormat("[self stuffWithInt:(4 + 2) float:4.5];");
   verifyFormat("[self stuffWithInt:a ? b : c float:4.5];");
