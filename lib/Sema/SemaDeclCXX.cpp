@@ -2525,6 +2525,9 @@ namespace {
 
     const CXXRecordDecl *RD = Constructor->getParent();
 
+    if (RD->getDescribedClassTemplate())
+      return;
+
     // Holds fields that are uninitialized.
     llvm::SmallPtrSet<ValueDecl*, 4> UninitializedFields;
 

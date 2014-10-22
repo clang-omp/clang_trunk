@@ -57,6 +57,7 @@ TEST_F(FormatTestJava, ClassDeclarations) {
                "    int j;\n"
                "  }\n"
                "}");
+  verifyFormat("public class A extends B.C {}");
 }
 
 TEST_F(FormatTestJava, ThrowsDeclarations) {
@@ -70,7 +71,35 @@ TEST_F(FormatTestJava, Annotations) {
   verifyFormat("@Override\n"
                "@Nullable\n"
                "public String getNameIfPresent() {\n}");
+
+  verifyFormat("@SuppressWarnings(value = \"unchecked\")\n"
+               "public void doSomething() {\n}");
+  verifyFormat("@SuppressWarnings(value = \"unchecked\")\n"
+               "@Author(name = \"abc\")\n"
+               "public void doSomething() {\n}");
+
+  verifyFormat("DoSomething(new A() {\n"
+               "  @Override\n"
+               "  public String toString() {\n"
+               "  }\n"
+               "});");
+
   verifyFormat("@Partial @Mock DataLoader loader;");
+  verifyFormat("@SuppressWarnings(value = \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\")\n"
+               "public static int iiiiiiiiiiiiiiiiiiiiiiii;");
+}
+
+TEST_F(FormatTestJava, Generics) {
+  verifyFormat("Iterable<?> a;");
+  verifyFormat("Iterable<?> a;");
+  verifyFormat("Iterable<? extends SomeObject> a;");
+
+  verifyFormat("A.<B>doSomething();");
+}
+
+TEST_F(FormatTestJava, StringConcatenation) {
+  verifyFormat("String someString = \"abc\"\n"
+               "                    + \"cde\";");
 }
 
 } // end namespace tooling

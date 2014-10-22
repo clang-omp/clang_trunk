@@ -575,8 +575,14 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
     NeedLocTracking = true;
   }
 
-  // If the user requested one of the flags in the -Rpass family, make sure
-  // that the backend tracks source location information.
+  // If the user requested to use a sample profile for PGO, then the
+  // backend will need to track source location information so the profile
+  // can be incorporated into the IR.
+  if (!Opts.SampleProfileFile.empty())
+    NeedLocTracking = true;
+
+  // If the user requested a flag that requires source locations available in
+  // the backend, make sure that the backend tracks source location information.
   if (NeedLocTracking && Opts.getDebugInfo() == CodeGenOptions::NoDebugInfo)
     Opts.setDebugInfo(CodeGenOptions::LocTrackingOnly);
 
@@ -838,7 +844,8 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
   Opts.ASTDumpLookups = Args.hasArg(OPT_ast_dump_lookups);
   Opts.UseGlobalModuleIndex = !Args.hasArg(OPT_fno_modules_global_index);
   Opts.GenerateGlobalModuleIndex = Opts.UseGlobalModuleIndex;
-  
+  Opts.ModuleFiles = Args.getAllArgValues(OPT_fmodule_file);
+
   Opts.CodeCompleteOpts.IncludeMacros
     = Args.hasArg(OPT_code_completion_macros);
   Opts.CodeCompleteOpts.IncludeCodePatterns

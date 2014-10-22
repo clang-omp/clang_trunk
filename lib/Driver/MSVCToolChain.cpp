@@ -38,42 +38,42 @@ using namespace clang::driver::toolchains;
 using namespace clang;
 using namespace llvm::opt;
 
-Windows::Windows(const Driver &D, const llvm::Triple& Triple,
-                 const ArgList &Args)
+MSVCToolChain::MSVCToolChain(const Driver &D, const llvm::Triple& Triple,
+                             const ArgList &Args)
   : ToolChain(D, Triple, Args) {
 }
 
-Tool *Windows::buildLinker() const {
+Tool *MSVCToolChain::buildLinker() const {
   return new tools::visualstudio::Link(*this);
 }
 
-Tool *Windows::buildAssembler() const {
+Tool *MSVCToolChain::buildAssembler() const {
   if (getTriple().isOSBinFormatMachO())
     return new tools::darwin::Assemble(*this);
   getDriver().Diag(clang::diag::err_no_external_assembler);
   return nullptr;
 }
 
-bool Windows::IsIntegratedAssemblerDefault() const {
+bool MSVCToolChain::IsIntegratedAssemblerDefault() const {
   return true;
 }
 
-bool Windows::IsUnwindTablesDefault() const {
+bool MSVCToolChain::IsUnwindTablesDefault() const {
   // Emit unwind tables by default on Win64. All non-x86_32 Windows platforms
   // such as ARM and PPC actually require unwind tables, but LLVM doesn't know
   // how to generate them yet.
   return getArch() == llvm::Triple::x86_64;
 }
 
-bool Windows::isPICDefault() const {
+bool MSVCToolChain::isPICDefault() const {
   return getArch() == llvm::Triple::x86_64;
 }
 
-bool Windows::isPIEDefault() const {
+bool MSVCToolChain::isPIEDefault() const {
   return false;
 }
 
-bool Windows::isPICDefaultForced() const {
+bool MSVCToolChain::isPICDefaultForced() const {
   return getArch() == llvm::Triple::x86_64;
 }
 
@@ -138,7 +138,6 @@ static bool getSystemRegistryString(const char *keyPath, const char *valueName,
                            &hTopKey);
     if (lResult == ERROR_SUCCESS) {
       char keyName[256];
-      int bestIndex = -1;
       double bestValue = 0.0;
       DWORD index, size = sizeof(keyName) - 1;
       for (index = 0; RegEnumKeyEx(hTopKey, index, keyName, &size, NULL,
@@ -168,7 +167,6 @@ static bool getSystemRegistryString(const char *keyPath, const char *valueName,
             lResult = RegQueryValueEx(hKey, valueName, NULL, &valueType,
               (LPBYTE)value, &valueSize);
             if (lResult == ERROR_SUCCESS) {
-              bestIndex = (int)index;
               bestValue = dvalue;
               returnValue = true;
             }
@@ -272,8 +270,8 @@ static bool getVisualStudioDir(std::string &path) {
   return false;
 }
 
-void Windows::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
-                                        ArgStringList &CC1Args) const {
+void MSVCToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
+                                              ArgStringList &CC1Args) const {
   if (DriverArgs.hasArg(options::OPT_nostdinc))
     return;
 
@@ -331,7 +329,7 @@ void Windows::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   addSystemIncludes(DriverArgs, CC1Args, Paths);
 }
 
-void Windows::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
-                                           ArgStringList &CC1Args) const {
+void MSVCToolChain::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
+                                                 ArgStringList &CC1Args) const {
   // FIXME: There should probably be logic here to find libc++ on Windows.
 }

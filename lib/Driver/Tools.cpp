@@ -3149,7 +3149,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // are preserved, all other debug options are substituted with "-g".
   Args.ClaimAllArgs(options::OPT_g_Group);
   if (Arg *A = Args.getLastArg(options::OPT_g_Group)) {
-    if (A->getOption().matches(options::OPT_gline_tables_only)) {
+    if (A->getOption().matches(options::OPT_gline_tables_only) ||
+        A->getOption().matches(options::OPT_g1)) {
       // FIXME: we should support specifying dwarf version with
       // -gline-tables-only.
       CmdArgs.push_back("-gline-tables-only");
@@ -3835,7 +3836,11 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // definitions.
   Args.AddAllArgs(CmdArgs, options::OPT_fmodule_map_file);
 
-  // -fmodule-cache-path specifies where our module files should be written.
+  // -fmodule-file can be used to specify files containing precompiled modules.
+  Args.AddAllArgs(CmdArgs, options::OPT_fmodule_file);
+
+  // -fmodule-cache-path specifies where our implicitly-built module files
+  // should be written.
   SmallString<128> ModuleCachePath;
   if (Arg *A = Args.getLastArg(options::OPT_fmodules_cache_path))
     ModuleCachePath = A->getValue();
