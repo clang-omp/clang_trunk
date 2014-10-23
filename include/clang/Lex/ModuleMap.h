@@ -71,8 +71,9 @@ public:
     NormalHeader,
     /// \brief This header is included but private.
     PrivateHeader,
-    /// \brief This header is explicitly excluded from the module.
-    ExcludedHeader
+    /// \brief This header is part of the module (for layering purposes) but
+    /// should be textually included.
+    TextualHeader,
     // Caution: Adding an enumerator needs other changes.
     // Adjust the number of bits for KnownHeader::Storage.
     // Adjust the bitfield HeaderFileInfo::HeaderRole size.
@@ -96,8 +97,8 @@ public:
     ModuleHeaderRole getRole() const { return Storage.getInt(); }
 
     /// \brief Whether this header is available in the module.
-    bool isAvailable() const { 
-      return getRole() != ExcludedHeader && getModule()->isAvailable(); 
+    bool isAvailable() const {
+      return getModule()->isAvailable();
     }
 
     // \brief Whether this known header is valid (i.e., it has an
@@ -249,11 +250,16 @@ public:
   /// used from.  Used to disambiguate if a header is present in multiple
   /// modules.
   ///
+  /// \param IncludeTextualHeaders If \c true, also find textual headers. By
+  /// default, these are treated like excluded headers and result in no known
+  /// header being found.
+  ///
   /// \returns The module KnownHeader, which provides the module that owns the
   /// given header file.  The KnownHeader is default constructed to indicate
   /// that no module owns this header file.
   KnownHeader findModuleForHeader(const FileEntry *File,
-                                  Module *RequestingModule = nullptr);
+                                  Module *RequestingModule = nullptr,
+                                  bool IncludeTextualHeaders = false);
 
   /// \brief Reports errors if a module must not include a specific file.
   ///
@@ -435,6 +441,9 @@ public:
   /// \param Role The role of the header wrt the module.
   void addHeader(Module *Mod, const FileEntry *Header,
                  ModuleHeaderRole Role);
+
+  /// \brief Marks this header as being excluded from the given module.
+  void excludeHeader(Module *Mod, const FileEntry *Header);
 
   /// \brief Parse the given module map file, and record any modules we 
   /// encounter.
