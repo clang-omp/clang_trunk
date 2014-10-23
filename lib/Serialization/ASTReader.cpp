@@ -2252,6 +2252,8 @@ ASTReader::ReadControlBlock(ModuleFile &F,
 
   // Read all of the records and blocks in the control block.
   RecordData Record;
+  unsigned NumInputs = 0;
+  unsigned NumUserInputs = 0;
   while (1) {
     llvm::BitstreamEntry Entry = Stream.advance();
     
@@ -2264,12 +2266,8 @@ ASTReader::ReadControlBlock(ModuleFile &F,
       const HeaderSearchOptions &HSOpts =
           PP.getHeaderSearchInfo().getHeaderSearchOpts();
 
-      // All user input files reside at the index range [0, Record[1]), and
-      // system input files reside at [Record[1], Record[0]).
-      // Record is the one from INPUT_FILE_OFFSETS.
-      unsigned NumInputs = Record[0];
-      unsigned NumUserInputs = Record[1];
-
+      // All user input files reside at the index range [0, NumUserInputs), and
+      // system input files reside at [NumUserInputs, NumInputs).
       if (!DisableValidation &&
           (ValidateSystemInputs || !HSOpts.ModulesValidateOncePerBuildSession ||
            F.InputFilesValidationTimestamp <= HSOpts.BuildSessionTimestamp)) {
@@ -2363,6 +2361,11 @@ ASTReader::ReadControlBlock(ModuleFile &F,
       break;
     }
 
+    case SIGNATURE:
+      assert((!F.Signature || F.Signature == Record[0]) && "signature changed");
+      F.Signature = Record[0];
+      break;
+
     case IMPORTS: {
       // Load each of the imported PCH files. 
       unsigned Idx = 0, N = Record.size();
@@ -2376,6 +2379,7 @@ ASTReader::ReadControlBlock(ModuleFile &F,
             SourceLocation::getFromRawEncoding(Record[Idx++]);
         off_t StoredSize = (off_t)Record[Idx++];
         time_t StoredModTime = (time_t)Record[Idx++];
+        ASTFileSignature StoredSignature = Record[Idx++];
         unsigned Length = Record[Idx++];
         SmallString<128> ImportedFile(Record.begin() + Idx,
                                       Record.begin() + Idx + Length);
@@ -2383,7 +2387,7 @@ ASTReader::ReadControlBlock(ModuleFile &F,
 
         // Load the AST file.
         switch(ReadASTCore(ImportedFile, ImportedKind, ImportLoc, &F, Loaded,
-                           StoredSize, StoredModTime,
+                           StoredSize, StoredModTime, StoredSignature,
                            ClientLoadCapabilities)) {
         case Failure: return Failure;
           // If we have to ignore the dependency, we'll have to ignore this too.
@@ -2479,8 +2483,10 @@ ASTReader::ReadControlBlock(ModuleFile &F,
               ReadModuleMapFileBlock(Record, F, ImportedBy, ClientLoadCapabilities))
         return Result;
     case INPUT_FILE_OFFSETS:
+      NumInputs = Record[0];
+      NumUserInputs = Record[1];
       F.InputFileOffsets = (const uint32_t *)Blob.data();
-      F.InputFilesLoaded.resize(Record[0]);
+      F.InputFilesLoaded.resize(NumInputs);
       break;
     }
   }
@@ -3552,7 +3558,7 @@ ASTReader::ASTReadResult ASTReader::ReadAST(const std::string &FileName,
   SmallVector<ImportedModule, 4> Loaded;
   switch(ASTReadResult ReadResult = ReadASTCore(FileName, Type, ImportLoc,
                                                 /*ImportedBy=*/nullptr, Loaded,
-                                                0, 0,
+                                                0, 0, 0,
                                                 ClientLoadCapabilities)) {
   case Failure:
   case Missing:
@@ -3719,6 +3725,8 @@ ASTReader::ASTReadResult ASTReader::ReadAST(const std::string &FileName,
   return Success;
 }
 
+static ASTFileSignature readASTFileSignature(llvm::BitstreamReader &StreamFile);
+
 ASTReader::ASTReadResult
 ASTReader::ReadASTCore(StringRef FileName,
                        ModuleKind Type,
@@ -3726,12 +3734,14 @@ ASTReader::ReadASTCore(StringRef FileName,
                        ModuleFile *ImportedBy,
                        SmallVectorImpl<ImportedModule> &Loaded,
                        off_t ExpectedSize, time_t ExpectedModTime,
+                       ASTFileSignature ExpectedSignature,
                        unsigned ClientLoadCapabilities) {
   ModuleFile *M;
   std::string ErrorStr;
   ModuleManager::AddModuleResult AddResult
     = ModuleMgr.addModule(FileName, Type, ImportLoc, ImportedBy,
                           getGeneration(), ExpectedSize, ExpectedModTime,
+                          ExpectedSignature, readASTFileSignature,
                           M, ErrorStr);
 
   switch (AddResult) {
@@ -4029,6 +4039,34 @@ static bool SkipCursorToBlock(BitstreamCursor &Cursor, unsigned BlockID) {
   }
 }
 
+static ASTFileSignature readASTFileSignature(llvm::BitstreamReader &StreamFile){
+  BitstreamCursor Stream(StreamFile);
+  if (Stream.Read(8) != 'C' ||
+      Stream.Read(8) != 'P' ||
+      Stream.Read(8) != 'C' ||
+      Stream.Read(8) != 'H') {
+    return 0;
+  }
+
+  // Scan for the CONTROL_BLOCK_ID block.
+  if (SkipCursorToBlock(Stream, CONTROL_BLOCK_ID))
+    return 0;
+
+  // Scan for SIGNATURE inside the control block.
+  ASTReader::RecordData Record;
+  while (1) {
+    llvm::BitstreamEntry Entry = Stream.advanceSkippingSubblocks();
+    if (Entry.Kind == llvm::BitstreamEntry::EndBlock ||
+        Entry.Kind != llvm::BitstreamEntry::Record)
+      return 0;
+
+    Record.clear();
+    StringRef Blob;
+    if (SIGNATURE == Stream.readRecord(Entry.ID, Record, &Blob))
+      return Record[0];
+  }
+}
+
 /// \brief Retrieve the name of the original source file name
 /// directly from the AST file, without actually loading the AST
 /// file.
@@ -4318,21 +4356,30 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     // Read a record.
     StringRef Blob;
     Record.clear();
-    switch (F.Stream.readRecord(Entry.ID, Record, &Blob)) {
+    auto Kind = F.Stream.readRecord(Entry.ID, Record, &Blob);
+
+    if ((Kind == SUBMODULE_METADATA) != First) {
+      Error("submodule metadata record should be at beginning of block");
+      return Failure;
+    }
+    First = false;
+
+    // Submodule information is only valid if we have a current module.
+    // FIXME: Should we error on these cases?
+    if (!CurrentModule && Kind != SUBMODULE_METADATA &&
+        Kind != SUBMODULE_DEFINITION)
+      continue;
+
+    switch (Kind) {
     default:  // Default behavior: ignore.
       break;
-      
-    case SUBMODULE_DEFINITION: {
-      if (First) {
-        Error("missing submodule metadata record at beginning of block");
-        return Failure;
-      }
 
+    case SUBMODULE_DEFINITION: {
       if (Record.size() < 8) {
         Error("malformed module definition");
         return Failure;
       }
-      
+
       StringRef Name = Blob;
       unsigned Idx = 0;
       SubmoduleID GlobalID = getGlobalSubmoduleID(F, Record[Idx++]);
@@ -4402,14 +4449,6 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     }
         
     case SUBMODULE_UMBRELLA_HEADER: {
-      if (First) {
-        Error("missing submodule metadata record at beginning of block");
-        return Failure;
-      }
-
-      if (!CurrentModule)
-        break;
-      
       if (const FileEntry *Umbrella = PP.getFileManager().getFile(Blob)) {
         if (!CurrentModule->getUmbrellaHeader())
           ModMap.setUmbrellaHeader(CurrentModule, Umbrella);
@@ -4423,14 +4462,6 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     }
         
     case SUBMODULE_HEADER: {
-      if (First) {
-        Error("missing submodule metadata record at beginning of block");
-        return Failure;
-      }
-
-      if (!CurrentModule)
-        break;
-      
       // We lazily associate headers with their modules via the HeaderInfoTable.
       // FIXME: Re-evaluate this section; maybe only store InputFile IDs instead
       // of complete filenames or remove it entirely.
@@ -4438,14 +4469,6 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     }
 
     case SUBMODULE_EXCLUDED_HEADER: {
-      if (First) {
-        Error("missing submodule metadata record at beginning of block");
-        return Failure;
-      }
-
-      if (!CurrentModule)
-        break;
-      
       // We lazily associate headers with their modules via the HeaderInfoTable.
       // FIXME: Re-evaluate this section; maybe only store InputFile IDs instead
       // of complete filenames or remove it entirely.
@@ -4453,14 +4476,6 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     }
 
     case SUBMODULE_PRIVATE_HEADER: {
-      if (First) {
-        Error("missing submodule metadata record at beginning of block");
-        return Failure;
-      }
-
-      if (!CurrentModule)
-        break;
-      
       // We lazily associate headers with their modules via the HeaderInfoTable.
       // FIXME: Re-evaluate this section; maybe only store InputFile IDs instead
       // of complete filenames or remove it entirely.
@@ -4468,27 +4483,11 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     }
 
     case SUBMODULE_TOPHEADER: {
-      if (First) {
-        Error("missing submodule metadata record at beginning of block");
-        return Failure;
-      }
-
-      if (!CurrentModule)
-        break;
-
       CurrentModule->addTopHeaderFilename(Blob);
       break;
     }
 
     case SUBMODULE_UMBRELLA_DIR: {
-      if (First) {
-        Error("missing submodule metadata record at beginning of block");
-        return Failure;
-      }
-      
-      if (!CurrentModule)
-        break;
-      
       if (const DirectoryEntry *Umbrella
                                   = PP.getFileManager().getDirectory(Blob)) {
         if (!CurrentModule->getUmbrellaDir())
@@ -4503,12 +4502,6 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     }
         
     case SUBMODULE_METADATA: {
-      if (!First) {
-        Error("submodule metadata record not at beginning of block");
-        return Failure;
-      }
-      First = false;
-      
       F.BaseSubmoduleID = getTotalNumSubmodules();
       F.LocalNumSubmodules = Record[0];
       unsigned LocalBaseSubmoduleID = Record[1];
@@ -4529,14 +4522,6 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     }
         
     case SUBMODULE_IMPORTS: {
-      if (First) {
-        Error("missing submodule metadata record at beginning of block");
-        return Failure;
-      }
-      
-      if (!CurrentModule)
-        break;
-      
       for (unsigned Idx = 0; Idx != Record.size(); ++Idx) {
         UnresolvedModuleRef Unresolved;
         Unresolved.File = &F;
@@ -4550,14 +4535,6 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     }
 
     case SUBMODULE_EXPORTS: {
-      if (First) {
-        Error("missing submodule metadata record at beginning of block");
-        return Failure;
-      }
-      
-      if (!CurrentModule)
-        break;
-      
       for (unsigned Idx = 0; Idx + 1 < Record.size(); Idx += 2) {
         UnresolvedModuleRef Unresolved;
         Unresolved.File = &F;
@@ -4574,53 +4551,21 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
       break;
     }
     case SUBMODULE_REQUIRES: {
-      if (First) {
-        Error("missing submodule metadata record at beginning of block");
-        return Failure;
-      }
-
-      if (!CurrentModule)
-        break;
-
       CurrentModule->addRequirement(Blob, Record[0], Context.getLangOpts(),
                                     Context.getTargetInfo());
       break;
     }
 
     case SUBMODULE_LINK_LIBRARY:
-      if (First) {
-        Error("missing submodule metadata record at beginning of block");
-        return Failure;
-      }
-
-      if (!CurrentModule)
-        break;
-
       CurrentModule->LinkLibraries.push_back(
                                          Module::LinkLibrary(Blob, Record[0]));
       break;
 
     case SUBMODULE_CONFIG_MACRO:
-      if (First) {
-        Error("missing submodule metadata record at beginning of block");
-        return Failure;
-      }
-
-      if (!CurrentModule)
-        break;
-
       CurrentModule->ConfigMacros.push_back(Blob.str());
       break;
 
     case SUBMODULE_CONFLICT: {
-      if (First) {
-        Error("missing submodule metadata record at beginning of block");
-        return Failure;
-      }
-
-      if (!CurrentModule)
-        break;
-
       UnresolvedModuleRef Unresolved;
       Unresolved.File = &F;
       Unresolved.Mod = CurrentModule;
