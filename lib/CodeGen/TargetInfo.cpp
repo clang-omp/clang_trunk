@@ -5609,15 +5609,19 @@ MipsABIInfo::classifyArgumentType(QualType Ty, uint64_t &Offset) const {
     // If we have reached here, aggregates are passed directly by coercing to
     // another structure type. Padding is inserted if the offset of the
     // aggregate is unaligned.
-    return ABIArgInfo::getDirect(HandleAggregates(Ty, TySize), 0,
-                                 getPaddingType(OrigOffset, CurrOffset));
+    ABIArgInfo ArgInfo =
+        ABIArgInfo::getDirect(HandleAggregates(Ty, TySize), 0,
+                              getPaddingType(OrigOffset, CurrOffset));
+    ArgInfo.setInReg(true);
+    return ArgInfo;
   }
 
   // Treat an enum type as its underlying type.
   if (const EnumType *EnumTy = Ty->getAs<EnumType>())
     Ty = EnumTy->getDecl()->getIntegerType();
 
-  if (Ty->isPromotableIntegerType())
+  // All integral types are promoted to the GPR width.
+  if (Ty->isIntegralOrEnumerationType())
     return ABIArgInfo::getExtend();
 
   return ABIArgInfo::getDirect(
