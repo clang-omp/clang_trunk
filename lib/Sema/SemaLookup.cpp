@@ -3396,7 +3396,7 @@ void TypoCorrectionConsumer::addCorrection(TypoCorrection Correction) {
 
   // If the correction is resolved but is not viable, ignore it.
   if (Correction.isResolved() &&
-      !isCandidateViable(CorrectionValidator, Correction))
+      !isCandidateViable(*CorrectionValidator, Correction))
     return;
 
   TypoResultList &CList =
@@ -3480,7 +3480,7 @@ bool TypoCorrectionConsumer::resolveCorrection(TypoCorrection &Candidate) {
 retry_lookup:
   LookupPotentialTypoResult(SemaRef, Result, Name, S, TempSS, TempMemberContext,
                             EnteringContext,
-                            CorrectionValidator.IsObjCIvarLookup,
+                            CorrectionValidator->IsObjCIvarLookup,
                             Name == Typo && !Candidate.WillReplaceSpecifier());
   switch (Result.getResultKind()) {
   case LookupResult::NotFound:
@@ -3511,7 +3511,7 @@ retry_lookup:
     // Store all of the Decls for overloaded symbols
     for (auto *TRD : Result)
       Candidate.addCorrectionDecl(TRD);
-    if (!isCandidateViable(CorrectionValidator, Candidate)) {
+    if (!isCandidateViable(*CorrectionValidator, Candidate)) {
       if (SearchNamespaces)
         QualifiedResults.push_back(Candidate);
       break;
@@ -4021,17 +4021,19 @@ static void checkCorrectionVisibility(Sema &SemaRef, TypoCorrection &TC) {
 TypoCorrection Sema::CorrectTypo(const DeclarationNameInfo &TypoName,
                                  Sema::LookupNameKind LookupKind,
                                  Scope *S, CXXScopeSpec *SS,
-                                 CorrectionCandidateCallback &CCC,
+                                 std::unique_ptr<CorrectionCandidateCallback> CCC,
                                  CorrectTypoKind Mode,
                                  DeclContext *MemberContext,
                                  bool EnteringContext,
                                  const ObjCObjectPointerType *OPT,
                                  bool RecordFailure) {
+  assert(CCC && "CorrectTypo requires a CorrectionCandidateCallback");
+
   // Always let the ExternalSource have the first chance at correction, even
   // if we would otherwise have given up.
   if (ExternalSource) {
     if (TypoCorrection Correction = ExternalSource->CorrectTypo(
-        TypoName, LookupKind, S, SS, CCC, MemberContext, EnteringContext, OPT))
+        TypoName, LookupKind, S, SS, *CCC, MemberContext, EnteringContext, OPT))
       return Correction;
   }
 
@@ -4086,13 +4088,15 @@ TypoCorrection Sema::CorrectTypo(const DeclarationNameInfo &TypoName,
                                            TypoName.getLocStart());
   }
 
-  TypoCorrectionConsumer Consumer(*this, TypoName, LookupKind, S, SS, CCC,
-                                  MemberContext, EnteringContext);
+  CorrectionCandidateCallback &CCCRef = *CCC;
+  TypoCorrectionConsumer Consumer(*this, TypoName, LookupKind, S, SS,
+                                  std::move(CCC), MemberContext,
+                                  EnteringContext);
 
   // If a callback object considers an empty typo correction candidate to be
   // viable, assume it does not do any actual validation of the candidates.
   TypoCorrection EmptyCorrection;
-  bool ValidatingCallback = !isCandidateViable(CCC, EmptyCorrection);
+  bool ValidatingCallback = !isCandidateViable(CCCRef, EmptyCorrection);
 
   // Perform name lookup to find visible, similarly-named entities.
   bool IsUnqualifiedLookup = false;
@@ -4127,7 +4131,7 @@ TypoCorrection Sema::CorrectTypo(const DeclarationNameInfo &TypoName,
       // keyword case, we'll end up adding the keyword below.
       if (Cached->second) {
         if (!Cached->second.isKeyword() &&
-            isCandidateViable(CCC, Cached->second)) {
+            isCandidateViable(CCCRef, Cached->second)) {
           // Do not use correction that is unaccessible in the given scope.
           NamedDecl *CorrectionDecl = Cached->second.getCorrectionDecl();
           DeclarationNameInfo NameInfo(CorrectionDecl->getDeclName(),
@@ -4184,7 +4188,7 @@ TypoCorrection Sema::CorrectTypo(const DeclarationNameInfo &TypoName,
     }
   }
 
-  AddKeywordsToConsumer(*this, Consumer, S, CCC, SS && SS->isNotEmpty());
+  AddKeywordsToConsumer(*this, Consumer, S, CCCRef, SS && SS->isNotEmpty());
 
   // If we haven't found anything, we're done.
   if (Consumer.empty())
@@ -4251,7 +4255,8 @@ TypoCorrection Sema::CorrectTypo(const DeclarationNameInfo &TypoName,
   // WantObjCSuper is only true for CTC_ObjCMessageReceiver and for
   // some instances of CTC_Unknown, while WantRemainingKeywords is true
   // for CTC_Unknown but not for CTC_ObjCMessageReceiver.
-  else if (SecondBestTC && CCC.WantObjCSuper && !CCC.WantRemainingKeywords) {
+  else if (SecondBestTC && CCCRef.WantObjCSuper &&
+           !CCCRef.WantRemainingKeywords) {
     // Prefer 'super' when we're completing in a message-receiver
     // context.
 
