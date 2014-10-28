@@ -220,8 +220,10 @@ static bool violatesPrivateInclude(Module *RequestingModule,
   // as obtained from the lookup and as obtained from the module.
   // This check is not cheap, so enable it only for debugging.
   bool IsPrivate = false;
-  for (auto *Hdrs : {&RequestedModule->PrivateHeaders,
-                     &RequestedModule->PrivateTextualHeaders})
+  SmallVectorImpl<const FileEntry *> *HeaderList[] =
+      {&RequestedModule->PrivateHeaders,
+       &RequestedModule->PrivateTextualHeaders};
+  for (auto *Hdrs : HeaderList)
     IsPrivate |=
         std::find(Hdrs->begin(), Hdrs->end(), IncFileEnt) != Hdrs->end();
   assert(IsPrivate == IsPrivateRole && "inconsistent headers and roles");
@@ -778,10 +780,22 @@ void ModuleMap::setUmbrellaDir(Module *Mod, const DirectoryEntry *UmbrellaDir) {
 
 void ModuleMap::addHeader(Module *Mod, const FileEntry *Header,
                           ModuleHeaderRole Role) {
-  auto HeaderLists = {&Mod->NormalHeaders, &Mod->PrivateHeaders,
-                      &Mod->TextualHeaders, &Mod->PrivateTextualHeaders};
-  assert(Role >= 0 && Role < HeaderLists.size() && "unknown header role");
-  HeaderLists.begin()[Role]->push_back(Header);
+  switch ((int)Role) {
+  default:
+    llvm_unreachable("unknown header role");
+  case NormalHeader:
+    Mod->NormalHeaders.push_back(Header);
+    break;
+  case PrivateHeader:
+    Mod->PrivateHeaders.push_back(Header);
+    break;
+  case TextualHeader:
+    Mod->TextualHeaders.push_back(Header);
+    break;
+  case PrivateHeader | TextualHeader:
+    Mod->PrivateTextualHeaders.push_back(Header);
+    break;
+  }
 
   if (!(Role & TextualHeader)) {
     bool isCompilingModuleHeader = Mod->getTopLevelModule() == CompilingModule;
