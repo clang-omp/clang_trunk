@@ -6585,12 +6585,13 @@ OMPClause *Sema::ActOnOpenMPReductionClause(ArrayRef<Expr *> VarList,
     OMPDeclareReductionDecl::ReductionData *DRRD =
         TryToFindDeclareReductionDecl(*this, SS, OpName, RedTy, Op);
     if (Op == OMPC_REDUCTION_custom && !DRRD) {
+      // RedDeclFilterCCC CCC(*this, RedTy);
+      auto CCC = llvm::make_unique<RedDeclFilterCCC>(*this, RedTy);
+      LookupResult Lookup(*this, OpName, LookupOMPDeclareReduction);
+      if (DiagnoseEmptyLookup(getCurScope(), SS, Lookup, std::move(CCC)))
+        continue;
 #if 0 // FIXME DiagnoseEmptyLookup takes CCC via a unique_ptr, so this needs
       // some adjustment.
-      RedDeclFilterCCC CCC(*this, RedTy);
-      LookupResult Lookup(*this, OpName, LookupOMPDeclareReduction);
-      if (DiagnoseEmptyLookup(getCurScope(), SS, Lookup, CCC))
-        continue;
       DRRD = CCC.getFoundData();
 #endif
       if (!DRRD)
