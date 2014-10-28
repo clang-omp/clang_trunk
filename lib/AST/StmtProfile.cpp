@@ -1222,6 +1222,10 @@ void StmtProfiler::VisitOpaqueValueExpr(const OpaqueValueExpr *E) {
   VisitExpr(E);  
 }
 
+void StmtProfiler::VisitTypoExpr(const TypoExpr *E) {
+  VisitExpr(E);
+}
+
 void StmtProfiler::VisitObjCStringLiteral(const ObjCStringLiteral *S) {
   VisitExpr(S);
 }

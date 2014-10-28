@@ -1598,6 +1598,10 @@ void ASTStmtReader::VisitOpaqueValueExpr(OpaqueValueExpr *E) {
   E->Loc = ReadSourceLocation(Record, Idx);
 }
 
+void ASTStmtReader::VisitTypoExpr(TypoExpr *E) {
+  llvm_unreachable("Cannot read TypoExpr nodes");
+}
+
 //===----------------------------------------------------------------------===//
 // Microsoft Expressions and Statements
 //===----------------------------------------------------------------------===//
