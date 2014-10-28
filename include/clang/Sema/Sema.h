@@ -2594,6 +2594,8 @@ public:
                                                    bool VolatileThis);
 
   typedef std::function<void(const TypoCorrection &)> TypoDiagnosticGenerator;
+  typedef std::function<ExprResult(Sema &, TypoExpr *, TypoCorrection)>
+      TypoRecoveryCallback;
 
 private:
   bool CppLookupName(LookupResult &R, Scope *S);
@@ -2601,6 +2603,7 @@ private:
   struct TypoExprState {
     std::unique_ptr<TypoCorrectionConsumer> Consumer;
     TypoDiagnosticGenerator DiagHandler;
+    TypoRecoveryCallback RecoveryHandler;
   };
 
   /// \brief The set of unhandled TypoExprs and their associated state.
@@ -2608,7 +2611,8 @@ private:
 
   /// \brief Creates a new TypoExpr AST node.
   TypoExpr *createDelayedTypo(std::unique_ptr<TypoCorrectionConsumer> TCC,
-                              TypoDiagnosticGenerator TDG);
+                              TypoDiagnosticGenerator TDG,
+                              TypoRecoveryCallback TRC);
 
   // \brief The set of known/encountered (unique, canonicalized) NamespaceDecls.
   //
@@ -2720,7 +2724,7 @@ public:
                                CXXScopeSpec *SS,
                                std::unique_ptr<CorrectionCandidateCallback> CCC,
                                TypoDiagnosticGenerator TDG,
-                               CorrectTypoKind Mode,
+                               TypoRecoveryCallback TRC, CorrectTypoKind Mode,
                                DeclContext *MemberContext = nullptr,
                                bool EnteringContext = false,
                                const ObjCObjectPointerType *OPT = nullptr);
