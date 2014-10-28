@@ -147,6 +147,8 @@ def CXX98CompatPedantic : DiagGroup<"c++98-compat-pedantic",
 
 def CXX11Narrowing : DiagGroup<"c++11-narrowing">;
 
+def CXX11WarnOverrideMethod : DiagGroup<"inconsistent-missing-override">;
+
 // Original name of this warning in Clang
 def : DiagGroup<"c++0x-narrowing", [CXX11Narrowing]>;
 
@@ -420,6 +422,7 @@ def : DiagGroup<"arc-abi">;
 def ARCUnsafeRetainedAssign : DiagGroup<"arc-unsafe-retained-assign">;
 def ARCRetainCycles : DiagGroup<"arc-retain-cycles">;
 def ARCNonPodMemAccess : DiagGroup<"arc-non-pod-memaccess">;
+def ARCBridgeCastRelease : DiagGroup<"arc-bridge-cast-release">;
 def AutomaticReferenceCounting : DiagGroup<"arc",
                                            [ARCUnsafeRetainedAssign,
                                             ARCRetainCycles,
