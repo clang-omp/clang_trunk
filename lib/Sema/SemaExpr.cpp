@@ -11318,6 +11318,7 @@ Sema::PushExpressionEvaluationContext(ExpressionEvaluationContext NewContext,
 
 void Sema::PopExpressionEvaluationContext() {
   ExpressionEvaluationContextRecord& Rec = ExprEvalContexts.back();
+  unsigned NumTypos = Rec.NumTypos;
 
   if (!Rec.Lambdas.empty()) {
     if (Rec.isUnevaluated() || Rec.Context == ConstantEvaluated) {
@@ -11365,6 +11366,12 @@ void Sema::PopExpressionEvaluationContext() {
 
   // Pop the current expression evaluation context off the stack.
   ExprEvalContexts.pop_back();
+
+  if (!ExprEvalContexts.empty())
+    ExprEvalContexts.back().NumTypos += NumTypos;
+  else
+    assert(NumTypos == 0 && "There are outstanding typos after popping the "
+                            "last ExpressionEvaluationContextRecord");
 }
 
 void Sema::DiscardCleanupsInEvaluationContext() {
