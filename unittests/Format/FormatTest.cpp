@@ -1207,8 +1207,8 @@ TEST_F(FormatTest, CorrectlyHandlesLengthOfBlockComments) {
 }
 
 TEST_F(FormatTest, DontBreakNonTrailingBlockComments) {
-  EXPECT_EQ("void\n"
-            "ffffffffff(int aaaaa /* test */);",
+  EXPECT_EQ("void ffffffffff(\n"
+            "    int aaaaa /* test */);",
             format("void ffffffffff(int aaaaa /* test */);",
                    getLLVMStyleWithColumns(35)));
 }
@@ -1258,11 +1258,11 @@ TEST_F(FormatTest, SplitsLongCxxComments) {
             format("// A comment before a macro definition\n"
                    "#define a b",
                    getLLVMStyleWithColumns(20)));
-  EXPECT_EQ("void\n"
-            "ffffff(int aaaaaaaaa,  // wwww\n"
-            "       int bbbbbbbbbb, // xxxxxxx\n"
-            "                       // yyyyyyyyyy\n"
-            "       int c, int d, int e) {}",
+  EXPECT_EQ("void ffffff(\n"
+            "    int aaaaaaaaa,  // wwww\n"
+            "    int bbbbbbbbbb, // xxxxxxx\n"
+            "                    // yyyyyyyyyy\n"
+            "    int c, int d, int e) {}",
             format("void ffffff(\n"
                    "    int aaaaaaaaa, // wwww\n"
                    "    int bbbbbbbbbb, // xxxxxxx yyyyyyyyyy\n"
@@ -3538,8 +3538,8 @@ TEST_F(FormatTest, BreaksFunctionDeclarationsWithTrailingTokens) {
   // they are not function-like.
   FormatStyle Style = getGoogleStyle();
   Style.ColumnLimit = 47;
-  verifyFormat("void\n"
-               "someLongFunction(int someLongParameter) const {\n}",
+  verifyFormat("void someLongFunction(\n"
+               "    int someLoooooooooooooongParameter) const {\n}",
                getLLVMStyleWithColumns(47));
   verifyFormat("LoooooongReturnType\n"
                "someLoooooooongFunction() const {}",
@@ -7400,7 +7400,7 @@ TEST_F(FormatTest, ConfigurableIndentWidth) {
 }
 
 TEST_F(FormatTest, ConfigurableFunctionDeclarationIndentAfterType) {
-  verifyFormat("void\n"
+  verifyFormat("double\n"
                "f();",
                getLLVMStyleWithColumns(8));
 }
@@ -9103,6 +9103,14 @@ TEST_F(FormatTest, FormatsLambdas) {
   verifyFormat("SomeFunction([]() { // A cool function...\n"
                "  return 43;\n"
                "});");
+  EXPECT_EQ("SomeFunction([]() {\n"
+            "#define A a\n"
+            "  return 43;\n"
+            "});",
+            format("SomeFunction([](){\n"
+                   "#define A a\n"
+                   "return 43;\n"
+                   "});"));
   verifyFormat("void f() {\n"
                "  SomeFunction([](decltype(x), A *a) {});\n"
                "}");

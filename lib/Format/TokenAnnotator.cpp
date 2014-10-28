@@ -1362,13 +1362,15 @@ void TokenAnnotator::calculateFormattingInformation(AnnotatedLine &Line) {
       ChildSize = LastOfChild.isTrailingComment() ? Style.ColumnLimit
                                                   : LastOfChild.TotalLength + 1;
     }
-    if (Current->MustBreakBefore || Current->Previous->Children.size() > 1 ||
+    const FormatToken *Prev= Current->Previous;
+    if (Current->MustBreakBefore || Prev->Children.size() > 1 ||
+        (Prev->Children.size() == 1 &&
+         Prev->Children[0]->First->MustBreakBefore) ||
         Current->IsMultiline)
-      Current->TotalLength = Current->Previous->TotalLength + Style.ColumnLimit;
+      Current->TotalLength = Prev->TotalLength + Style.ColumnLimit;
     else
-      Current->TotalLength = Current->Previous->TotalLength +
-                             Current->ColumnWidth + ChildSize +
-                             Current->SpacesRequiredBefore;
+      Current->TotalLength = Prev->TotalLength + Current->ColumnWidth +
+                             ChildSize + Current->SpacesRequiredBefore;
 
     if (Current->Type == TT_CtorInitializerColon)
       InFunctionDecl = false;
@@ -1768,7 +1770,7 @@ bool TokenAnnotator::mustBreakBefore(const AnnotatedLine &Line,
     return Right.NewlinesBefore > 0;
   } else if (Right.Previous->is(tok::l_brace) && Right.NestingLevel == 1 &&
              Style.Language == FormatStyle::LK_Proto) {
-    // Don't enums onto single lines in protocol buffers.
+    // Don't put enums onto single lines in protocol buffers.
     return true;
   } else if (Style.Language == FormatStyle::LK_JavaScript &&
              Right.is(tok::r_brace) && Left.is(tok::l_brace) &&
