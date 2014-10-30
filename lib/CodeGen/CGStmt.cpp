@@ -2177,37 +2177,23 @@ LValue CodeGenFunction::InitCapturedStruct(const CapturedStmt &S) {
 
   // Initialize the captured struct.
   LValue SlotLV = MakeNaturalAlignAddrLValue(
-                    CreateMemTemp(RecordTy, "agg.captured"), RecordTy);
+      CreateMemTemp(RecordTy, "agg.captured"), RecordTy);
 
   RecordDecl::field_iterator CurField = RD->field_begin();
   CapturedStmt::const_capture_iterator C = S.capture_begin();
   for (CapturedStmt::capture_init_iterator I = S.capture_init_begin(),
                                            E = S.capture_init_end();
-       I != E; ++I, ++C, ++CurField) {
-    if ((*CurField)->getType()->isVariablyModifiedType()) {
-      EmitVariablyModifiedType((*CurField)->getType());
-    }
+       I != E; ++I, ++CurField) {
     LValue LV = EmitLValueForFieldInitialization(SlotLV, *CurField);
-    EmitInitializerForField(*CurField, LV, *I, None);
+    if (CurField->hasCapturedVLAType()) {
+      auto VAT = CurField->getCapturedVLAType();
+      EmitStoreThroughLValue(RValue::get(VLASizeMap[VAT->getSizeExpr()]), LV);
+    } else {
+      EmitInitializerForField(*CurField, LV, *I, None);
+    }
   }
 
   return SlotLV;
-}
-
-static void InitVLACaptures(CodeGenFunction &CGF, const CapturedStmt &S) {
-  for (auto &C : S.captures()) {
-    if (C.capturesVariable()) {
-      QualType QTy;
-      auto VD = C.getCapturedVar();
-      if (const ParmVarDecl *PVD = dyn_cast<ParmVarDecl>(VD))
-        QTy = PVD->getOriginalType();
-      else
-        QTy = VD->getType();
-      if (QTy->isVariablyModifiedType()) {
-        CGF.EmitVariablyModifiedType(QTy);
-      }
-    }
-  }
 }
 
 /// Generate an outlined function for the body of a CapturedStmt, store any
@@ -2273,14 +2259,21 @@ CodeGenFunction::GenerateCapturedStmtFunction(const CapturedStmt &S) {
   CapturedStmtInfo->setContextValue(Builder.CreateLoad(DeclPtr));
 
   // Initialize variable-length arrays.
-  InitVLACaptures(*this, S);
+  LValue Base = MakeNaturalAlignAddrLValue(CapturedStmtInfo->getContextValue(),
+                                           Ctx.getTagDeclType(RD));
+  for (auto *FD : RD->fields()) {
+    if (FD->hasCapturedVLAType()) {
+      auto *ExprArg = EmitLoadOfLValue(EmitLValueForField(Base, FD),
+                                       S.getLocStart()).getScalarVal();
+      auto VAT = FD->getCapturedVLAType();
+      VLASizeMap[VAT->getSizeExpr()] = ExprArg;
+    }
+  }
 
   // If 'this' is captured, load it into CXXThisValue.
   if (CapturedStmtInfo->isCXXThisExprCaptured()) {
     FieldDecl *FD = CapturedStmtInfo->getThisFieldDecl();
-    LValue LV = MakeNaturalAlignAddrLValue(CapturedStmtInfo->getContextValue(),
-                                           Ctx.getTagDeclType(RD));
-    LValue ThisLValue = EmitLValueForField(LV, FD);
+    LValue ThisLValue = EmitLValueForField(Base, FD);
     CXXThisValue = EmitLoadOfLValue(ThisLValue, Loc).getScalarVal();
   }
 
