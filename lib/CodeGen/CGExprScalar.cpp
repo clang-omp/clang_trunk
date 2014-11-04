@@ -457,7 +457,7 @@ public:
       case LangOptions::SOB_Defined:
         return Builder.CreateMul(Ops.LHS, Ops.RHS, "mul");
       case LangOptions::SOB_Undefined:
-        if (!CGF.SanOpts->SignedIntegerOverflow)
+        if (!CGF.SanOpts.SignedIntegerOverflow)
           return Builder.CreateNSWMul(Ops.LHS, Ops.RHS, "mul");
         // Fall through.
       case LangOptions::SOB_Trapping:
@@ -465,7 +465,7 @@ public:
       }
     }
 
-    if (Ops.Ty->isUnsignedIntegerType() && CGF.SanOpts->UnsignedIntegerOverflow)
+    if (Ops.Ty->isUnsignedIntegerType() && CGF.SanOpts.UnsignedIntegerOverflow)
       return EmitOverflowCheckedBinOp(Ops);
 
     if (Ops.LHS->getType()->isFPOrFPVectorTy())
@@ -815,7 +815,7 @@ Value *ScalarExprEmitter::EmitScalarConversion(Value *Src, QualType SrcType,
 
   // An overflowing conversion has undefined behavior if either the source type
   // or the destination type is a floating-point type.
-  if (CGF.SanOpts->FloatCastOverflow &&
+  if (CGF.SanOpts.FloatCastOverflow &&
       (OrigSrcType->isFloatingType() || DstType->isFloatingType()))
     EmitFloatConversionCheck(OrigSrc, OrigSrcType, Src, SrcType, DstType,
                              DstTy);
@@ -1125,7 +1125,7 @@ Value *ScalarExprEmitter::VisitArraySubscriptExpr(ArraySubscriptExpr *E) {
   Value *Idx  = Visit(E->getIdx());
   QualType IdxTy = E->getIdx()->getType();
 
-  if (CGF.SanOpts->ArrayBounds)
+  if (CGF.SanOpts.ArrayBounds)
     CGF.EmitBoundsCheck(E, E->getBase(), Idx, IdxTy, /*Accessed*/true);
 
   return Builder.CreateExtractElement(Base, Idx, "vecext");
@@ -1577,7 +1577,7 @@ EmitAddConsiderOverflowBehavior(const UnaryOperator *E,
   case LangOptions::SOB_Defined:
     return Builder.CreateAdd(InVal, NextVal, IsInc ? "inc" : "dec");
   case LangOptions::SOB_Undefined:
-    if (!CGF.SanOpts->SignedIntegerOverflow)
+    if (!CGF.SanOpts.SignedIntegerOverflow)
       return Builder.CreateNSWAdd(InVal, NextVal, IsInc ? "inc" : "dec");
     // Fall through.
   case LangOptions::SOB_Trapping:
@@ -1625,7 +1625,7 @@ ScalarExprEmitter::EmitScalarPrePostIncDec(const UnaryOperator *E, LValue LV,
     // checking, and fall into the slow path with the atomic cmpxchg loop.
     if (!type->isBooleanType() && type->isIntegerType() &&
         !(type->isUnsignedIntegerType() &&
-         CGF.SanOpts->UnsignedIntegerOverflow) &&
+         CGF.SanOpts.UnsignedIntegerOverflow) &&
         CGF.getLangOpts().getSignedOverflowBehavior() !=
          LangOptions::SOB_Trapping) {
       llvm::AtomicRMWInst::BinOp aop = isInc ? llvm::AtomicRMWInst::Add :
@@ -1676,7 +1676,7 @@ ScalarExprEmitter::EmitScalarPrePostIncDec(const UnaryOperator *E, LValue LV,
     if (CanOverflow && type->isSignedIntegerOrEnumerationType()) {
       value = EmitAddConsiderOverflowBehavior(E, value, amt, isInc);
     } else if (CanOverflow && type->isUnsignedIntegerType() &&
-               CGF.SanOpts->UnsignedIntegerOverflow) {
+               CGF.SanOpts.UnsignedIntegerOverflow) {
       BinOpInfo BinOp;
       BinOp.LHS = value;
       BinOp.RHS = llvm::ConstantInt::get(value->getType(), 1, false);
@@ -2071,7 +2071,7 @@ LValue ScalarExprEmitter::EmitCompoundAssignLValue(
     QualType type = atomicTy->getValueType();
     if (!type->isBooleanType() && type->isIntegerType() &&
          !(type->isUnsignedIntegerType() &&
-          CGF.SanOpts->UnsignedIntegerOverflow) &&
+          CGF.SanOpts.UnsignedIntegerOverflow) &&
          CGF.getLangOpts().getSignedOverflowBehavior() !=
           LangOptions::SOB_Trapping) {
       llvm::AtomicRMWInst::BinOp aop = llvm::AtomicRMWInst::BAD_BINOP;
@@ -2184,10 +2184,10 @@ void ScalarExprEmitter::EmitUndefinedBehaviorIntegerDivAndRemCheck(
     const BinOpInfo &Ops, llvm::Value *Zero, bool isDiv) {
   llvm::Value *Cond = nullptr;
 
-  if (CGF.SanOpts->IntegerDivideByZero)
+  if (CGF.SanOpts.IntegerDivideByZero)
     Cond = Builder.CreateICmpNE(Ops.RHS, Zero);
 
-  if (CGF.SanOpts->SignedIntegerOverflow &&
+  if (CGF.SanOpts.SignedIntegerOverflow &&
       Ops.Ty->hasSignedIntegerRepresentation()) {
     llvm::IntegerType *Ty = cast<llvm::IntegerType>(Zero->getType());
 
@@ -2208,12 +2208,12 @@ void ScalarExprEmitter::EmitUndefinedBehaviorIntegerDivAndRemCheck(
 Value *ScalarExprEmitter::EmitDiv(const BinOpInfo &Ops) {
   {
     CodeGenFunction::SanitizerScope SanScope(&CGF);
-    if ((CGF.SanOpts->IntegerDivideByZero ||
-         CGF.SanOpts->SignedIntegerOverflow) &&
+    if ((CGF.SanOpts.IntegerDivideByZero ||
+         CGF.SanOpts.SignedIntegerOverflow) &&
         Ops.Ty->isIntegerType()) {
       llvm::Value *Zero = llvm::Constant::getNullValue(ConvertType(Ops.Ty));
       EmitUndefinedBehaviorIntegerDivAndRemCheck(Ops, Zero, true);
-    } else if (CGF.SanOpts->FloatDivideByZero &&
+    } else if (CGF.SanOpts.FloatDivideByZero &&
                Ops.Ty->isRealFloatingType()) {
       llvm::Value *Zero = llvm::Constant::getNullValue(ConvertType(Ops.Ty));
       EmitBinOpCheck(Builder.CreateFCmpUNE(Ops.RHS, Zero), Ops);
@@ -2240,7 +2240,7 @@ Value *ScalarExprEmitter::EmitDiv(const BinOpInfo &Ops) {
 
 Value *ScalarExprEmitter::EmitRem(const BinOpInfo &Ops) {
   // Rem in C can't be a floating point type: C99 6.5.5p2.
-  if (CGF.SanOpts->IntegerDivideByZero) {
+  if (CGF.SanOpts.IntegerDivideByZero) {
     CodeGenFunction::SanitizerScope SanScope(&CGF);
     llvm::Value *Zero = llvm::Constant::getNullValue(ConvertType(Ops.Ty));
 
@@ -2299,7 +2299,7 @@ Value *ScalarExprEmitter::EmitOverflowCheckedBinOp(const BinOpInfo &Ops) {
   if (handlerName->empty()) {
     // If the signed-integer-overflow sanitizer is enabled, emit a call to its
     // runtime. Otherwise, this is a -ftrapv check, so just emit a trap.
-    if (!isSigned || CGF.SanOpts->SignedIntegerOverflow) {
+    if (!isSigned || CGF.SanOpts.SignedIntegerOverflow) {
       CodeGenFunction::SanitizerScope SanScope(&CGF);
       EmitBinOpCheck(Builder.CreateNot(overflow), Ops);
     } else
@@ -2387,7 +2387,7 @@ static Value *emitPointerArithmetic(CodeGenFunction &CGF,
   if (isSubtraction)
     index = CGF.Builder.CreateNeg(index, "idx.neg");
 
-  if (CGF.SanOpts->ArrayBounds)
+  if (CGF.SanOpts.ArrayBounds)
     CGF.EmitBoundsCheck(op.E, pointerOperand, index, indexOperand->getType(),
                         /*Accessed*/ false);
 
@@ -2527,7 +2527,7 @@ Value *ScalarExprEmitter::EmitAdd(const BinOpInfo &op) {
     case LangOptions::SOB_Defined:
       return Builder.CreateAdd(op.LHS, op.RHS, "add");
     case LangOptions::SOB_Undefined:
-      if (!CGF.SanOpts->SignedIntegerOverflow)
+      if (!CGF.SanOpts.SignedIntegerOverflow)
         return Builder.CreateNSWAdd(op.LHS, op.RHS, "add");
       // Fall through.
     case LangOptions::SOB_Trapping:
@@ -2535,7 +2535,7 @@ Value *ScalarExprEmitter::EmitAdd(const BinOpInfo &op) {
     }
   }
 
-  if (op.Ty->isUnsignedIntegerType() && CGF.SanOpts->UnsignedIntegerOverflow)
+  if (op.Ty->isUnsignedIntegerType() && CGF.SanOpts.UnsignedIntegerOverflow)
     return EmitOverflowCheckedBinOp(op);
 
   if (op.LHS->getType()->isFPOrFPVectorTy()) {
@@ -2557,7 +2557,7 @@ Value *ScalarExprEmitter::EmitSub(const BinOpInfo &op) {
       case LangOptions::SOB_Defined:
         return Builder.CreateSub(op.LHS, op.RHS, "sub");
       case LangOptions::SOB_Undefined:
-        if (!CGF.SanOpts->SignedIntegerOverflow)
+        if (!CGF.SanOpts.SignedIntegerOverflow)
           return Builder.CreateNSWSub(op.LHS, op.RHS, "sub");
         // Fall through.
       case LangOptions::SOB_Trapping:
@@ -2565,7 +2565,7 @@ Value *ScalarExprEmitter::EmitSub(const BinOpInfo &op) {
       }
     }
 
-    if (op.Ty->isUnsignedIntegerType() && CGF.SanOpts->UnsignedIntegerOverflow)
+    if (op.Ty->isUnsignedIntegerType() && CGF.SanOpts.UnsignedIntegerOverflow)
       return EmitOverflowCheckedBinOp(op);
 
     if (op.LHS->getType()->isFPOrFPVectorTy()) {
@@ -2652,7 +2652,7 @@ Value *ScalarExprEmitter::EmitShl(const BinOpInfo &Ops) {
   if (Ops.LHS->getType() != RHS->getType())
     RHS = Builder.CreateIntCast(RHS, Ops.LHS->getType(), false, "sh_prom");
 
-  if (CGF.SanOpts->Shift && !CGF.getLangOpts().OpenCL &&
+  if (CGF.SanOpts.Shift && !CGF.getLangOpts().OpenCL &&
       isa<llvm::IntegerType>(Ops.LHS->getType())) {
     CodeGenFunction::SanitizerScope SanScope(&CGF);
     llvm::Value *WidthMinusOne = GetWidthMinusOneValue(Ops.LHS, RHS);
@@ -2705,7 +2705,7 @@ Value *ScalarExprEmitter::EmitShr(const BinOpInfo &Ops) {
   if (Ops.LHS->getType() != RHS->getType())
     RHS = Builder.CreateIntCast(RHS, Ops.LHS->getType(), false, "sh_prom");
 
-  if (CGF.SanOpts->Shift && !CGF.getLangOpts().OpenCL &&
+  if (CGF.SanOpts.Shift && !CGF.getLangOpts().OpenCL &&
       isa<llvm::IntegerType>(Ops.LHS->getType())) {
     CodeGenFunction::SanitizerScope SanScope(&CGF);
     EmitBinOpCheck(Builder.CreateICmpULE(RHS, GetWidthMinusOneValue(Ops.LHS, RHS)), Ops);

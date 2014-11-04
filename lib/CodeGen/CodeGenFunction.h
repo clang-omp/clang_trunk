@@ -414,7 +414,7 @@ public:
   unsigned char BoundsChecking;
 
   /// \brief Sanitizer options to use for this function.
-  const SanitizerOptions *SanOpts;
+  SanitizerOptions SanOpts;
 
   /// \brief True if CodeGen currently emits code implementing sanitizer checks.
   bool IsSanitizerScope;
