@@ -2,9 +2,9 @@
 // RUN: echo 'type:SomeNamespace::BlacklistedByName=field-padding' > %t.type.blacklist
 // RUN: echo 'src:*sanitize-address-field-padding.cpp=field-padding' > %t.file.blacklist
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -fsanitize=address -fsanitize-address-field-padding=1 -fsanitize-blacklist=%t.type.blacklist -Rsanitize-address -emit-llvm -o - %s 2>&1 | FileCheck %s
+// RUN: %clang_cc1 -triple x86_64-unknown-unknown -fsanitize=address -fsanitize-address-field-padding=1 -fsanitize-blacklist=%t.type.blacklist -Rsanitize-address -emit-llvm -o - %s -O1 -mconstructor-aliases 2>&1 | FileCheck %s --check-prefix=WITH_CTOR_ALIASES
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -fsanitize=address -fsanitize-address-field-padding=1 -fsanitize-blacklist=%t.file.blacklist -Rsanitize-address -emit-llvm -o - %s 2>&1 | FileCheck %s --check-prefix=FILE_BLACKLIST
 // RUN: %clang_cc1 -fsanitize=address -emit-llvm -o - %s 2>&1 | FileCheck %s --check-prefix=NO_PADDING
-// REQUIRES: shell
 //
 
 // The reasons to ignore a particular class are not set in stone and will change.
@@ -193,3 +193,27 @@ ExternCStruct extern_C_struct;
 // CHECK-NOT: __asan_poison_intra_object_redzone
 // CHECK: ret void
 //
+
+struct WithVirtualDtor {
+  virtual ~WithVirtualDtor();
+  int x, y;
+};
+struct InheritsFrom_WithVirtualDtor: WithVirtualDtor {
+  int a, b;
+  InheritsFrom_WithVirtualDtor() {}
+  ~InheritsFrom_WithVirtualDtor() {}
+};
+
+void Create_InheritsFrom_WithVirtualDtor() {
+  InheritsFrom_WithVirtualDtor x;
+}
+
+
+// Make sure the dtor of InheritsFrom_WithVirtualDtor remains in the code,
+// i.e. we ignore -mconstructor-aliases when field paddings are added
+// because the paddings in InheritsFrom_WithVirtualDtor needs to be unpoisoned
+// in the dtor.
+// WITH_CTOR_ALIASES-LABEL: define void @_Z35Create_InheritsFrom_WithVirtualDtor
+// WITH_CTOR_ALIASES-NOT: call void @_ZN15WithVirtualDtorD2Ev
+// WITH_CTOR_ALIASES: call void @_ZN28InheritsFrom_WithVirtualDtorD2Ev
+// WITH_CTOR_ALIASES: ret void

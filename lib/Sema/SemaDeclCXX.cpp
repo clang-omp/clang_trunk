@@ -1905,6 +1905,14 @@ void Sema::DiagnoseAbsenceOfOverrideControl(NamedDecl *D) {
       isa<CXXDestructorDecl>(MD))
     return;
 
+  SourceLocation Loc = MD->getLocation();
+  SourceLocation SpellingLoc = Loc;
+  if (getSourceManager().isMacroArgExpansion(Loc))
+    SpellingLoc = getSourceManager().getImmediateExpansionRange(Loc).first;
+  SpellingLoc = getSourceManager().getSpellingLoc(SpellingLoc);
+  if (SpellingLoc.isValid() && getSourceManager().isInSystemHeader(SpellingLoc))
+      return;
+    
   if (MD->size_overridden_methods() > 0) {
     Diag(MD->getLocation(), diag::warn_function_marked_not_override_overriding)
       << MD->getDeclName();
@@ -2468,6 +2476,8 @@ namespace {
       Expr *Callee = E->getCallee();
       if (isa<MemberExpr>(Callee)) {
         HandleValue(Callee, false /*AddressOf*/);
+        for (auto Arg : E->arguments())
+          Visit(Arg);
         return;
       }
 
@@ -2486,6 +2496,17 @@ namespace {
       }
 
       Inherited::VisitCallExpr(E);
+    }
+
+    void VisitCXXOperatorCallExpr(CXXOperatorCallExpr *E) {
+      Expr *Callee = E->getCallee();
+
+      if (isa<UnresolvedLookupExpr>(Callee))
+        return Inherited::VisitCXXOperatorCallExpr(E);
+
+      Visit(Callee);
+      for (auto Arg : E->arguments())
+        HandleValue(Arg->IgnoreParenImpCasts(), false /*AddressOf*/);
     }
 
     void VisitBinaryOperator(BinaryOperator *E) {
@@ -4614,6 +4635,12 @@ static void checkDLLAttribute(Sema &S, CXXRecordDecl *Class) {
   if (!ClassAttr)
     return;
 
+  if (!Class->isExternallyVisible()) {
+    S.Diag(Class->getLocation(), diag::err_attribute_dll_not_extern)
+        << Class << ClassAttr;
+    return;
+  }
+
   if (S.Context.getTargetInfo().getCXXABI().isMicrosoft() &&
       !ClassAttr->isInherited()) {
     // Diagnose dll attributes on members of class with dll attribute.
@@ -4636,7 +4663,9 @@ static void checkDLLAttribute(Sema &S, CXXRecordDecl *Class) {
     // Don't inherit dll attribute until the template is instantiated.
     return;
 
-  bool ClassExported = ClassAttr->getKind() == attr::DLLExport;
+  // The class is either imported or exported.
+  const bool ClassExported = ClassAttr->getKind() == attr::DLLExport;
+  const bool ClassImported = !ClassExported;
 
   // Force declaration of implicit members so they can inherit the attribute.
   S.ForceDeclarationOfImplicitMembers(Class);
@@ -4655,15 +4684,22 @@ static void checkDLLAttribute(Sema &S, CXXRecordDecl *Class) {
     if (!VD && !MD)
       continue;
 
-    // Don't process deleted methods.
-    if (MD && MD->isDeleted())
-      continue;
+    if (MD) {
+      // Don't process deleted methods.
+      if (MD->isDeleted())
+        continue;
 
-    if (MD && MD->isMoveAssignmentOperator() && !ClassExported &&
-        MD->isInlined()) {
-      // Current MSVC versions don't export the move assignment operators, so
-      // don't attempt to import them if we have a definition.
-      continue;
+      if (MD->isMoveAssignmentOperator() && ClassImported && MD->isInlined()) {
+        // Current MSVC versions don't export the move assignment operators, so
+        // don't attempt to import them if we have a definition.
+        continue;
+      }
+
+      if (MD->isInlined() && ClassImported &&
+          !S.Context.getTargetInfo().getCXXABI().isMicrosoft()) {
+        // MinGW does not import inline functions.
+        continue;
+      }
     }
 
     if (!getDLLAttr(Member)) {

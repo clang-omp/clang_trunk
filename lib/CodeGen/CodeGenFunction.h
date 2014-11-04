@@ -454,11 +454,11 @@ public:
   /// Header for data within LifetimeExtendedCleanupStack.
   struct LifetimeExtendedCleanupHeader {
     /// The size of the following cleanup object.
-    size_t Size : 29;
+    unsigned Size : 29;
     /// The kind of cleanup to push: a value from the CleanupKind enumeration.
     unsigned Kind : 3;
 
-    size_t getSize() const { return Size; }
+    size_t getSize() const { return size_t(Size); }
     CleanupKind getKind() const { return static_cast<CleanupKind>(Kind); }
   };
 
@@ -1264,6 +1264,9 @@ public:
   void pushLifetimeExtendedDestroy(CleanupKind kind, llvm::Value *addr,
                                    QualType type, Destroyer *destroyer,
                                    bool useEHCleanupForArray);
+  void pushCallObjectDeleteCleanup(const FunctionDecl *OperatorDelete,
+                                   llvm::Value *CompletePtr,
+                                   QualType ElementType);
   void pushStackRestore(CleanupKind kind, llvm::Value *SPMem);
   void emitDestroy(llvm::Value *addr, QualType type, Destroyer *destroyer,
                    bool useEHCleanupForArray);
@@ -2560,6 +2563,11 @@ public:
                               ReturnValueSlot ReturnValue, llvm::Value *This,
                               llvm::Value *ImplicitParam,
                               QualType ImplicitParamTy, const CallExpr *E);
+  RValue EmitCXXStructorCall(const CXXMethodDecl *MD, llvm::Value *Callee,
+                             ReturnValueSlot ReturnValue, llvm::Value *This,
+                             llvm::Value *ImplicitParam,
+                             QualType ImplicitParamTy, const CallExpr *E,
+                             StructorType Type);
   RValue EmitCXXMemberCallExpr(const CXXMemberCallExpr *E,
                                ReturnValueSlot ReturnValue);
   RValue EmitCXXMemberPointerCallExpr(const CXXMemberCallExpr *E,
