@@ -1583,20 +1583,10 @@ void ASTDumper::dumpStmt(const Stmt *S) {
     }
 
     ConstStmtVisitor<ASTDumper>::Visit(S);
-
-    setMoreChildren(!S->children().empty());
-    ConstStmtVisitor<ASTDumper>::Visit(S);
-    setMoreChildren(false);
-    for (Stmt::const_child_range CI = S->children(); CI; ++CI) {
-      Stmt::const_child_range Next = CI;
-      ++Next;
-      if (!Next)
-        lastChild();
+    for (Stmt::const_child_range CI = S->children(); CI; ++CI)
       dumpStmt(*CI);
-    }
-    if (const CapturedStmt *CS = dyn_cast<CapturedStmt>(S)) {
+    if (const CapturedStmt *CS = dyn_cast<CapturedStmt>(S))
       dumpStmt(CS->getCapturedStmt());
-    }
   });
 }
 
@@ -1641,17 +1631,18 @@ void ASTDumper::VisitCapturedStmt(const CapturedStmt *Node) {
   for (CapturedStmt::const_capture_iterator I = Node->capture_begin(),
                                             E = Node->capture_end();
                                             I != E; ++I) {
-    IndentScope Indent(*this);
-    OS << "Capture ";
-    switch (I->getCaptureKind()) {
-    case CapturedStmt::VCK_This:
-      OS << "this";
-      break;
-    case CapturedStmt::VCK_ByRef:
-      OS << "byref ";
-      dumpBareDeclRef(I->getCapturedVar());
-      break;
-    }
+    dumpChild([=]{
+      OS << "Capture ";
+      switch (I->getCaptureKind()) {
+      case CapturedStmt::VCK_This:
+        OS << "this";
+        break;
+      case CapturedStmt::VCK_ByRef:
+        OS << "byref ";
+        dumpBareDeclRef(I->getCapturedVar());
+        break;
+      }
+    });
   }
   dumpDecl(Node->getCapturedDecl());
 }
