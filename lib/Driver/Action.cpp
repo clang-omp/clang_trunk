@@ -24,6 +24,7 @@ const char *Action::getClassName(ActionClass AC) {
   switch (AC) {
   case InputClass: return "input";
   case BindArchClass: return "bind-arch";
+  case BindTargetClass: return "bind-target";
   case PreprocessJobClass: return "preprocessor";
   case PrecompileJobClass: return "precompiler";
   case AnalyzeJobClass: return "analyzer";
@@ -51,6 +52,12 @@ void BindArchAction::anchor() {}
 BindArchAction::BindArchAction(std::unique_ptr<Action> Input,
                                const char *_ArchName)
     : Action(BindArchClass, std::move(Input)), ArchName(_ArchName) {}
+
+void BindTargetAction::anchor() {}
+
+BindTargetAction::BindTargetAction(std::unique_ptr<Action> Input, const char *_TargetName)
+  : Action(BindTargetClass, std::move(Input)), TargetName(_TargetName) {
+}
 
 void JobAction::anchor() {}
 

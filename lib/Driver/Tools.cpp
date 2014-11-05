@@ -186,7 +186,7 @@ static void addDirectoryList(const ArgList &Args,
 
 static void AddLinkerInputs(const ToolChain &TC,
                             const InputInfoList &Inputs, const ArgList &Args,
-                            ArgStringList &CmdArgs) {
+                            ArgStringList &CmdArgs, bool isTargetLinkage) {
   const Driver &D = TC.getDriver();
 
   // Add extra linker input arguments which are not treated as inputs
@@ -204,8 +204,14 @@ static void AddLinkerInputs(const ToolChain &TC,
           << TC.getTripleString();
     }
 
-    // Add filenames immediately.
+    // Add filenames immediately except if this is a host linker phase and the
+    // the object files (inputs) are produced by a target assembler. Those are
+    // handled by a linker script.
     if (II.isFilename()) {
+
+      if ( !isTargetLinkage && II.getOriginalAction()->getOffloadingDevice() )
+        continue;
+
       CmdArgs.push_back(II.getFilename());
       continue;
     }
@@ -232,6 +238,108 @@ static void AddLinkerInputs(const ToolChain &TC,
   if (!TC.isCrossCompiling())
     addDirectoryList(Args, CmdArgs, "-L", "LIBRARY_PATH");
 }
+
+static void AddOpenMPLinkerScript(const ToolChain &TC, Compilation &C,
+                  const JobAction &JA,
+                  const InputInfo &Output,
+                  const InputInfoList &Inputs,
+                  const ArgList &Args,
+                  ArgStringList &CmdArgs) {
+
+  if ( !Args.hasArg(options::OPT_fopenmp) )
+    return;
+
+  // This is the linkage for the target
+  if ( JA.getOffloadingDevice() )
+    return;
+
+  // Add OpenMP target arguments by employing
+
+  // FIXME: check if the toolchain supports a linker script
+
+  // Gather the pairs (target triple)-(file name)
+
+  std::vector<std::pair<const char*,const char*> > Targets;
+
+  for (InputInfoList::const_iterator
+       it = Inputs.begin(), ie = Inputs.end(); it != ie; ++it) {
+    const InputInfo &II = *it;
+
+    if ( const char *tname = II.getOriginalAction()->getOffloadingDevice()){
+      Targets.push_back(std::pair<const char*,const char*>
+                  (tname,II.getFilename()));
+
+    }
+  }
+
+  if (Targets.empty())
+    return;
+
+  // Create temporary linker script
+  StringRef Name = llvm::sys::path::filename(Output.getFilename());
+  std::pair<StringRef, StringRef> Split = Name.rsplit('.');
+  std::string TmpName = C.getDriver().GetTemporaryPath(Split.first,"lk");
+  const char *LKS = C.addTempFile(C.getArgs().MakeArgString(TmpName.c_str()));
+
+  // Open script file in order to write contents
+  std::error_code EC;
+  llvm::raw_fd_ostream lksf(LKS,EC,llvm::sys::fs::F_None);
+
+  if (EC) {
+    // FIXME: maybe use a file open failure message here
+    C.getDriver().Diag(clang::diag::err_unable_to_make_temp) << EC.message();
+    return;
+  }
+
+  // Add commands to embed target binaries. We ensure that each section and
+  // image s 16-byte aligned. This is not mandatory, but increases the
+  // likelihood of data to be aligned with a cache block in several main host
+  // machines.
+  lksf << "TARGET(binary)\n";
+  for (unsigned i=0; i<Targets.size(); ++i)
+    lksf << "INPUT(" << Targets[i].second << ")\n";
+
+  lksf << "SECTIONS\n";
+  lksf << "{\n";
+  lksf << "  .openmptgt ALIGN(0x10) : {\n";
+
+  for (unsigned i=0; i<Targets.size(); ++i){
+    std::string tgt_name(Targets[i].first);
+    std::replace(tgt_name.begin(),tgt_name.end(),'-','_');
+    lksf << "    . = ALIGN(0x10);\n";
+    lksf << "    __omptgt__img_start_" << tgt_name << " = .;\n";
+    lksf << "    " << Targets[i].second << "\n";
+    lksf << "    __omptgt__img_end_" << tgt_name << " = .;\n";
+
+    // We append the host entries and target name associated with the target
+    // image
+
+    lksf << "    QUAD(__omptgt__host_entries_begin);\n";
+    lksf << "    QUAD(__omptgt__host_entries_end);\n";
+
+    for(const char *c = tgt_name.c_str(); *c != '\0'; ++c )
+      lksf << "    BYTE(" << (unsigned)*c  << ");\n";
+    lksf << "    BYTE(0);\n";
+
+  }
+
+  lksf << "  }\n";
+  // Add commands to define host entries begin and end
+  lksf << "  .openmptgt_host_entries ALIGN(0x10) : {\n";
+  lksf << "    __omptgt__host_entries_begin = .;\n";
+  lksf << "    *(.openmptgt_host_entries)\n";
+  lksf << "    __omptgt__host_entries_end = .;\n";
+  lksf << "  }\n";
+  lksf << "}\n";
+  lksf << "INSERT BEFORE .data\n";
+
+  lksf.close();
+
+  CmdArgs.push_back("-T");
+  CmdArgs.push_back(LKS);
+
+}
+
 
 /// \brief Determine whether Objective-C automated reference counting is
 /// enabled.
@@ -1203,6 +1311,33 @@ void Clang::AddMIPSTargetArgs(const ArgList &Args,
   }
 }
 
+/// getNVPTXTargetCPU - Get the (LLVM) name of the NVPTX gpu we are targeting.
+static const char *getNVPTXTargetGPU(const ArgList &Args,
+                                   const llvm::Triple &Triple,
+                                   bool isOpenMPTarget) {
+
+  // if this is not an OpenMP target we can rely on the arch parameter
+  if ( isOpenMPTarget )
+    if (const Arg *A = Args.getLastArg(options::OPT_march_EQ))
+        return A->getValue();
+
+  StringRef ArchName = Triple.getArchName();
+
+  if (ArchName.empty())
+    return "sm_20";
+
+  return llvm::StringSwitch<const char *>(ArchName)
+      .Case("nvptxsm_20", "sm_20")
+      .Case("nvptxsm_21", "sm_21")
+      .Case("nvptxsm_30", "sm_30")
+      .Case("nvptxsm_35", "sm_35")
+      .Case("nvptx64sm_20", "sm_20")
+      .Case("nvptx64sm_21", "sm_21")
+      .Case("nvptx64sm_30", "sm_30")
+      .Case("nvptx64sm_35", "sm_35")
+      .Default("sm_20");
+}
+
 /// getPPCTargetCPU - Get the (LLVM) name of the PowerPC cpu we are targeting.
 static std::string getPPCTargetCPU(const ArgList &Args) {
   if (Arg *A = Args.getLastArg(options::OPT_mcpu_EQ)) {
@@ -1452,7 +1587,8 @@ static const char *getX86TargetCPU(const ArgList &Args,
   }
 }
 
-static std::string getCPUName(const ArgList &Args, const llvm::Triple &T) {
+static std::string getCPUName(const ArgList &Args, const llvm::Triple &T,
+                              bool isOpenMPTarget) {
   switch(T.getArch()) {
   default:
     return "";
@@ -1513,11 +1649,15 @@ static std::string getCPUName(const ArgList &Args, const llvm::Triple &T) {
 
   case llvm::Triple::r600:
     return getR600TargetGPU(Args);
+
+  case llvm::Triple::nvptx:
+  case llvm::Triple::nvptx64:
+    return getNVPTXTargetGPU(Args,T,isOpenMPTarget);
   }
 }
 
 static void AddGoldPlugin(const ToolChain &ToolChain, const ArgList &Args,
-                          ArgStringList &CmdArgs) {
+                          ArgStringList &CmdArgs, bool isOpenMPTarget) {
   // Tell the linker to load the plugin. This has to come before AddLinkerInputs
   // as gold requires -plugin to come before any -plugin-opt that -Wl might
   // forward.
@@ -1529,7 +1669,7 @@ static void AddGoldPlugin(const ToolChain &ToolChain, const ArgList &Args,
   // the plugin.
 
   // Handle flags for selecting CPU variants.
-  std::string CPU = getCPUName(Args, ToolChain.getTriple());
+  std::string CPU = getCPUName(Args, ToolChain.getTriple(), isOpenMPTarget);
   if (!CPU.empty())
     CmdArgs.push_back(Args.MakeArgString(Twine("-plugin-opt=mcpu=") + CPU));
 }
@@ -2496,8 +2636,35 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // FIXME: Implement custom jobs for internal actions.
   CmdArgs.push_back("-cc1");
 
-  if (Args.hasArg(options::OPT_fopenmp))
+  if (Args.hasArg(options::OPT_fopenmp)){
     CmdArgs.push_back("-fopenmp");
+
+    // pass the targets we are generating code to
+    if ( Arg *Tgts = Args.getLastArg(options::OPT_omptargets_EQ) ){
+
+      ArrayRef<const char *> Vals = Tgts->getValues();
+
+      if (!Vals.empty()){
+
+        std::string S("-omptargets=");
+        S += Vals[0];
+        for (unsigned i=1; i <Vals.size(); ++i ){
+          S += ',';
+          S += Vals[i];
+        }
+        CmdArgs.push_back(Args.MakeArgString(S));
+      }
+    }
+
+    // inform the frontend we are generating code for a target
+    if ( JA.getOffloadingDevice() )
+      CmdArgs.push_back("-omp-target-mode");
+
+    // the frontend components needs to know the path of the original source
+    // file given that the target functions use that to generate a unique name
+    CmdArgs.push_back("-omp-main-file-path");
+    CmdArgs.push_back(Args.MakeArgString(Inputs[0].getBaseInput()));
+  }
 
   // Add the "effective" target triple.
   CmdArgs.push_back("-triple");
@@ -3065,7 +3232,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // Add the target cpu
   std::string ETripleStr = getToolChain().ComputeEffectiveClangTriple(Args);
   llvm::Triple ETriple(ETripleStr);
-  std::string CPU = getCPUName(Args, ETriple);
+  std::string CPU = getCPUName(Args, ETriple, JA.getOffloadingDevice());
   if (!CPU.empty()) {
     CmdArgs.push_back("-target-cpu");
     CmdArgs.push_back(Args.MakeArgString(CPU));
@@ -4862,7 +5029,7 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
 
   // Add the target cpu
   const llvm::Triple &Triple = getToolChain().getTriple();
-  std::string CPU = getCPUName(Args, Triple);
+  std::string CPU = getCPUName(Args, Triple, JA.getOffloadingDevice());
   if (!CPU.empty()) {
     CmdArgs.push_back("-target-cpu");
     CmdArgs.push_back(Args.MakeArgString(CPU));
@@ -5252,8 +5419,8 @@ void hexagon::Link::ConstructJob(Compilation &C, const JobAction &JA,
   const std::string MarchSuffix = "/" + MarchString;
   const std::string G0Suffix = "/G0";
   const std::string MarchG0Suffix = MarchSuffix + G0Suffix;
-  const std::string RootDir = toolchains::Hexagon_TC::GetGnuDir(D.InstalledDir)
-                              + "/";
+  const std::string RootDir =
+      toolchains::Hexagon_TC::GetGnuDir(D.InstalledDir, Args) + "/";
   const std::string StartFilesDir = RootDir
                                     + "hexagon/lib"
                                     + (buildingLib
@@ -5308,8 +5475,7 @@ void hexagon::Link::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_t);
   Args.AddAllArgs(CmdArgs, options::OPT_u_Group);
 
-  AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs);
-
+  AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs, JA.getOffloadingDevice());
   //----------------------------------------------------------------------------
   // Libraries
   //----------------------------------------------------------------------------
@@ -5339,6 +5505,8 @@ void hexagon::Link::ConstructJob(Compilation &C, const JobAction &JA,
     std::string finiObj = useShared ? "/finiS.o" : "/fini.o";
     CmdArgs.push_back(Args.MakeArgString(StartFilesDir + finiObj));
   }
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   std::string Linker = ToolChain.GetProgramPath("hexagon-ld");
   C.addCommand(llvm::make_unique<Command>(JA, *this, Args.MakeArgString(Linker),
@@ -5429,7 +5597,8 @@ bool mips::isUCLibc(const ArgList &Args) {
   return A && A->getOption().matches(options::OPT_muclibc);
 }
 
-bool mips::isNaN2008(const ArgList &Args, const llvm::Triple &Triple) {
+bool mips::isNaN2008(const ArgList &Args, const llvm::Triple &Triple,
+                     bool isOpenMPTarget) {
   if (Arg *NaNArg = Args.getLastArg(options::OPT_mnan_EQ))
     return llvm::StringSwitch<bool>(NaNArg->getValue())
                .Case("2008", true)
@@ -5437,7 +5606,7 @@ bool mips::isNaN2008(const ArgList &Args, const llvm::Triple &Triple) {
                .Default(false);
 
   // NaN2008 is the default for MIPS32r6/MIPS64r6.
-  return llvm::StringSwitch<bool>(getCPUName(Args, Triple))
+  return llvm::StringSwitch<bool>(getCPUName(Args, Triple, isOpenMPTarget))
              .Cases("mips32r6", "mips64r6", true)
              .Default(false);
 
@@ -5869,11 +6038,16 @@ void darwin::Link::ConstructJob(Compilation &C, const JobAction &JA,
 
   Args.AddAllArgs(CmdArgs, options::OPT_L);
 
-  if (Args.hasArg(options::OPT_fopenmp))
+  if (Args.hasArg(options::OPT_fopenmp)){
     // This is more complicated in gcc...
     CmdArgs.push_back("-liomp5");
 
-  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs);
+    if (Args.hasArg(options::OPT_omptargets_EQ))
+      CmdArgs.push_back("-lomptarget");
+  }
+
+  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs,
+                  JA.getOffloadingDevice());
   // Build the input file for -filelist (list of linker input files) in case we
   // need it later
   for (const auto &II : Inputs) {
@@ -5930,6 +6104,8 @@ void darwin::Link::ConstructJob(Compilation &C, const JobAction &JA,
 
   Args.AddAllArgs(CmdArgs, options::OPT_T_Group);
   Args.AddAllArgs(CmdArgs, options::OPT_F);
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   const char *Exec =
     Args.MakeArgString(getToolChain().GetLinkerPath());
@@ -6102,7 +6278,8 @@ void solaris::Link::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_e);
   Args.AddAllArgs(CmdArgs, options::OPT_r);
 
-  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs);
+  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs,
+      JA.getOffloadingDevice());
 
   if (!Args.hasArg(options::OPT_nostdlib) &&
       !Args.hasArg(options::OPT_nodefaultlibs)) {
@@ -6123,6 +6300,8 @@ void solaris::Link::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back(Args.MakeArgString(LibPath + "crtn.o"));
 
   addProfileRT(getToolChain(), Args, CmdArgs);
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   const char *Exec =
     Args.MakeArgString(getToolChain().GetLinkerPath());
@@ -6316,7 +6495,8 @@ void openbsd::Link::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_Z_Flag);
   Args.AddAllArgs(CmdArgs, options::OPT_r);
 
-  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs);
+  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs,
+      JA.getOffloadingDevice());
 
   if (!Args.hasArg(options::OPT_nostdlib) &&
       !Args.hasArg(options::OPT_nodefaultlibs)) {
@@ -6359,6 +6539,8 @@ void openbsd::Link::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back(Args.MakeArgString(
                               getToolChain().GetFilePath("crtendS.o")));
   }
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   const char *Exec =
     Args.MakeArgString(getToolChain().GetLinkerPath());
@@ -6442,7 +6624,8 @@ void bitrig::Link::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_T_Group);
   Args.AddAllArgs(CmdArgs, options::OPT_e);
 
-  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs);
+  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs,
+      JA.getOffloadingDevice());
 
   if (!Args.hasArg(options::OPT_nostdlib) &&
       !Args.hasArg(options::OPT_nodefaultlibs)) {
@@ -6495,6 +6678,8 @@ void bitrig::Link::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back(Args.MakeArgString(
                               getToolChain().GetFilePath("crtendS.o")));
   }
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   const char *Exec =
     Args.MakeArgString(getToolChain().GetLinkerPath());
@@ -6689,10 +6874,11 @@ void freebsd::Link::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_r);
 
   if (D.IsUsingLTO(Args))
-    AddGoldPlugin(ToolChain, Args, CmdArgs);
+    AddGoldPlugin(ToolChain, Args, CmdArgs, JA.getOffloadingDevice());
 
   bool NeedsSanitizerDeps = addSanitizerRuntimes(ToolChain, Args, CmdArgs);
-  AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs);
+  AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs,
+      JA.getOffloadingDevice());
 
   if (!Args.hasArg(options::OPT_nostdlib) &&
       !Args.hasArg(options::OPT_nodefaultlibs)) {
@@ -6760,6 +6946,8 @@ void freebsd::Link::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   addProfileRT(ToolChain, Args, CmdArgs);
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   const char *Exec =
     Args.MakeArgString(getToolChain().GetLinkerPath());
@@ -6979,7 +7167,8 @@ void netbsd::Link::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_Z_Flag);
   Args.AddAllArgs(CmdArgs, options::OPT_r);
 
-  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs);
+  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs,
+      JA.getOffloadingDevice());
 
   unsigned Major, Minor, Micro;
   getToolChain().getTriple().getOSVersion(Major, Minor, Micro);
@@ -7043,6 +7232,8 @@ void netbsd::Link::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   addProfileRT(getToolChain(), Args, CmdArgs);
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   const char *Exec = Args.MakeArgString(getToolChain().GetLinkerPath());
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
@@ -7262,8 +7453,9 @@ static void AddLibgcc(const llvm::Triple &Triple, const Driver &D,
     CmdArgs.push_back("-ldl");
 }
 
-static std::string getLinuxDynamicLinker(const ArgList &Args,
-                                         const toolchains::Linux &ToolChain) {
+static StringRef getLinuxDynamicLinker(const ArgList &Args,
+                                       const toolchains::Linux &ToolChain,
+                                       bool isOpenMPTarget) {
   if (ToolChain.getTriple().getEnvironment() == llvm::Triple::Android) {
     if (ToolChain.getTriple().isArch64Bit())
       return "/system/bin/linker64";
@@ -7295,7 +7487,7 @@ static std::string getLinuxDynamicLinker(const ArgList &Args,
     StringRef CPUName;
     StringRef ABIName;
     mips::getMipsCPUAndABI(Args, ToolChain.getTriple(), CPUName, ABIName);
-    bool IsNaN2008 = mips::isNaN2008(Args, ToolChain.getTriple());
+    bool IsNaN2008 = mips::isNaN2008(Args, ToolChain.getTriple(), isOpenMPTarget);
 
     StringRef LibDir = llvm::StringSwitch<llvm::StringRef>(ABIName)
                            .Case("o32", "/lib")
@@ -7471,7 +7663,8 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
        !Args.hasArg(options::OPT_shared))) {
     CmdArgs.push_back("-dynamic-linker");
     CmdArgs.push_back(Args.MakeArgString(
-        D.DyldPrefix + getLinuxDynamicLinker(Args, ToolChain)));
+        D.DyldPrefix + getLinuxDynamicLinker(Args, ToolChain,
+                                             JA.getOffloadingDevice())));
   }
 
   CmdArgs.push_back("-o");
@@ -7519,13 +7712,14 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(Args.MakeArgString(StringRef("-L") + Path));
 
   if (D.IsUsingLTO(Args))
-    AddGoldPlugin(ToolChain, Args, CmdArgs);
+    AddGoldPlugin(ToolChain, Args, CmdArgs, JA.getOffloadingDevice());
 
   if (Args.hasArg(options::OPT_Z_Xlinker__no_demangle))
     CmdArgs.push_back("--no-demangle");
 
   bool NeedsSanitizerDeps = addSanitizerRuntimes(ToolChain, Args, CmdArgs);
-  AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs);
+  AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs,
+                  JA.getOffloadingDevice());
   // The profile runtime also needs access to system libraries.
   addProfileRT(getToolChain(), Args, CmdArgs);
 
@@ -7551,9 +7745,11 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
         linkSanitizerRuntimeDeps(ToolChain, CmdArgs);
 
       bool OpenMP = Args.hasArg(options::OPT_fopenmp);
-      if (OpenMP)
+      if (OpenMP) {
         CmdArgs.push_back("-liomp5");
-
+        if (Args.hasArg(options::OPT_omptargets_EQ))
+          CmdArgs.push_back("-lomptarget");
+      }
       AddRunTimeLibs(ToolChain, D, CmdArgs, Args);
 
       if ((Args.hasArg(options::OPT_pthread) ||
@@ -7583,6 +7779,8 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
         CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crtn.o")));
     }
   }
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   C.addCommand(
       llvm::make_unique<Command>(JA, *this, ToolChain.Linker.c_str(), CmdArgs));
@@ -7634,7 +7832,8 @@ void minix::Link::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_T_Group);
   Args.AddAllArgs(CmdArgs, options::OPT_e);
 
-  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs);
+  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs,
+      JA.getOffloadingDevice());
 
   addProfileRT(getToolChain(), Args, CmdArgs);
 
@@ -7656,6 +7855,8 @@ void minix::Link::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(
          Args.MakeArgString(getToolChain().GetFilePath("crtend.o")));
   }
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   const char *Exec = Args.MakeArgString(getToolChain().GetLinkerPath());
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
@@ -7759,7 +7960,8 @@ void dragonfly::Link::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_T_Group);
   Args.AddAllArgs(CmdArgs, options::OPT_e);
 
-  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs);
+  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs,
+      JA.getOffloadingDevice());
 
   if (!Args.hasArg(options::OPT_nostdlib) &&
       !Args.hasArg(options::OPT_nodefaultlibs)) {
@@ -7831,6 +8033,8 @@ void dragonfly::Link::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   addProfileRT(getToolChain(), Args, CmdArgs);
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   const char *Exec = Args.MakeArgString(getToolChain().GetLinkerPath());
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
@@ -7982,6 +8186,8 @@ void visualstudio::Link::ConstructJob(Compilation &C, const JobAction &JA,
     // or -L. Render it, even if MSVC doesn't understand it.
     A.renderAsInput(Args, CmdArgs);
   }
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   // It's not sufficient to just use link from the program PATH, because other
   // environments like GnuWin32 install their own link.exe which may come first.
@@ -8144,10 +8350,128 @@ void XCore::Link::ConstructJob(Compilation &C, const JobAction &JA,
   if (EH.ShouldUseExceptionTables)
     CmdArgs.push_back("-fexceptions");
 
-  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs);
+  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs,
+      JA.getOffloadingDevice());
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   const char *Exec = Args.MakeArgString(getToolChain().GetProgramPath("xcc"));
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
+}
+
+/// NVPTX Tools
+// We pass assemble and link construction to the ptxas and
+// nvlink tools, respectively.
+// FIXME: get the exact cpu we are assembling to nad include it
+// as part of the arguments
+
+void NVPTX::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
+                                       const InputInfo &Output,
+                                       const InputInfoList &Inputs,
+                                       const ArgList &Args,
+                                       const char *LinkingOutput) const {
+  ArgStringList CmdArgs;
+
+  if (Args.hasArg(options::OPT_v))
+    CmdArgs.push_back("-v");
+
+  CmdArgs.push_back("-o");
+  CmdArgs.push_back(Output.getFilename());
+
+  CmdArgs.push_back("-c");
+
+  std::string CPU = getCPUName(Args, getToolChain().getTriple(),
+      JA.getOffloadingDevice());
+
+  if (!CPU.empty()) {
+    CmdArgs.push_back("-arch");
+    CmdArgs.push_back(Args.MakeArgString(CPU));
+  }
+
+  for (InputInfoList::const_iterator
+       it = Inputs.begin(), ie = Inputs.end(); it != ie; ++it) {
+    const InputInfo &II = *it;
+    CmdArgs.push_back(II.getFilename());
+  }
+
+  const char *Exec =
+    Args.MakeArgString(getToolChain().GetProgramPath("ptxas"));
+  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
+}
+
+void NVPTX::Link::ConstructJob(Compilation &C, const JobAction &JA,
+                                   const InputInfo &Output,
+                                   const InputInfoList &Inputs,
+                                   const ArgList &Args,
+                                   const char *LinkingOutput) const {
+  ArgStringList CmdArgs;
+
+  if (Output.isFilename()) {
+    CmdArgs.push_back("-o");
+    CmdArgs.push_back(Output.getFilename());
+  } else {
+    assert(Output.isNothing() && "Invalid output.");
+  }
+
+  if (Args.hasArg(options::OPT_v))
+    CmdArgs.push_back("-v");
+
+  std::string CPU = getCPUName(Args, getToolChain().getTriple(),
+      JA.getOffloadingDevice());
+
+  if (!CPU.empty()) {
+    CmdArgs.push_back("-arch");
+    CmdArgs.push_back(Args.MakeArgString(CPU));
+  }
+
+  // nvlink relies on the extension used by the input files
+  // to decide what to do. Given that ptxas produces cubin files
+  // we need to copy the input files to a new file with the right
+  // extension.
+  // FIXME: this can be efficiently done by specifying a new
+  // output type for the assembly action, however this would expose
+  // the target details to the driver and maybe we do not want to do
+  // that
+  for (const auto &II : Inputs) {
+
+    if (II.getType() == types::TY_LLVM_IR ||
+        II.getType() == types::TY_LTO_IR ||
+        II.getType() == types::TY_LLVM_BC ||
+        II.getType() == types::TY_LTO_BC){
+      C.getDriver().Diag(diag::err_drv_no_linker_llvm_support)
+        << getToolChain().getTripleString();
+      continue;
+    }
+
+    // Currently, we only pass the input files to the linker, we do not pass
+    // any libraries that may be valid only for the host.
+    if (!II.isFilename())
+      continue;
+
+    StringRef Name = llvm::sys::path::filename(II.getFilename());
+    std::pair<StringRef, StringRef> Split = Name.rsplit('.');
+    std::string TmpName = C.getDriver().GetTemporaryPath(Split.first,"cubin");
+
+    const char *CubinF = C.addTempFile(C.getArgs().MakeArgString(TmpName.c_str()));
+
+    const char *CopyExec =
+        Args.MakeArgString(getToolChain().GetProgramPath(
+            C.getDriver().IsCLMode() ? "copy" : "cp" ));
+
+    ArgStringList CopyCmdArgs;
+    CopyCmdArgs.push_back(II.getFilename());
+    CopyCmdArgs.push_back(CubinF);
+    C.addCommand(llvm::make_unique<Command>(JA, *this, CopyExec, CopyCmdArgs));
+
+    CmdArgs.push_back(CubinF);
+  }
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
+
+  const char *Exec =
+    Args.MakeArgString(getToolChain().GetProgramPath("nvlink"));
+  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
+
 }
 
 void CrossWindows::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
@@ -8300,7 +8624,7 @@ void CrossWindows::Link::ConstructJob(Compilation &C, const JobAction &JA,
   for (const auto &Path : Paths)
     CmdArgs.push_back(Args.MakeArgString(StringRef("-L") + Path));
 
-  AddLinkerInputs(TC, Inputs, Args, CmdArgs);
+  AddLinkerInputs(TC, Inputs, Args, CmdArgs, JA.getOffloadingDevice());
 
   if (D.CCCIsCXX() && !Args.hasArg(options::OPT_nostdlib) &&
       !Args.hasArg(options::OPT_nodefaultlibs)) {
@@ -8320,6 +8644,8 @@ void CrossWindows::Link::ConstructJob(Compilation &C, const JobAction &JA,
       AddRunTimeLibs(TC, D, CmdArgs, Args);
     }
   }
+
+  AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   const std::string Linker = TC.GetProgramPath("ld");
   Exec = Args.MakeArgString(Linker);

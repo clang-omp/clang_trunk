@@ -27,8 +27,8 @@ using namespace clang;
 using namespace llvm::opt;
 
 ToolChain::ToolChain(const Driver &D, const llvm::Triple &T,
-                     const ArgList &Args)
-  : D(D), Triple(T), Args(Args) {
+                     const ArgList &Args, bool IsOpenMPTargetToolchain)
+  : D(D), Triple(T), Args(Args), IsOpenMPTargetToolchain(IsOpenMPTargetToolchain) {
   if (Arg *A = Args.getLastArg(options::OPT_mthread_model))
     if (!isThreadModelSupported(A->getValue()))
       D.Diag(diag::err_drv_invalid_thread_model_for_target)
@@ -118,6 +118,7 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
 
   case Action::InputClass:
   case Action::BindArchClass:
+  case Action::BindTargetClass:
   case Action::LipoJobClass:
   case Action::DsymutilJobClass:
   case Action::VerifyDebugInfoJobClass:
@@ -134,6 +135,25 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
 
   llvm_unreachable("Invalid tool kind.");
 }
+
+llvm::opt::DerivedArgList *
+ToolChain::TranslateArgs(const llvm::opt::DerivedArgList &Args,
+                         const char *BoundArch,
+                         bool isOpenMPTarget,
+                         bool &isSuccess) const {
+
+   if (isOpenMPTarget){
+     isSuccess = false;
+
+     D.Diag(diag::err_drv_omp_target_translation_not_available)
+         << BoundArch;
+
+     return nullptr;
+   }
+
+   isSuccess = true;
+   return nullptr;
+ }
 
 Tool *ToolChain::SelectTool(const JobAction &JA) const {
   if (getDriver().ShouldUseClangCompiler(JA))

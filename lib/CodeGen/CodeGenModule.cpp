@@ -117,6 +117,8 @@ CodeGenModule::CodeGenModule(ASTContext &C, const CodeGenOptions &CGO,
     createOpenCLRuntime();
   if (LangOpts.CUDA)
     createCUDARuntime();
+  if (LangOpts.OpenMP)
+    createOpenMPRuntime();
 
   // Enable TBAA unless it's suppressed. ThreadSanitizer needs TBAA even at O0.
   if (LangOpts.Sanitize.Thread ||
@@ -188,7 +190,7 @@ void CodeGenModule::createOpenCLRuntime() {
 }
 
 void CodeGenModule::createOpenMPRuntime() {
-  OpenMPRuntime = new CGOpenMPRuntime(*this);
+  OpenMPRuntime = CreateOpenMPRuntime(*this);
 }
 
 void CodeGenModule::createCUDARuntime() {
@@ -1893,6 +1895,12 @@ void CodeGenModule::MaybeHandleStaticInExternC(const SomeDecl *D,
 }
 
 void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D) {
+
+  // If we are generating code for a target we only generate the var definition
+  // if it is inside a declare target region
+  if ( LangOpts.OpenMPTargetMode && !OpenMPSupport.getTargetDeclare() )
+    return;
+
   llvm::Constant *Init = nullptr;
   QualType ASTTy = D->getType();
   CXXRecordDecl *RD = ASTTy->getBaseElementTypeUnsafe()->getAsCXXRecordDecl();
@@ -2281,9 +2289,36 @@ void CodeGenModule::HandleCXXStaticMemberVarInstantiation(VarDecl *VD) {
   EmitTopLevelDecl(VD);
 }
 
+/// Recursivelly find target regions starting from the given statement
+static void FindAndProcessTargetRegions(CodeGenFunction &CGF, const Stmt *S){
+
+  if (!S)
+    return;
+
+  // If we found a OMP target directive, codegen it
+  if ( const OMPTargetDirective *D = dyn_cast<OMPTargetDirective>(S))
+    CGF.EmitOMPTargetDirective(*D);
+
+  // Keep looking for target regions recursively
+  for(Stmt::const_child_iterator ii=S->child_begin(), ie=S->child_end(); ii != ie; ++ii)
+    FindAndProcessTargetRegions(CGF,*ii);
+}
+
 void CodeGenModule::EmitGlobalFunctionDefinition(GlobalDecl GD,
                                                  llvm::GlobalValue *GV) {
   const auto *D = cast<FunctionDecl>(GD.getDecl());
+
+  // If we are generating code for a target we need to look
+  // into the function declarations for target regions instead
+  // of codegening the function
+  if ( LangOpts.OpenMPTargetMode && !OpenMPSupport.getTargetDeclare() ){
+
+    CodeGenFunction CGF(*this);
+    CGF.CurFuncDecl = D;
+
+    FindAndProcessTargetRegions(CGF, D->getBody());
+    return;
+  }
 
   // If a method is deffered then defer its omp directive too.
   if (const CXXMethodDecl *MD = dyn_cast_or_null<CXXMethodDecl>(D)) {
@@ -3110,6 +3145,11 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
   if (D->getDeclContext() && D->getDeclContext()->isDependentContext())
     return;
 
+  // Ignore any declaration other than Function and OMPDeclareTarget
+  // if we are generating code for a target
+  if ( LangOpts.OpenMPTargetMode && !(D->getKind() == Decl::Function || D->getKind() == Decl::OMPDeclareTarget ))
+    return;
+
   switch (D->getKind()) {
   case Decl::CXXConversion:
   case Decl::CXXMethod:
@@ -3266,7 +3306,7 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
     EmitOMPDeclareSimd(cast<OMPDeclareSimdDecl>(D));
     break;
   case Decl::OMPDeclareTarget:
-    EmitOMPDeclareSimd(cast<OMPDeclareSimdDecl>(D));
+    EmitOMPDeclareTarget(cast<OMPDeclareTargetDecl>(D));
     break;
 
   case Decl::ClassTemplateSpecialization: {
@@ -3540,7 +3580,7 @@ CodeGenModule::OpenMPSupportStackTy::OMPStackElemTy::OMPStackElemTy(CodeGenModul
     NoWait(true), Mergeable(false), Schedule(0), ChunkSize(0), NewTask(false),
     Untied(false), HasLastPrivate(false),
     TaskPrivateTy(0), TaskPrivateQTy(), TaskPrivateBase(0), NumTeams(0), ThreadLimit(0),
-    WaitDepsArgs(0) { }
+    WaitDepsArgs(0), OffloadingDevice(0) { }
 
 CodeGenFunction &CodeGenModule::OpenMPSupportStackTy::getCGFForReductionFunction() {
   if (!OpenMPStack.back().RedCGF) {
@@ -3759,6 +3799,29 @@ void CodeGenModule::OpenMPSupportStackTy::setUntied(bool Flag) {
   OpenMPStack.back().Untied = Flag;
 }
 
+void CodeGenModule::OpenMPSupportStackTy::setTargetDeclare(bool Flag){
+  OpenMPStack.back().TargetDeclare = Flag;
+}
+bool CodeGenModule::OpenMPSupportStackTy::getTargetDeclare(){
+  for (OMPStackTy::reverse_iterator I = OpenMPStack.rbegin(),
+                                    E = OpenMPStack.rend();
+       I != E; ++I) {
+    if (I->TargetDeclare) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void CodeGenModule::OpenMPSupportStackTy::setDistribute(bool Flag){
+  OpenMPStack.back().Distribute = Flag;
+}
+
+bool CodeGenModule::OpenMPSupportStackTy::getDistribute(){
+  return OpenMPStack.back().Distribute;
+}
+
+
 llvm::Value *CodeGenModule::OpenMPSupportStackTy::getTaskFlags() {
   return OpenMPStack.back().TaskFlags;
 }
@@ -3896,3 +3959,19 @@ llvm::Constant *CodeGenModule::GetAddrOfRTTIDescriptor(QualType Ty,
   return getCXXABI().getAddrOfRTTIDescriptor(Ty);
 }
 
+void CodeGenModule::OpenMPSupportStackTy::getMapData(ArrayRef<llvm::Value*> &MapPointers, ArrayRef<llvm::Value*> &MapSizes, ArrayRef<unsigned> &MapTypes){
+  MapPointers = OpenMPStack.back().MapPointers;
+  MapSizes = OpenMPStack.back().MapSizes;
+  MapTypes = OpenMPStack.back().MapTypes;
+}
+void CodeGenModule::OpenMPSupportStackTy::addMapData(llvm::Value *MapPointer, llvm::Value *MapSize, unsigned MapType){
+  OpenMPStack.back().MapPointers.push_back(MapPointer);
+  OpenMPStack.back().MapSizes.push_back(MapSize);
+  OpenMPStack.back().MapTypes.push_back(MapType);
+}
+void CodeGenModule::OpenMPSupportStackTy::setOffloadingDevice(llvm::Value *device){
+  OpenMPStack.back().OffloadingDevice = device;
+}
+llvm::Value *CodeGenModule::OpenMPSupportStackTy::getOffloadingDevice(){
+  return OpenMPStack.back().OffloadingDevice;
+}

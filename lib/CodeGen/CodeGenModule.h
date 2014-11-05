@@ -1166,23 +1166,6 @@ public:
   ///
   void EmitOMPDeclareTarget(const OMPDeclareTargetDecl *D);
 
-  /// \brief Creates a structure with the location info for Intel OpenMP RTL.
-  llvm::Value *CreateIntelOpenMPRTLLoc(SourceLocation Loc,
-                                       CodeGenFunction &CGF,
-                                       unsigned Flags = 0x02);
-  /// \brief Creates call to "__kmpc_global_thread_num(ident_t *loc)" OpenMP
-  /// RTL function.
-  llvm::Value *CreateOpenMPGlobalThreadNum(SourceLocation Loc,
-                                           CodeGenFunction &CGF);
-
-  /// \brief Checks if the variable is OpenMP threadprivate and generates code
-  /// for threadprivate variables.
-  /// \return 0 if the variable is not threadprivate, or new address otherwise.
-  llvm::Value *CreateOpenMPThreadPrivateCached(const VarDecl *VD,
-                                               SourceLocation Loc,
-                                               CodeGenFunction &CGF,
-                                               bool NoCast = false);
-
   class OpenMPSupportStackTy {
     /// \brief A set of OpenMP threadprivate variables.
     llvm::DenseMap<const Decl *, const Expr *> OpenMPThreadPrivate;
@@ -1225,7 +1208,9 @@ public:
       const Expr *ChunkSize;
       bool NewTask;
       bool Untied;
+      bool TargetDeclare;
       bool HasLastPrivate;
+      bool Distribute;
       llvm::DenseMap<const ValueDecl *, FieldDecl *> TaskFields;
       llvm::Type *TaskPrivateTy;
       QualType TaskPrivateQTy;
@@ -1233,6 +1218,10 @@ public:
       llvm::Value *NumTeams;
       llvm::Value *ThreadLimit;
       llvm::Value **WaitDepsArgs;
+      llvm::SmallVector<llvm::Value*,16> MapPointers;
+      llvm::SmallVector<llvm::Value*,16> MapSizes;
+      llvm::SmallVector<unsigned,16> MapTypes;
+      llvm::Value* OffloadingDevice;
       OMPStackElemTy(CodeGenModule &CGM);
       ~OMPStackElemTy();
     };
@@ -1333,6 +1322,10 @@ public:
     bool getOrdered();
     void setUntied(bool Flag);
     bool getUntied();
+    void setTargetDeclare(bool Flag);
+    bool getTargetDeclare();
+    void setDistribute(bool Flag);
+    bool getDistribute();
     bool getParentUntied();
     void setHasLastPrivate(bool Flag);
     bool hasLastPrivate();
@@ -1354,6 +1347,10 @@ public:
     llvm::Value *getThreadLimit();
     void setWaitDepsArgs(llvm::Value **Args);
     llvm::Value **getWaitDepsArgs();
+    void getMapData(ArrayRef<llvm::Value*> &MapPointers, ArrayRef<llvm::Value*> &MapSizes, ArrayRef<unsigned> &MapTypes);
+    void addMapData(llvm::Value *MapPointer, llvm::Value *MapSize, unsigned MapType);
+    void setOffloadingDevice(llvm::Value *device);
+    llvm::Value* getOffloadingDevice();
   };
 
   OpenMPSupportStackTy OpenMPSupport;

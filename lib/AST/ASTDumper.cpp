@@ -1641,6 +1641,9 @@ void ASTDumper::VisitCapturedStmt(const CapturedStmt *Node) {
         OS << "byref ";
         dumpBareDeclRef(I->getCapturedVar());
         break;
+      case CapturedStmt::VCK_VLAType:
+        OS << "VLA Type";
+        break;
       }
     });
   }

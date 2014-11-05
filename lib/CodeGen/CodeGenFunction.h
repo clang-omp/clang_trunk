@@ -2131,6 +2131,7 @@ public:
 
   LValue InitCapturedStruct(const CapturedStmt &S);
   void InitOpenMPFunction(llvm::Value *Context, const CapturedStmt &S);
+  void InitOpenMPTargetFunction(const CapturedStmt &S);
   llvm::Function *EmitCapturedStmt(const CapturedStmt &S, CapturedRegionKind K);
   llvm::Function *GenerateCapturedStmtFunction(const CapturedStmt &S);
   llvm::Value *GenerateCapturedStmtArgument(const CapturedStmt &S);
@@ -2202,6 +2203,10 @@ public:
                                     const OMPExecutableDirective &S);
   void EmitInitOMPProcBindClause(const OMPProcBindClause &C,
                                  const OMPExecutableDirective &S);
+  void EmitInitOMPDeviceClause(const OMPDeviceClause &C,
+                               const OMPExecutableDirective &S);
+  void EmitInitOMPMapClause(const OMPMapClause &C,
+                            const OMPExecutableDirective &S);
   void EmitAfterInitOMPIfClause(const OMPIfClause &C,
                                 const OMPExecutableDirective &S);
   void EmitFinalOMPIfClause(const OMPIfClause &C,
