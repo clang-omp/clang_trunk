@@ -47,7 +47,7 @@
 // CHK-COMMANDS: "-target-cpu" "ppc64"
 // CHK-COMMANDS: "-o" "[[T2ASM:.+]].s" "-x" "cpp-output" "[[PP]].i"
 // CHK-COMMANDS: clang{{.*}}" "-cc1as" {{.*}} "-target-cpu" "ppc64" {{.*}} "-o" "[[T2OBJ:.+]].o" "[[T2ASM]].s"
-// CHK-COMMANDS: ld" "--eh-frame-hdr" "-m" "elf64ppc" "-shared" "-o" "[[T2LIB:.+]].so" {{.*}} "[[T2OBJ]].o"
+// CHK-COMMANDS: ld" {{.*}} "--eh-frame-hdr" "-m" "elf64ppc" "-shared" "-o" "[[T2LIB:.+]].so" {{.*}} "[[T2OBJ]].o"
 
 // Final linking command
 // CHK-COMMANDS: ld" {{.*}} "-o" "a.out"  {{.*}}  "[[HOSTOBJ]].o" "-liomp5" "-lomptarget" {{.*}} "-T" "[[LKSCRIPT:.+]].lk"
@@ -80,14 +80,14 @@
 // RUN:   FileCheck -check-prefix=CHK-CODEGEN-TARGET1 -input-file=target_driver_and_codegen.tgt-nvptx64-nvidia-cuda.ll %s
 // RUN:   FileCheck -check-prefix=CHK-CODEGEN-TARGET2 -input-file=target_driver_and_codegen.tgt-powerpc64-ibm-linux-gnu.ll %s
 
+// CHK-CODEGEN-HOST-DAG: @__omptgt__img_end_powerpc64_ibm_linux_gnu = external constant i8
+// CHK-CODEGEN-HOST-DAG: @__omptgt__img_start_powerpc64_ibm_linux_gnu = external constant i8
+// CHK-CODEGEN-HOST-DAG: @__omptgt__img_end_nvptx64_nvidia_cuda = external constant i8
+// CHK-CODEGEN-HOST-DAG: @__omptgt__img_start_nvptx64_nvidia_cuda = external constant i8
 
-// CHK-CODEGEN-HOST:   @__omptgt__img_start_[[T1:.*]] = external constant i8
-// CHK-CODEGEN-HOST:   @__omptgt__img_end_[[T1]] = external constant i8
-// CHK-CODEGEN-HOST:   @__omptgt__img_start_[[T2:.*]] = external constant i8
-// CHK-CODEGEN-HOST:   @__omptgt__img_end_[[T2]] = external constant i8
 // CHK-CODEGEN-HOST:   @__omptgt__device_images = internal constant [2 x { i8*, i8* }] [
-// CHK-CODEGEN-HOST:   { i8*, i8* } { i8* @__omptgt__img_start_[[T1]], i8* @__omptgt__img_end_[[T1]] },
-// CHK-CODEGEN-HOST:   { i8*, i8* } { i8* @__omptgt__img_start_[[T2]], i8* @__omptgt__img_end_[[T2]] }]
+// CHK-CODEGEN-HOST-DAG:   { i8*, i8* } { i8* @__omptgt__img_start_powerpc64_ibm_linux_gnu, i8* @__omptgt__img_end_powerpc64_ibm_linux_gnu },
+// CHK-CODEGEN-HOST-DAG:   { i8*, i8* } { i8* @__omptgt__img_start_nvptx64_nvidia_cuda, i8* @__omptgt__img_end_nvptx64_nvidia_cuda }]
 // CHK-CODEGEN-HOST:   @__omptgt__host_entries_begin = external constant { i8*, i32 }
 // CHK-CODEGEN-HOST:   @__omptgt__host_entries_end = external constant { i8*, i32 }
 // CHK-CODEGEN-HOST:   @__omptgt__target_regions_descriptor =
