@@ -1964,7 +1964,8 @@ TEST_F(FormatTest, FormatsEnum) {
   verifyFormat("enum E { // comment\n"
                "  ONE,\n"
                "  TWO\n"
-               "};");
+               "};\n"
+               "int i;");
 }
 
 TEST_F(FormatTest, FormatsEnumsWithErrors) {
@@ -2569,6 +2570,11 @@ TEST_F(FormatTest, MacrosWithoutTrailingSemicolon) {
                    "     Q_Object\n"
                    "  A() {\n}\n"
                    "}  ;"));
+
+  // Only if the next line can actually start an unwrapped line.
+  EXPECT_EQ("SOME_WEIRD_LOG_MACRO << SomeThing;",
+            format("SOME_WEIRD_LOG_MACRO\n"
+                   "<< SomeThing;"));
 }
 
 TEST_F(FormatTest, MacroCallsWithoutTrailingSemicolon) {
@@ -8710,7 +8716,7 @@ TEST_F(FormatTest, UsesLanguageForBasedOnStyle) {
   Style.Language = FormatStyle::LK_JavaScript;
   Style.BreakBeforeTernaryOperators = true;
   EXPECT_EQ(0, parseConfiguration("BasedOnStyle: Google", &Style).value());
-  EXPECT_FALSE(Style.SpacesInContainerLiterals);
+  EXPECT_FALSE(Style.BreakBeforeTernaryOperators);
 
   Style.BreakBeforeTernaryOperators = true;
   EXPECT_EQ(0, parseConfiguration("---\n"
@@ -8719,7 +8725,7 @@ TEST_F(FormatTest, UsesLanguageForBasedOnStyle) {
               "Language: JavaScript\n"
               "IndentWidth: 76\n"
               "...\n", &Style).value());
-  EXPECT_FALSE(Style.SpacesInContainerLiterals);
+  EXPECT_FALSE(Style.BreakBeforeTernaryOperators);
   EXPECT_EQ(76u, Style.IndentWidth);
   EXPECT_EQ(FormatStyle::LK_JavaScript, Style.Language);
 }
