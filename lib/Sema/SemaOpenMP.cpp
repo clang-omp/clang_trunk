@@ -6273,11 +6273,14 @@ class RedDeclFilterCCC : public CorrectionCandidateCallback {
 private:
   Sema &Actions;
   QualType QTy;
-  OMPDeclareReductionDecl::ReductionData *FoundData;
+  OMPDeclareReductionDecl::ReductionData *&FoundData;
 
 public:
-  RedDeclFilterCCC(Sema &S, QualType QTy)
-      : Actions(S), QTy(QTy), FoundData(0) {}
+  RedDeclFilterCCC(Sema &S, QualType QTy,
+                   OMPDeclareReductionDecl::ReductionData *&FoundData)
+      : Actions(S), QTy(QTy), FoundData(FoundData) {
+    FoundData = nullptr;
+  }
   virtual bool ValidateCandidate(const TypoCorrection &Candidate) {
     if (OMPDeclareReductionDecl *D = dyn_cast_or_null<OMPDeclareReductionDecl>(
             Candidate.getCorrectionDecl())) {
@@ -6298,7 +6301,6 @@ public:
     }
     return false;
   }
-  OMPDeclareReductionDecl::ReductionData *getFoundData() { return FoundData; }
 };
 }
 
@@ -6585,16 +6587,11 @@ OMPClause *Sema::ActOnOpenMPReductionClause(ArrayRef<Expr *> VarList,
     OMPDeclareReductionDecl::ReductionData *DRRD =
         TryToFindDeclareReductionDecl(*this, SS, OpName, RedTy, Op);
     if (Op == OMPC_REDUCTION_custom && !DRRD) {
-      // RedDeclFilterCCC CCC(*this, RedTy);
-      auto CCC = llvm::make_unique<RedDeclFilterCCC>(*this, RedTy);
       LookupResult Lookup(*this, OpName, LookupOMPDeclareReduction);
-      if (DiagnoseEmptyLookup(getCurScope(), SS, Lookup, std::move(CCC)))
-        continue;
-#if 0 // FIXME DiagnoseEmptyLookup takes CCC via a unique_ptr, so this needs
-      // some adjustment.
-      DRRD = CCC.getFoundData();
-#endif
-      if (!DRRD)
+      if (DiagnoseEmptyLookup(
+              getCurScope(), SS, Lookup,
+              llvm::make_unique<RedDeclFilterCCC>(*this, RedTy, DRRD)) ||
+          !DRRD)
         continue;
     }
     if (DRRD) {
