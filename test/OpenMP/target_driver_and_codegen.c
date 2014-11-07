@@ -47,7 +47,7 @@
 // CHK-COMMANDS: "-target-cpu" "ppc64"
 // CHK-COMMANDS: "-o" "[[T2ASM:.+]].s" "-x" "cpp-output" "[[PP]].i"
 // CHK-COMMANDS: clang{{.*}}" "-cc1as" {{.*}} "-target-cpu" "ppc64" {{.*}} "-o" "[[T2OBJ:.+]].o" "[[T2ASM]].s"
-// CHK-COMMANDS: ld" {{.*}} "--eh-frame-hdr" "-m" "elf64ppc" "-shared" "-o" "[[T2LIB:.+]].so" {{.*}} "[[T2OBJ]].o"
+// CHK-COMMANDS: ld" {{.*}}"--eh-frame-hdr" "-m" "elf64ppc" "-shared" "-o" "[[T2LIB:.+]].so" {{.*}}"[[T2OBJ]].o"
 
 // Final linking command
 // CHK-COMMANDS: ld" {{.*}} "-o" "a.out"  {{.*}}  "[[HOSTOBJ]].o" "-liomp5" "-lomptarget" {{.*}} "-T" "[[LKSCRIPT:.+]].lk"
