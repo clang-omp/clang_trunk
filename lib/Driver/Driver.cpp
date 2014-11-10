@@ -2123,11 +2123,10 @@ std::string Driver::GetProgramPath(const char *Name,
   }
 
   // If all else failed, search the path.
-  for (const auto &TargetSpecificExecutable : TargetSpecificExecutables) {
-    auto P = llvm::sys::findProgramByName(TargetSpecificExecutable);
-    if (P)
+  for (const auto &TargetSpecificExecutable : TargetSpecificExecutables)
+    if (llvm::ErrorOr<std::string> P =
+            llvm::sys::findProgramByName(TargetSpecificExecutable))
       return *P;
-  }
 
   return Name;
 }

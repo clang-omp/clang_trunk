@@ -2173,14 +2173,13 @@ void Generic_ELF::addClangTargetOptions(const ArgList &DriverArgs,
 /// Hexagon Toolchain
 
 std::string Hexagon_TC::GetGnuDir(const std::string &InstalledDir,
-                                    const ArgList &Args) {
+                                  const ArgList &Args) {
 
   // Locate the rest of the toolchain ...
-  const Arg *A = Args.getLastArg(options::OPT_gcc_toolchain);
-  std::string gcc_toolchain( (A) ? A->getValue() : GCC_INSTALL_PREFIX);
+  std::string GccToolchain = getGCCToolchainDir(Args);
 
-  if ( !gcc_toolchain.empty() )
-    return gcc_toolchain;
+  if (!GccToolchain.empty())
+    return GccToolchain;
 
   std::string InstallRelDir = InstalledDir + "/../../gnu";
   if (llvm::sys::fs::exists(InstallRelDir))
@@ -2319,7 +2318,8 @@ void Hexagon_TC::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
 
   const Driver &D = getDriver();
   std::string Ver(GetGCCLibAndIncVersion());
-  SmallString<128> IncludeDir(Hexagon_TC::GetGnuDir(D.InstalledDir, DriverArgs));
+  SmallString<128> IncludeDir(
+      Hexagon_TC::GetGnuDir(D.InstalledDir, DriverArgs));
 
   llvm::sys::path::append(IncludeDir, "hexagon/include/c++/");
   llvm::sys::path::append(IncludeDir, Ver);

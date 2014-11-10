@@ -1410,6 +1410,8 @@ private:
   
   ExprResult ParseObjCBoolLiteral();
 
+  ExprResult ParseFoldExpression(ExprResult LHS, BalancedDelimiterTracker &T);
+
   //===--------------------------------------------------------------------===//
   // C++ Expressions
   ExprResult ParseCXXIdExpression(bool isAddressOfOperand = false);

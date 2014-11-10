@@ -2522,6 +2522,8 @@ ASTReader::ReadControlBlock(ModuleFile &F,
       if (ASTReadResult Result =
               ReadModuleMapFileBlock(Record, F, ImportedBy, ClientLoadCapabilities))
         return Result;
+      break;
+
     case INPUT_FILE_OFFSETS:
       NumInputs = Record[0];
       NumUserInputs = Record[1];
@@ -4648,7 +4650,8 @@ bool ASTReader::ParseLanguageOptions(const RecordData &Record,
 #define ENUM_LANGOPT(Name, Type, Bits, Default, Description) \
   LangOpts.set##Name(static_cast<LangOptions::Type>(Record[Idx++]));
 #include "clang/Basic/LangOptions.def"
-#define SANITIZER(NAME, ID) LangOpts.Sanitize.ID = Record[Idx++];
+#define SANITIZER(NAME, ID)                                                    \
+  LangOpts.Sanitize.set(SanitizerKind::ID, Record[Idx++]);
 #include "clang/Basic/Sanitizers.def"
 
   ObjCRuntime::Kind runtimeKind = (ObjCRuntime::Kind) Record[Idx++];
