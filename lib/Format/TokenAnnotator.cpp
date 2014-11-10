@@ -765,6 +765,7 @@ private:
            Previous && Previous->isOneOf(tok::star, tok::amp);
            Previous = Previous->Previous)
         Previous->Type = TT_PointerOrReference;
+      Contexts.back().IsExpression = false;
     } else if (Current.Previous &&
                Current.Previous->Type == TT_CtorInitializerColon) {
       Contexts.back().IsExpression = true;
@@ -842,7 +843,8 @@ private:
         // function declaration have been found.
         Current.Type = TT_TrailingAnnotation;
       } else if (Style.Language == FormatStyle::LK_Java && Current.Previous &&
-                 Current.Previous->is(tok::at)) {
+                 Current.Previous->is(tok::at) &&
+                 Current.isNot(Keywords.kw_interface)) {
         const FormatToken& AtToken = *Current.Previous;
         if (!AtToken.Previous ||
             AtToken.Previous->Type == TT_LeadingJavaAnnotation)

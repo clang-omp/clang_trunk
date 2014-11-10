@@ -197,6 +197,8 @@ def err_expected_semi_after_namespace_name : Error<
   "expected ';' after namespace name">;
 def err_unexpected_namespace_attributes_alias : Error<
   "attributes cannot be specified on namespace alias">;
+def err_unexpected_nested_namespace_attribute : Error<
+  "attributes cannot be specified on a nested namespace definition">;
 def err_inline_namespace_alias : Error<"namespace alias cannot be inline">;
 def err_namespace_nonnamespace_scope : Error<
   "namespaces can only be defined in global or namespace scope">;
@@ -343,8 +345,6 @@ def err_invalid_vector_decl_spec_combination : Error<
 def err_invalid_pixel_decl_spec_combination : Error<
   "'__pixel' must be preceded by '__vector'.  "
   "'%0' declaration specifier not allowed here">;
-def err_invalid_vector_decl_spec : Error<
-  "cannot use '%0' with '__vector'">;
 def err_invalid_vector_bool_decl_spec : Error<
   "cannot use '%0' with '__vector bool'">;
 def err_invalid_vector_double_decl_spec : Error <
@@ -561,6 +561,10 @@ def warn_cxx98_compat_noexcept_expr : Warning<
 def warn_cxx98_compat_nullptr : Warning<
   "'nullptr' is incompatible with C++98">, InGroup<CXX98Compat>, DefaultIgnore;
 
+def warn_cxx14_compat_attribute : Warning<
+  "attributes on %select{a namespace|an enumerator}0 declaration are "
+  "incompatible with C++ standards before C++1z">,
+  InGroup<CXXPre1zCompat>, DefaultIgnore;
 def warn_cxx98_compat_alignas : Warning<"'alignas' is incompatible with C++98">,
   InGroup<CXX98Compat>, DefaultIgnore;
 def warn_cxx98_compat_attribute : Warning<
