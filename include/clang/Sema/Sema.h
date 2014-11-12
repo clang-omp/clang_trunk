@@ -2720,6 +2720,18 @@ public:
                                bool EnteringContext = false,
                                const ObjCObjectPointerType *OPT = nullptr);
 
+  ExprResult
+  CorrectDelayedTyposInExpr(Expr *E,
+                            llvm::function_ref<ExprResult(Expr *)> Filter =
+                                [](Expr *E) -> ExprResult { return E; });
+
+  ExprResult
+  CorrectDelayedTyposInExpr(ExprResult ER,
+                            llvm::function_ref<ExprResult(Expr *)> Filter =
+                                [](Expr *E) -> ExprResult { return E; }) {
+    return ER.isInvalid() ? ER : CorrectDelayedTyposInExpr(ER.get(), Filter);
+  }
+
   void diagnoseTypo(const TypoCorrection &Correction,
                     const PartialDiagnostic &TypoDiag,
                     bool ErrorRecovery = true);
@@ -2945,14 +2957,16 @@ private:
   ObjCMethodDecl *LookupMethodInGlobalPool(Selector Sel, SourceRange R,
                                            bool receiverIdOrClass,
                                            bool warn, bool instance);
-  
+
+public:
   /// \brief - Returns instance or factory methods in global method pool for
   /// given selector. If no such method or only one method found, function returns
   /// false; otherwise, it returns true
   bool CollectMultipleMethodsInGlobalPool(Selector Sel,
                                           SmallVectorImpl<ObjCMethodDecl*>& Methods,
                                           bool instance);
-    
+
+private:
   /// \brief - Returns a selector which best matches given argument list or
   /// nullptr if none could be found
   ObjCMethodDecl *SelectBestMethod(Selector Sel, MultiExprArg Args,
@@ -4088,7 +4102,8 @@ public:
 
   /// \brief Check the given exception-specification and update the
   /// exception specification information with the results.
-  void checkExceptionSpecification(ExceptionSpecificationType EST,
+  void checkExceptionSpecification(bool IsTopLevel,
+                                   ExceptionSpecificationType EST,
                                    ArrayRef<ParsedType> DynamicExceptions,
                                    ArrayRef<SourceRange> DynamicExceptionRanges,
                                    Expr *NoexceptExpr,
@@ -6747,6 +6762,8 @@ public:
                                         DeclarationName Entity,
                                         CXXRecordDecl *ThisContext,
                                         unsigned ThisTypeQuals);
+  void SubstExceptionSpec(FunctionDecl *New, const FunctionProtoType *Proto,
+                          const MultiLevelTemplateArgumentList &Args);
   ParmVarDecl *SubstParmVarDecl(ParmVarDecl *D,
                             const MultiLevelTemplateArgumentList &TemplateArgs,
                                 int indexAdjustment,

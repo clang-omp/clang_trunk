@@ -2991,7 +2991,8 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
           NoexceptExpr = FTI.NoexceptExpr;
         }
 
-        S.checkExceptionSpecification(FTI.getExceptionSpecType(),
+        S.checkExceptionSpecification(D.isFunctionDeclarationContext(),
+                                      FTI.getExceptionSpecType(),
                                       DynamicExceptions,
                                       DynamicExceptionRanges,
                                       NoexceptExpr,
@@ -5472,6 +5473,8 @@ static QualType getDecltypeForExpr(Sema &S, Expr *E) {
   } else if (const ObjCPropertyRefExpr *PR = dyn_cast<ObjCPropertyRefExpr>(E)) {
     if (PR->isExplicitProperty())
       return PR->getExplicitProperty()->getType();
+  } else if (auto *PE = dyn_cast<PredefinedExpr>(E)) {
+    return PE->getType();
   }
   
   // C++11 [expr.lambda.prim]p18:

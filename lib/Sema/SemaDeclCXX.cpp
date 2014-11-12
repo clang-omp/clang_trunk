@@ -2811,8 +2811,7 @@ Sema::BuildMemInitializer(Decl *ConstructorD,
   //   using a qualified name. ]
   if (!SS.getScopeRep() && !TemplateTypeTy) {
     // Look for a member, first.
-    DeclContext::lookup_result Result
-      = ClassDecl->lookup(MemberOrBase);
+    DeclContext::lookup_result Result = ClassDecl->lookup(MemberOrBase);
     if (!Result.empty()) {
       ValueDecl *Member;
       if ((Member = dyn_cast<FieldDecl>(Result.front())) ||
@@ -2915,6 +2914,7 @@ Sema::BuildMemInitializer(Decl *ConstructorD,
 
     if (BaseType.isNull()) {
       BaseType = Context.getTypeDeclType(TyD);
+      MarkAnyDeclReferenced(TyD->getLocation(), TyD, /*OdrUse=*/false);
       if (SS.isSet())
         // FIXME: preserve source range information
         BaseType = Context.getElaboratedType(ETK_None, SS.getScopeRep(),
@@ -13086,10 +13086,10 @@ void Sema::SetIvarInitializers(ObjCImplementationDecl *ObjCImplementation) {
       AllToInit.push_back(Member);
       
       // Be sure that the destructor is accessible and is marked as referenced.
-      if (const RecordType *RecordTy
-                  = Context.getBaseElementType(Field->getType())
-                                                        ->getAs<RecordType>()) {
-                    CXXRecordDecl *RD = cast<CXXRecordDecl>(RecordTy->getDecl());
+      if (const RecordType *RecordTy =
+              Context.getBaseElementType(Field->getType())
+                  ->getAs<RecordType>()) {
+        CXXRecordDecl *RD = cast<CXXRecordDecl>(RecordTy->getDecl());
         if (CXXDestructorDecl *Destructor = LookupDestructor(RD)) {
           MarkFunctionReferenced(Field->getLocation(), Destructor);
           CheckDestructorAccess(Field->getLocation(), Destructor,
@@ -13315,13 +13315,12 @@ bool Sema::checkThisInStaticMemberFunctionAttributes(CXXMethodDecl *Method) {
   return false;
 }
 
-void
-Sema::checkExceptionSpecification(ExceptionSpecificationType EST,
-                                  ArrayRef<ParsedType> DynamicExceptions,
-                                  ArrayRef<SourceRange> DynamicExceptionRanges,
-                                  Expr *NoexceptExpr,
-                                  SmallVectorImpl<QualType> &Exceptions,
-                                  FunctionProtoType::ExceptionSpecInfo &ESI) {
+void Sema::checkExceptionSpecification(
+    bool IsTopLevel, ExceptionSpecificationType EST,
+    ArrayRef<ParsedType> DynamicExceptions,
+    ArrayRef<SourceRange> DynamicExceptionRanges, Expr *NoexceptExpr,
+    SmallVectorImpl<QualType> &Exceptions,
+    FunctionProtoType::ExceptionSpecInfo &ESI) {
   Exceptions.clear();
   ESI.Type = EST;
   if (EST == EST_Dynamic) {
@@ -13330,13 +13329,15 @@ Sema::checkExceptionSpecification(ExceptionSpecificationType EST,
       // FIXME: Preserve type source info.
       QualType ET = GetTypeFromParser(DynamicExceptions[ei]);
 
-      SmallVector<UnexpandedParameterPack, 2> Unexpanded;
-      collectUnexpandedParameterPacks(ET, Unexpanded);
-      if (!Unexpanded.empty()) {
-        DiagnoseUnexpandedParameterPacks(DynamicExceptionRanges[ei].getBegin(),
-                                         UPPC_ExceptionType,
-                                         Unexpanded);
-        continue;
+      if (IsTopLevel) {
+        SmallVector<UnexpandedParameterPack, 2> Unexpanded;
+        collectUnexpandedParameterPacks(ET, Unexpanded);
+        if (!Unexpanded.empty()) {
+          DiagnoseUnexpandedParameterPacks(
+              DynamicExceptionRanges[ei].getBegin(), UPPC_ExceptionType,
+              Unexpanded);
+          continue;
+        }
       }
 
       // Check that the type is valid for an exception spec, and
@@ -13355,7 +13356,8 @@ Sema::checkExceptionSpecification(ExceptionSpecificationType EST,
               NoexceptExpr->getType()->getCanonicalTypeUnqualified() ==
               Context.BoolTy) &&
              "Parser should have made sure that the expression is boolean");
-      if (NoexceptExpr && DiagnoseUnexpandedParameterPack(NoexceptExpr)) {
+      if (IsTopLevel && NoexceptExpr &&
+          DiagnoseUnexpandedParameterPack(NoexceptExpr)) {
         ESI.Type = EST_BasicNoexcept;
         return;
       }
