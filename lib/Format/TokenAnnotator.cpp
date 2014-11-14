@@ -63,11 +63,13 @@ private:
         next();
         return true;
       }
-      if (CurrentToken->isOneOf(tok::r_paren, tok::r_square, tok::r_brace,
-                                tok::colon))
-        return false;
       if (CurrentToken->is(tok::question) &&
-          Style.Language != FormatStyle::LK_Java)
+          Style.Language == FormatStyle::LK_Java) {
+        next();
+        continue;
+      }
+      if (CurrentToken->isOneOf(tok::r_paren, tok::r_square, tok::r_brace,
+                                tok::colon, tok::question))
         return false;
       // If a && or || is found and interpreted as a binary operator, this set
       // of angles is likely part of something like "a < b && c > d". If the
@@ -367,10 +369,6 @@ private:
   }
 
   bool parseConditional() {
-    if (Style.Language == FormatStyle::LK_Java &&
-        CurrentToken->isOneOf(tok::comma, tok::greater))
-      return true;  // This is a generic "?".
-
     while (CurrentToken) {
       if (CurrentToken->is(tok::colon)) {
         CurrentToken->Type = TT_ConditionalExpr;
@@ -1686,7 +1684,8 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
   } else if (Style.Language == FormatStyle::LK_Java) {
     if (Left.is(Keywords.kw_synchronized) && Right.is(tok::l_paren))
       return Style.SpaceBeforeParens != FormatStyle::SBPO_Never;
-    if (Left.is(tok::kw_static) && Right.Type == TT_TemplateOpener)
+    if (Left.isOneOf(tok::kw_static, tok::kw_public) &&
+        Right.Type == TT_TemplateOpener)
       return true;
   }
   if (Right.Tok.getIdentifierInfo() && Left.Tok.getIdentifierInfo())
