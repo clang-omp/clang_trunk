@@ -464,7 +464,8 @@ unsigned ContinuationIndenter::addTokenOnNewLine(LineState &State,
 
   if (PreviousNonComment &&
       !PreviousNonComment->isOneOf(tok::comma, tok::semi) &&
-      PreviousNonComment->Type != TT_TemplateCloser &&
+      (PreviousNonComment->Type != TT_TemplateCloser ||
+       Current.NestingLevel != 0) &&
       PreviousNonComment->Type != TT_BinaryOperator &&
       PreviousNonComment->Type != TT_JavaAnnotation &&
       PreviousNonComment->Type != TT_LeadingJavaAnnotation &&
@@ -594,7 +595,7 @@ unsigned ContinuationIndenter::getNewLineColumn(const LineState &State) {
   if (NextNonComment->Type == TT_CtorInitializerComma)
     return State.Stack.back().Indent;
   if (Previous.is(tok::r_paren) && !Current.isBinaryOperator() &&
-      Current.isNot(tok::colon))
+      !Current.isOneOf(tok::colon, tok::comment))
     return ContinuationIndent;
   if (State.Stack.back().Indent == State.FirstIndent && PreviousNonComment &&
       PreviousNonComment->isNot(tok::r_brace))

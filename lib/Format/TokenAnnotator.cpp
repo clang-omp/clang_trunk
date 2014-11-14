@@ -1120,7 +1120,9 @@ public:
       // At the end of the line or when an operator with higher precedence is
       // found, insert fake parenthesis and return.
       if (!Current || (Current->closesScope() && Current->MatchingParen) ||
-          (CurrentPrecedence != -1 && CurrentPrecedence < Precedence)) {
+          (CurrentPrecedence != -1 && CurrentPrecedence < Precedence) ||
+          (CurrentPrecedence == prec::Conditional &&
+           Precedence == prec::Assignment && Current->is(tok::colon))) {
         if (LatestOperator) {
           LatestOperator->LastOperator = true;
           if (Precedence == PrecedenceArrowAndPeriod) {
@@ -1186,9 +1188,12 @@ private:
     if (Precedence > prec::Unknown)
       Start->StartsBinaryExpression = true;
     if (Current) {
-      ++Current->Previous->FakeRParens;
+      FormatToken *Previous = Current->Previous;
+      if (Previous->is(tok::comment) && Previous->Previous)
+        Previous = Previous->Previous;
+      ++Previous->FakeRParens;
       if (Precedence > prec::Unknown)
-        Current->Previous->EndsBinaryExpression = true;
+        Previous->EndsBinaryExpression = true;
     }
   }
 
@@ -1217,11 +1222,11 @@ private:
     if (!Current || !Current->is(tok::question))
       return;
     next();
-    parseConditionalExpr();
+    parse(prec::Assignment);
     if (!Current || Current->Type != TT_ConditionalExpr)
       return;
     next();
-    parseConditionalExpr();
+    parse(prec::Assignment);
     addFakeParenthesis(Start, prec::Conditional);
   }
 
@@ -1439,6 +1444,18 @@ unsigned TokenAnnotator::splitPenalty(const AnnotatedLine &Line,
 
   if (Left.is(tok::semi))
     return 0;
+
+  if (Style.Language == FormatStyle::LK_Java) {
+    if (Left.Type == TT_LeadingJavaAnnotation)
+      return 1;
+    if (Right.is(Keywords.kw_extends))
+      return 1;
+    if (Right.is(Keywords.kw_implements))
+      return 2;
+    if (Left.is(tok::comma) && Left.NestingLevel == 0)
+      return 3;
+  }
+
   if (Left.is(tok::comma) || (Right.is(tok::identifier) && Right.Next &&
                               Right.Next->Type == TT_DictLiteral))
     return 1;
@@ -1448,6 +1465,7 @@ unsigned TokenAnnotator::splitPenalty(const AnnotatedLine &Line,
     if (Right.Type != TT_ObjCMethodExpr && Right.Type != TT_LambdaLSquare)
       return 500;
   }
+
   if (Right.Type == TT_StartOfName ||
       Right.Type == TT_FunctionDeclarationName || Right.is(tok::kw_operator)) {
     if (Line.First->is(tok::kw_for) && Right.PartOfMultiVariableDeclStmt)
@@ -1470,12 +1488,6 @@ unsigned TokenAnnotator::splitPenalty(const AnnotatedLine &Line,
 
   if (Left.Type == TT_RangeBasedForLoopColon ||
       Left.Type == TT_InheritanceColon)
-    return 2;
-
-  if (Left.Type == TT_LeadingJavaAnnotation)
-    return 1;
-  if (Style.Language == FormatStyle::LK_Java &&
-      Right.is(Keywords.kw_implements))
     return 2;
 
   if (Right.isMemberAccess()) {

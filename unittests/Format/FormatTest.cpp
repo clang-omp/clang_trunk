@@ -3266,6 +3266,10 @@ TEST_F(FormatTest, ExpressionIndentationBreakingBeforeOperators) {
                "              > ccccc) {\n"
                "}",
                Style);
+  verifyFormat("return (a)\n"
+               "       // comment\n"
+               "       + b;",
+               Style);
 
   // Forced by comments.
   verifyFormat(
@@ -3537,6 +3541,10 @@ TEST_F(FormatTest, BreaksFunctionDeclarations) {
                "    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
                "        aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n"
                "    bbbb bbbb);");
+  verifyFormat("void SomeLoooooooooooongFunction(\n"
+               "    std::unique_ptr<aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa>\n"
+               "        aaaaaaaaaaaaaaaaaaaaaaaaaa,\n"
+               "    int bbbbbbbbbbbbb);");
 
   // Treat overloaded operators like other functions.
   verifyFormat("SomeLoooooooooooooooooooooooooogType\n"
@@ -4070,6 +4078,10 @@ TEST_F(FormatTest, BreaksConditionalExpressions) {
                "          aaaaaaaaa\n"
                "      ? b\n"
                "      : c);");
+  verifyFormat("return aaaa == bbbb\n"
+               "           // comment\n"
+               "           ? aaaa\n"
+               "           : bbbb;");
   verifyFormat(
       "unsigned Indent =\n"
       "    format(TheLine.First, IndentForLevel[TheLine.Level] >= 0\n"
@@ -4124,6 +4136,26 @@ TEST_F(FormatTest, BreaksConditionalExpressions) {
                "             ccccccccccccccccccccccccccccccccccccccc\n"
                "                 ? aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
                "                 : bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb);");
+
+  // Assignments in conditional expressions. Apparently not uncommon :-(.
+  verifyFormat("return a != b\n"
+               "           // comment\n"
+               "           ? a = b\n"
+               "           : a = b;");
+  verifyFormat("return a != b\n"
+               "           // comment\n"
+               "           ? a = a != b\n"
+               "                     // comment\n"
+               "                     ? a = b\n"
+               "                     : a\n"
+               "           : a;\n");
+  verifyFormat("return a != b\n"
+               "           // comment\n"
+               "           ? a\n"
+               "           : a = a != b\n"
+               "                     // comment\n"
+               "                     ? a = b\n"
+               "                     : a;");
 }
 
 TEST_F(FormatTest, BreaksConditionalExpressionsAfterOperator) {
