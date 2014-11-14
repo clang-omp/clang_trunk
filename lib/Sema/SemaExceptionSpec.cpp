@@ -35,6 +35,33 @@ static const FunctionProtoType *GetUnderlyingFunction(QualType T)
   return T->getAs<FunctionProtoType>();
 }
 
+/// HACK: libstdc++ has a bug where it shadows std::swap with a member
+/// swap function then tries to call std::swap unqualified from the exception
+/// specification of that function. This function detects whether we're in
+/// such a case and turns off delay-parsing of exception specifications.
+bool Sema::isLibstdcxxEagerExceptionSpecHack(const Declarator &D) {
+  auto *RD = dyn_cast<CXXRecordDecl>(CurContext);
+
+  // All the problem cases are member functions named "swap" within class
+  // templates declared directly within namespace std.
+  if (!RD || RD->getEnclosingNamespaceContext() != getStdNamespace() ||
+      !RD->getIdentifier() || !RD->getDescribedClassTemplate() ||
+      !D.getIdentifier() || !D.getIdentifier()->isStr("swap"))
+    return false;
+
+  // Only apply this hack within a system header.
+  if (!Context.getSourceManager().isInSystemHeader(D.getLocStart()))
+    return false;
+
+  return llvm::StringSwitch<bool>(RD->getIdentifier()->getName())
+      .Case("array", true)
+      .Case("pair", true)
+      .Case("priority_queue", true)
+      .Case("stack", true)
+      .Case("queue", true)
+      .Default(false);
+}
+
 /// CheckSpecifiedExceptionType - Check if the given type is valid in an
 /// exception specification. Incomplete types, or pointers to incomplete types
 /// other than void are not allowed.
@@ -112,6 +139,11 @@ bool Sema::CheckDistantExceptionSpec(QualType T) {
 
 const FunctionProtoType *
 Sema::ResolveExceptionSpec(SourceLocation Loc, const FunctionProtoType *FPT) {
+  if (FPT->getExceptionSpecType() == EST_Unparsed) {
+    Diag(Loc, diag::err_exception_spec_not_parsed);
+    return nullptr;
+  }
+
   if (!isUnresolvedExceptionSpec(FPT->getExceptionSpecType()))
     return FPT;
 
@@ -135,16 +167,8 @@ Sema::ResolveExceptionSpec(SourceLocation Loc, const FunctionProtoType *FPT) {
 void
 Sema::UpdateExceptionSpec(FunctionDecl *FD,
                           const FunctionProtoType::ExceptionSpecInfo &ESI) {
-  for (auto *Redecl : FD->redecls()) {
-    auto *RedeclFD = dyn_cast<FunctionDecl>(Redecl);
-    const FunctionProtoType *Proto =
-        RedeclFD->getType()->castAs<FunctionProtoType>();
-
-    // Overwrite the exception spec and rebuild the function type.
-    RedeclFD->setType(Context.getFunctionType(
-        Proto->getReturnType(), Proto->getParamTypes(),
-        Proto->getExtProtoInfo().withExceptionSpec(ESI)));
-  }
+  for (auto *Redecl : FD->redecls())
+    Context.adjustExceptionSpec(cast<FunctionDecl>(Redecl), ESI);
 
   // If we've fully resolved the exception specification, notify listeners.
   if (!isUnresolvedExceptionSpec(ESI.Type))
@@ -790,6 +814,11 @@ bool Sema::CheckOverridingFunctionExceptionSpec(const CXXMethodDecl *New,
       return false;
     }
   }
+  // If the exception specification hasn't been parsed yet, skip the check.
+  // We'll get called again once it's been parsed.
+  if (New->getType()->castAs<FunctionProtoType>()->getExceptionSpecType() ==
+      EST_Unparsed)
+    return false;
   unsigned DiagID = diag::err_override_exception_spec;
   if (getLangOpts().MicrosoftExt)
     DiagID = diag::ext_override_exception_spec;
