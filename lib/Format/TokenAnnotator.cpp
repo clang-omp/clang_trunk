@@ -763,7 +763,7 @@ private:
            Previous && Previous->isOneOf(tok::star, tok::amp);
            Previous = Previous->Previous)
         Previous->Type = TT_PointerOrReference;
-      Contexts.back().IsExpression = false;
+      Contexts.back().IsExpression = Contexts.back().InCtorInitializer;
     } else if (Current.Previous &&
                Current.Previous->Type == TT_CtorInitializerColon) {
       Contexts.back().IsExpression = true;
@@ -1696,7 +1696,8 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
   } else if (Style.Language == FormatStyle::LK_Java) {
     if (Left.is(Keywords.kw_synchronized) && Right.is(tok::l_paren))
       return Style.SpaceBeforeParens != FormatStyle::SBPO_Never;
-    if (Left.isOneOf(tok::kw_static, tok::kw_public) &&
+    if (Left.isOneOf(tok::kw_static, tok::kw_public, tok::kw_private,
+                     tok::kw_protected) &&
         Right.Type == TT_TemplateOpener)
       return true;
   }

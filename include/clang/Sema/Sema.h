@@ -2773,8 +2773,6 @@ public:
                                       const AttributeList *AttrList);
 
   void checkUnusedDeclAttributes(Declarator &D);
-    
-  void CheckBoolLikeConversion(Expr *E, SourceLocation CC);
 
   /// Determine if type T is a valid subject for a nonnull and similar
   /// attributes. By default, we look through references (the behavior used by
@@ -8912,6 +8910,7 @@ private:
 
   void CheckFloatComparison(SourceLocation Loc, Expr* LHS, Expr* RHS);
   void CheckImplicitConversions(Expr *E, SourceLocation CC = SourceLocation());
+  void CheckBoolLikeConversion(Expr *E, SourceLocation CC);
   void CheckForIntOverflow(Expr *E);
   void CheckUnsequencedOperations(Expr *E);
 
