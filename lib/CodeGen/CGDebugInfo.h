@@ -87,6 +87,10 @@ class CGDebugInfo {
   /// compilation.
   std::vector<std::pair<const TagType *, llvm::WeakVH>> ReplaceMap;
 
+  /// \brief Cache of replaceable forward declarartions (functions and
+  /// variables) to RAUW at the end of compilation.
+  std::vector<std::pair<const DeclaratorDecl *, llvm::WeakVH>> FwdDeclReplaceMap;
+
   // LexicalBlockStack - Keep track of our current nested lexical block.
   std::vector<llvm::TrackingVH<llvm::MDNode> > LexicalBlockStack;
   llvm::DenseMap<const Decl *, llvm::WeakVH> RegionMap;
@@ -376,6 +380,14 @@ private:
   llvm::DIDerivedType
   getOrCreateStaticDataMemberDeclarationOrNull(const VarDecl *D);
 
+  /// \brief Create a DISubprogram describing the forward
+  /// decalration represented in the given FunctionDecl.
+  llvm::DISubprogram getFunctionForwardDeclaration(const FunctionDecl *FD);
+
+  /// \brief Create a DIGlobalVariable describing the forward
+  /// decalration represented in the given VarDecl.
+  llvm::DIGlobalVariable getGlobalVariableForwardDeclaration(const VarDecl *VD);
+
   /// Return a global variable that represents one of the collection of
   /// global variables created for an anonmyous union.
   llvm::DIGlobalVariable
@@ -410,6 +422,21 @@ private:
   /// invalid then use current location.
   /// \param Force  Assume DebugColumnInfo option is true.
   unsigned getColumnNumber(SourceLocation Loc, bool Force=false);
+
+  /// \brief Collect various properties of a FunctionDecl.
+  /// \param GD  A GlobalDecl whose getDecl() must return a FunctionDecl.
+  void collectFunctionDeclProps(GlobalDecl GD,
+                                llvm::DIFile Unit,
+                                StringRef &Name, StringRef &LinkageName,
+                                llvm::DIDescriptor &FDContext,
+                                llvm::DIArray &TParamsArray,
+                                unsigned &Flags);
+
+  /// \brief Collect various properties of a VarDecl.
+  void collectVarDeclProps(const VarDecl *VD, llvm::DIFile &Unit,
+                           unsigned &LineNo, QualType &T,
+                           StringRef &Name, StringRef &LinkageName,
+                           llvm::DIDescriptor &VDContext);
 
   /// internString - Allocate a copy of \p A using the DebugInfoNames allocator
   /// and return a reference to it. If multiple arguments are given the strings
