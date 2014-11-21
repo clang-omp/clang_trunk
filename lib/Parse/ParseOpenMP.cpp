@@ -1784,7 +1784,8 @@ OMPClause *Parser::ParseOpenMPVarListClause(OpenMPClauseKind Kind) {
       ConsumeAnyToken();
       ColonProtectionRAIIObject ColonRAII(*this);
       TailLoc = Tok.getLocation();
-      ExprResult Tail = ParseAssignmentExpression();
+      ExprResult Tail =
+        Actions.CorrectDelayedTyposInExpr(ParseAssignmentExpression());
       if (Tail.isUsable()) {
         TailExpr = Tail.get();
       } else {
