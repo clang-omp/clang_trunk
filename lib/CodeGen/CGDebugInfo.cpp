@@ -3413,12 +3413,6 @@ void CGDebugInfo::finalize() {
     else
       VH = it->second;
 
-    // Functions have a fake temporary MDNode operand that is supposed
-    // to get RAUWed upon DIBuilder finalization. Do not leak these
-    // nodes for the temporary functions we are about to delete.
-    if (FwdDecl.isSubprogram())
-      llvm::MDNode::deleteTemporary(llvm::DISubprogram(FwdDecl).getVariablesNodes());
-
     FwdDecl.replaceAllUsesWith(CGM.getLLVMContext(),
                                llvm::DIDescriptor(cast<llvm::MDNode>(VH)));
   }
