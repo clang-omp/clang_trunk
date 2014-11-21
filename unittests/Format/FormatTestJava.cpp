@@ -164,6 +164,20 @@ TEST_F(FormatTestJava, EnumDeclarations) {
                "  public void f() {\n"
                "  }\n"
                "}");
+  verifyFormat("private enum SomeEnum implements Foo<?, B> {\n"
+               "  ABC {\n"
+               "    @Override\n"
+               "    public String toString() {\n"
+               "      return \"ABC\";\n"
+               "    }\n"
+               "  },\n"
+               "  CDE {\n"
+               "    @Override\n"
+               "    public String toString() {\n"
+               "      return \"CDE\";\n"
+               "    }\n"
+               "  };\n"
+               "}");
 }
 
 TEST_F(FormatTestJava, ThrowsDeclarations) {
@@ -273,6 +287,12 @@ TEST_F(FormatTestJava, MethodDeclarations) {
                "    Object arg1, Object arg2) {\n"
                "}",
                getStyleWithColumns(40));
+}
+
+TEST_F(FormatTestJava, CppKeywords) {
+  verifyFormat("public void union(Type a, Type b);");
+  verifyFormat("public void struct(Object o);");
+  verifyFormat("public void delete(Object o);");
 }
 
 } // end namespace tooling
