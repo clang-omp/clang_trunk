@@ -246,7 +246,7 @@ static const llvm::GlobalObject *getAliasedGlobal(const llvm::GlobalAlias &GA) {
     auto *GA2 = dyn_cast<llvm::GlobalAlias>(C);
     if (!GA2)
       return nullptr;
-    if (!Visited.insert(GA2))
+    if (!Visited.insert(GA2).second)
       return nullptr;
     C = GA2->getAliasee();
   }
@@ -975,13 +975,13 @@ static void addLinkOptionsPostorder(CodeGenModule &CGM,
                                     SmallVectorImpl<llvm::Value *> &Metadata,
                                     llvm::SmallPtrSet<Module *, 16> &Visited) {
   // Import this module's parent.
-  if (Mod->Parent && Visited.insert(Mod->Parent)) {
+  if (Mod->Parent && Visited.insert(Mod->Parent).second) {
     addLinkOptionsPostorder(CGM, Mod->Parent, Metadata, Visited);
   }
 
   // Import this module's dependencies.
   for (unsigned I = Mod->Imports.size(); I > 0; --I) {
-    if (Visited.insert(Mod->Imports[I-1]))
+    if (Visited.insert(Mod->Imports[I - 1]).second)
       addLinkOptionsPostorder(CGM, Mod->Imports[I-1], Metadata, Visited);
   }
 
@@ -1022,7 +1022,7 @@ void CodeGenModule::EmitModuleLinkOptions() {
   for (llvm::SetVector<clang::Module *>::iterator M = ImportedModules.begin(),
                                                MEnd = ImportedModules.end();
        M != MEnd; ++M) {
-    if (Visited.insert(*M))
+    if (Visited.insert(*M).second)
       Stack.push_back(*M);
   }
 
@@ -1042,7 +1042,7 @@ void CodeGenModule::EmitModuleLinkOptions() {
       if ((*Sub)->IsExplicit)
         continue;
 
-      if (Visited.insert(*Sub)) {
+      if (Visited.insert(*Sub).second) {
         Stack.push_back(*Sub);
         AnyChildren = true;
       }
@@ -1063,7 +1063,7 @@ void CodeGenModule::EmitModuleLinkOptions() {
   for (llvm::SetVector<clang::Module *>::iterator M = LinkModules.begin(),
                                                MEnd = LinkModules.end();
        M != MEnd; ++M) {
-    if (Visited.insert(*M))
+    if (Visited.insert(*M).second)
       addLinkOptionsPostorder(*this, *M, MetadataArgs, Visited);
   }
   std::reverse(MetadataArgs.begin(), MetadataArgs.end());
@@ -2672,7 +2672,7 @@ CodeGenModule::GetAddrOfConstantString(const StringLiteral *Literal) {
   unsigned StringLength = 0;
   llvm::StringMapEntry<llvm::Constant*> &Entry =
     GetConstantStringEntry(CFConstantStringMap, Literal, StringLength);
-  
+
   if (auto *C = Entry.second)
     return C;
   
@@ -2746,8 +2746,8 @@ CodeGenModule::GetAddrOfConstantString(const StringLiteral *Literal) {
   
   // String pointer.
   llvm::Constant *C =
-    llvm::ConstantDataArray::getString(VMContext, Entry.first());
-  
+      llvm::ConstantDataArray::getString(VMContext, Entry.first());
+
   llvm::GlobalValue::LinkageTypes Linkage;
   bool isConstant;
   Linkage = llvm::GlobalValue::PrivateLinkage;
@@ -2779,7 +2779,7 @@ CodeGenModule::GetAddrOfConstantString(const StringLiteral *Literal) {
                      ? NSStringNonFragileABISection
                      : NSStringSection);
   Entry.second = GV;
-  
+
   return GV;
 }
 
