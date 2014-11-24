@@ -54,6 +54,17 @@ TEST_F(FormatTestJava, NoAlternativeOperatorNames) {
   verifyFormat("someObject.and();");
 }
 
+TEST_F(FormatTestJava, FormatsInstanceOfLikeOperators) {
+  FormatStyle Style = getStyleWithColumns(50);
+  verifyFormat("return aaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "    instanceof bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;",
+               Style);
+  Style.BreakBeforeBinaryOperators = FormatStyle::BOS_None;
+  verifyFormat("return aaaaaaaaaaaaaaaaaaaaaaaaaaaaa instanceof\n"
+               "    bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;",
+               Style);
+}
+
 TEST_F(FormatTestJava, ClassDeclarations) {
   verifyFormat("public class SomeClass {\n"
                "  private int a;\n"
@@ -144,8 +155,8 @@ TEST_F(FormatTestJava, EnumDeclarations) {
                "  }\n"
                "}");
   verifyFormat("enum SomeThing {\n"
-               "  ABC(new int[]{1, 2}),\n"
-               "  CDE(new int[]{2, 3});\n"
+               "  ABC(new int[] {1, 2}),\n"
+               "  CDE(new int[] {2, 3});\n"
                "  Something(int[] i) {\n"
                "  }\n"
                "}");
@@ -178,6 +189,13 @@ TEST_F(FormatTestJava, EnumDeclarations) {
                "    }\n"
                "  };\n"
                "}");
+}
+
+TEST_F(FormatTestJava, ArrayInitializers) {
+  verifyFormat("new int[] {1, 2, 3, 4};");
+  verifyFormat("new int[] {\n"
+               "    1, 2, 3, 4,\n"
+               "};");
 }
 
 TEST_F(FormatTestJava, ThrowsDeclarations) {

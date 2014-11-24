@@ -754,6 +754,12 @@ TEST_F(FormatTest, ShortCaseLabels) {
                "}",
                Style);
   verifyFormat("switch (a) {\n"
+               "#if FOO\n"
+               "case 0: return 0;\n"
+               "#endif\n"
+               "}",
+               Style);
+  verifyFormat("switch (a) {\n"
                "case 1: {\n"
                "}\n"
                "case 2: {\n"
@@ -9412,6 +9418,7 @@ TEST_F(FormatTest, FormatsBlocks) {
                "    }\n"
                "  }\n"
                "});");
+  verifyFormat("Block b = ^int *(A *a, B *b) {}");
 
   FormatStyle FourIndent = getLLVMStyle();
   FourIndent.ObjCBlockIndentWidth = 4;
