@@ -747,6 +747,8 @@ private:
       }
     } else if (Current.isOneOf(tok::kw_return, tok::kw_throw)) {
       Contexts.back().IsExpression = true;
+    } else if (Current.is(TT_TrailingReturnArrow)) {
+      Contexts.back().IsExpression = false;
     } else if (Current.is(tok::l_paren) && !Line.MustBeDeclaration &&
                !Line.InPPDirective &&
                (!Current.Previous ||
@@ -786,6 +788,9 @@ private:
         Current.Type = TT_StartOfName;
       } else if (Current.is(tok::kw_auto)) {
         AutoFound = true;
+      } else if (Current.is(tok::arrow) &&
+                 Style.Language == FormatStyle::LK_Java) {
+        Current.Type = TT_LambdaArrow;
       } else if (Current.is(tok::arrow) && AutoFound &&
                  Line.MustBeDeclaration && Current.NestingLevel == 0) {
         Current.Type = TT_TrailingReturnArrow;
@@ -970,7 +975,8 @@ private:
       return TT_UnaryOperator;
 
     const FormatToken *NextToken = Tok.getNextNonComment();
-    if (!NextToken || NextToken->is(tok::l_brace))
+    if (!NextToken ||
+        (NextToken->is(tok::l_brace) && !NextToken->getNextNonComment()))
       return TT_Unknown;
 
     if (PrevToken->is(tok::coloncolon))
@@ -1166,6 +1172,8 @@ private:
         return prec::Conditional;
       else if (NextNonComment && NextNonComment->is(tok::colon) &&
                NextNonComment->Type == TT_DictLiteral)
+        return prec::Comma;
+      else if (Current->is(TT_LambdaArrow))
         return prec::Comma;
       else if (Current->is(tok::semi) || Current->Type == TT_InlineASMColon ||
                Current->Type == TT_SelectorName ||
@@ -1701,10 +1709,13 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
     if (Left.is(Keywords.kw_var))
       return true;
   } else if (Style.Language == FormatStyle::LK_Java) {
+    if (Left.is(TT_LambdaArrow) || Right.is(TT_LambdaArrow))
+      return true;
     if (Left.is(Keywords.kw_synchronized) && Right.is(tok::l_paren))
       return Style.SpaceBeforeParens != FormatStyle::SBPO_Never;
-    if (Left.isOneOf(tok::kw_static, tok::kw_public, tok::kw_private,
-                     tok::kw_protected) &&
+    if ((Left.isOneOf(tok::kw_static, tok::kw_public, tok::kw_private,
+                      tok::kw_protected) ||
+         Left.isOneOf(Keywords.kw_final, Keywords.kw_abstract)) &&
         Right.Type == TT_TemplateOpener)
       return true;
   }

@@ -1755,7 +1755,8 @@ OMPClause *Parser::ParseOpenMPVarListClause(OpenMPClauseKind Kind) {
     AllowCEANExpressions CEANRAII(*this,
                                   Kind == OMPC_depend || Kind == OMPC_map ||
                                   Kind == OMPC_from || Kind == OMPC_to);
-    ExprResult VarExpr = ParseAssignmentExpression();
+    ExprResult VarExpr =
+        Actions.CorrectDelayedTyposInExpr(ParseAssignmentExpression());
     if (VarExpr.isUsable()) {
       Vars.push_back(VarExpr.get());
     } else {

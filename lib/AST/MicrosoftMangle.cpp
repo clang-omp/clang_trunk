@@ -341,9 +341,7 @@ bool MicrosoftMangleContextImpl::shouldMangleCXXName(const NamedDecl *D) {
 
 bool
 MicrosoftMangleContextImpl::shouldMangleStringLiteral(const StringLiteral *SL) {
-  return SL->isAscii() || SL->isWide();
-  // TODO: This needs to be updated when MSVC gains support for Unicode
-  // literals.
+  return true;
 }
 
 void MicrosoftCXXNameMangler::mangle(const NamedDecl *D, StringRef Prefix) {
@@ -2442,14 +2440,10 @@ void MicrosoftMangleContextImpl::mangleStringLiteral(const StringLiteral *SL,
   Mangler.getStream() << "\01??_C@_";
 
   // <char-type>: The "kind" of string literal is encoded into the mangled name.
-  // TODO: This needs to be updated when MSVC gains support for unicode
-  // literals.
-  if (SL->isAscii())
-    Mangler.getStream() << '0';
-  else if (SL->isWide())
+  if (SL->isWide())
     Mangler.getStream() << '1';
   else
-    llvm_unreachable("unexpected string literal kind!");
+    Mangler.getStream() << '0';
 
   // <literal-length>: The next part of the mangled name consists of the length
   // of the string.
@@ -2572,7 +2566,10 @@ void MicrosoftMangleContextImpl::mangleStringLiteral(const StringLiteral *SL,
   unsigned NumCharsToMangle = std::min(32U, SL->getLength());
   for (unsigned I = 0, E = NumCharsToMangle * SL->getCharByteWidth(); I != E;
        ++I)
-    MangleByte(GetBigEndianByte(I));
+    if (SL->isWide())
+      MangleByte(GetBigEndianByte(I));
+    else
+      MangleByte(GetLittleEndianByte(I));
 
   // Encode the NUL terminator if there is room.
   if (NumCharsToMangle < 32)

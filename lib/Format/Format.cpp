@@ -750,7 +750,7 @@ private:
       if (Line->First->isOneOf(tok::kw_case, tok::kw_default, tok::r_brace))
         break;
       if (Line->First->isOneOf(tok::kw_if, tok::kw_for, tok::kw_switch,
-                               tok::kw_while))
+                               tok::kw_while, tok::comment))
         return 0;
       Length += I[1 + NumStmts]->Last->TotalLength + 1; // 1 for the space.
     }
@@ -1285,7 +1285,7 @@ private:
       int AdditionalIndent =
           State.FirstIndent - State.Line->Level * Style.IndentWidth;
       if (State.Stack.size() < 2 ||
-          !State.Stack[State.Stack.size() - 2].JSFunctionInlined) {
+          !State.Stack[State.Stack.size() - 2].NestedBlockInlined) {
         AdditionalIndent = State.Stack.back().Indent -
                            Previous.Children[0]->Level * Style.IndentWidth;
       }

@@ -48,6 +48,7 @@ enum TokenType {
   TT_InheritanceColon,
   TT_InlineASMColon,
   TT_JavaAnnotation,
+  TT_LambdaArrow,
   TT_LambdaLSquare,
   TT_LeadingJavaAnnotation,
   TT_LineComment,
@@ -270,6 +271,8 @@ struct FormatToken {
   bool IsForEachMacro;
 
   bool is(tok::TokenKind Kind) const { return Tok.is(Kind); }
+
+  bool is(TokenType TT) const { return Type == TT; }
 
   bool is(const IdentifierInfo *II) const {
     return II && II == Tok.getIdentifierInfo();
@@ -543,7 +546,9 @@ struct AdditionalKeywords {
     kw_function = &IdentTable.get("function");
     kw_var = &IdentTable.get("var");
 
+    kw_abstract = &IdentTable.get("abstract");
     kw_extends = &IdentTable.get("extends");
+    kw_final = &IdentTable.get("final");
     kw_implements = &IdentTable.get("implements");
     kw_interface = &IdentTable.get("interface");
     kw_synchronized = &IdentTable.get("synchronized");
@@ -566,7 +571,9 @@ struct AdditionalKeywords {
   IdentifierInfo *kw_var;
 
   // Java keywords.
+  IdentifierInfo *kw_abstract;
   IdentifierInfo *kw_extends;
+  IdentifierInfo *kw_final;
   IdentifierInfo *kw_implements;
   IdentifierInfo *kw_interface;
   IdentifierInfo *kw_synchronized;

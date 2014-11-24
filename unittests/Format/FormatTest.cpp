@@ -745,6 +745,11 @@ TEST_F(FormatTest, ShortCaseLabels) {
                "case 3:\n"
                "case 4:\n"
                "case 5: return;\n"
+               "case 6: // comment\n"
+               "  return;\n"
+               "case 7:\n"
+               "  // comment\n"
+               "  return;\n"
                "default: y = 1; break;\n"
                "}",
                Style);
@@ -2895,11 +2900,19 @@ TEST_F(FormatTest, LayoutBlockInsideParens) {
             "});",
             format(" functionCall ( {int i;int j;} );"));
   EXPECT_EQ("functionCall({\n"
-            "               int i;\n"
-            "               int j;\n"
-            "             },\n"
-            "             aaaa, bbbb, cccc);",
+            "  int i;\n"
+            "  int j;\n"
+            "}, aaaa, bbbb, cccc);",
             format(" functionCall ( {int i;int j;},  aaaa,   bbbb, cccc);"));
+  EXPECT_EQ("functionCall(\n"
+            "    {\n"
+            "      int i;\n"
+            "      int j;\n"
+            "    },\n"
+            "    aaaa, bbbb, // comment\n"
+            "    cccc);",
+            format(" functionCall ( {int i;int j;},  aaaa,   bbbb, // comment\n"
+                   "cccc);"));
   EXPECT_EQ("functionCall(aaaa, bbbb, { int i; });",
             format(" functionCall (aaaa,   bbbb, {int i;});"));
   EXPECT_EQ("functionCall(aaaa, bbbb, {\n"
@@ -2910,7 +2923,8 @@ TEST_F(FormatTest, LayoutBlockInsideParens) {
   EXPECT_EQ("functionCall(aaaa, bbbb, { int i; });",
             format(" functionCall (aaaa,   bbbb, {int i;});"));
   verifyFormat(
-      "Aaa({\n"
+      "Aaa(\n"  // FIXME: There shouldn't be a linebreak here.
+      "    {\n"
       "      int i; // break\n"
       "    },\n"
       "    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa(bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,\n"
@@ -2992,10 +3006,9 @@ TEST_F(FormatTest, LayoutNestedBlocks) {
   FormatStyle Style = getGoogleStyle();
   Style.ColumnLimit = 45;
   verifyFormat("Debug(aaaaa, {\n"
-               "               if (aaaaaaaaaaaaaaaaaaaaaaaa)\n"
-               "                 return;\n"
-               "             },\n"
-               "      a);", Style);
+               "  if (aaaaaaaaaaaaaaaaaaaaaaaa) return;\n"
+               "}, a);",
+               Style);
 }
 
 TEST_F(FormatTest, IndividualStatementsOfNestedBlocks) {
@@ -7682,11 +7695,10 @@ TEST_F(FormatTest, ConfigurableUseOfTab) {
                Tab);
   verifyFormat("{\n"
                "\tQ({\n"
-               "\t\t  int a;\n"
-               "\t\t  someFunction(aaaaaaaaaa,\n"
-               "\t\t               bbbbbbbbb);\n"
-               "\t  },\n"
-               "\t  p);\n"
+               "\t\tint a;\n"
+               "\t\tsomeFunction(aaaaaaaa,\n"
+               "\t\t             bbbbbbb);\n"
+               "\t}, p);\n"
                "}",
                Tab);
   EXPECT_EQ("{\n"
@@ -9267,20 +9279,24 @@ TEST_F(FormatTest, FormatsLambdas) {
   verifyFormat("int c = []() -> int { return 2; }();\n");
   verifyFormat("int c = []() -> vector<int> { return {2}; }();\n");
   verifyFormat("Foo([]() -> std::vector<int> { return {2}; }());");
+  verifyGoogleFormat("auto a = [&b, c](D* d) -> D* {};");
+  verifyGoogleFormat("auto a = [&b, c](D* d) -> D& {};");
+  verifyGoogleFormat("auto a = [&b, c](D* d) -> const D* {};");
   verifyFormat("auto aaaaaaaa = [](int i, // break for some reason\n"
                "                   int j) -> int {\n"
                "  return ffffffffffffffffffffffffffffffffffffffffffff(i * j);\n"
                "};");
 
   // Multiple lambdas in the same parentheses change indentation rules.
-  verifyFormat("SomeFunction([]() {\n"
-               "               int i = 42;\n"
-               "               return i;\n"
-               "             },\n"
-               "             []() {\n"
-               "               int j = 43;\n"
-               "               return j;\n"
-               "             });");
+  verifyFormat("SomeFunction(\n"
+               "    []() {\n"
+               "      int i = 42;\n"
+               "      return i;\n"
+               "    },\n"
+               "    []() {\n"
+               "      int j = 43;\n"
+               "      return j;\n"
+               "    });");
 
   // More complex introducers.
   verifyFormat("return [i, args...] {};");
