@@ -612,8 +612,10 @@ public:
     // definitions (code.google.com/p/protobuf) or missing "#" (either way we
     // should not break the line).
     IdentifierInfo *Info = CurrentToken->Tok.getIdentifierInfo();
-    if (Info && Info->getPPKeywordID() == tok::pp_import &&
-        CurrentToken->Next) {
+    if ((Style.Language == FormatStyle::LK_Java &&
+         CurrentToken->is(Keywords.kw_package)) ||
+        (Info && Info->getPPKeywordID() == tok::pp_import &&
+         CurrentToken->Next)) {
       next();
       parseIncludeDirective();
       return LT_ImportStatement;
@@ -864,7 +866,8 @@ private:
                Current.Previous->is(tok::at) &&
                Current.isNot(Keywords.kw_interface)) {
       const FormatToken &AtToken = *Current.Previous;
-      if (!AtToken.Previous || AtToken.Previous->is(TT_LeadingJavaAnnotation))
+      const FormatToken *Previous = AtToken.getPreviousNonComment();
+      if (!Previous || Previous->is(TT_LeadingJavaAnnotation))
         Current.Type = TT_LeadingJavaAnnotation;
       else
         Current.Type = TT_JavaAnnotation;
@@ -920,15 +923,19 @@ private:
         LeftOfParens->MatchingParen &&
         LeftOfParens->MatchingParen->is(TT_LambdaLSquare))
       return false;
+    if (Tok.Next) {
+      if (Style.Language == FormatStyle::LK_JavaScript &&
+          Tok.Next->is(Keywords.kw_in))
+        return false;
+      if (Style.Language == FormatStyle::LK_Java && Tok.Next->is(tok::l_paren))
+        return true;
+    }
     bool IsCast = false;
     bool ParensAreEmpty = Tok.Previous == Tok.MatchingParen;
     bool ParensAreType =
         !Tok.Previous ||
         Tok.Previous->isOneOf(TT_PointerOrReference, TT_TemplateCloser) ||
         Tok.Previous->isSimpleTypeSpecifier();
-    if (Style.Language == FormatStyle::LK_JavaScript && Tok.Next &&
-        Tok.Next->is(Keywords.kw_in))
-      return false;
     bool ParensCouldEndDecl =
         Tok.Next && Tok.Next->isOneOf(tok::equal, tok::semi, tok::l_brace);
     bool IsSizeOfOrAlignOf =
@@ -1195,7 +1202,8 @@ private:
       else if (Current->isOneOf(tok::period, tok::arrow))
         return PrecedenceArrowAndPeriod;
       else if (Style.Language == FormatStyle::LK_Java &&
-               Current->isOneOf(Keywords.kw_extends, Keywords.kw_implements))
+               Current->isOneOf(Keywords.kw_extends, Keywords.kw_implements,
+                                Keywords.kw_throws))
         return 0;
     }
     return -1;
@@ -1465,7 +1473,7 @@ unsigned TokenAnnotator::splitPenalty(const AnnotatedLine &Line,
   if (Style.Language == FormatStyle::LK_Java) {
     if (Left.is(TT_LeadingJavaAnnotation))
       return 1;
-    if (Right.is(Keywords.kw_extends))
+    if (Right.isOneOf(Keywords.kw_extends, Keywords.kw_throws))
       return 1;
     if (Right.is(Keywords.kw_implements))
       return 2;
