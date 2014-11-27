@@ -661,7 +661,8 @@ private:
            Tok.TokenText == "goog" && Tok.Next && Tok.Next->is(tok::period) &&
            Tok.Next->Next && (Tok.Next->Next->TokenText == "module" ||
                               Tok.Next->Next->TokenText == "require" ||
-                              Tok.Next->Next->TokenText == "provide");
+                              Tok.Next->Next->TokenText == "provide") &&
+           Tok.Next->Next->Next && Tok.Next->Next->Next->is(tok::l_paren);
   }
 
   void resetTokenMetadata(FormatToken *Token) {
@@ -1479,6 +1480,9 @@ unsigned TokenAnnotator::splitPenalty(const AnnotatedLine &Line,
       return 2;
     if (Left.is(tok::comma) && Left.NestingLevel == 0)
       return 3;
+  } else if (Style.Language == FormatStyle::LK_JavaScript) {
+    if (Right.is(Keywords.kw_function))
+      return 100;
   }
 
   if (Left.is(tok::comma) || (Right.is(tok::identifier) && Right.Next &&
@@ -1670,12 +1674,11 @@ bool TokenAnnotator::spaceRequiredBetween(const AnnotatedLine &Line,
   if (Right.is(tok::l_paren)) {
     if (Left.is(tok::r_paren) && Left.is(TT_AttributeParen))
       return true;
-    return Line.Type == LT_ObjCDecl ||
-           Left.isOneOf(tok::kw_new, tok::kw_delete, tok::semi) ||
+    return Line.Type == LT_ObjCDecl || Left.is(tok::semi) ||
            (Style.SpaceBeforeParens != FormatStyle::SBPO_Never &&
             (Left.isOneOf(tok::kw_if, tok::kw_for, tok::kw_while,
                           tok::kw_switch, tok::kw_case) ||
-             (Left.is(tok::kw_catch) &&
+             (Left.isOneOf(tok::kw_catch, tok::kw_new, tok::kw_delete) &&
               (!Left.Previous || Left.Previous->isNot(tok::period))) ||
              Left.IsForEachMacro)) ||
            (Style.SpaceBeforeParens == FormatStyle::SBPO_Always &&
