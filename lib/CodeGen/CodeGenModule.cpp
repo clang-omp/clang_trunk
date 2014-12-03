@@ -625,7 +625,7 @@ void CodeGenModule::EmitCtorList(const CtorList &Fns, const char *GlobalName) {
 
   // Get the type of a ctor entry, { i32, void ()*, i8* }.
   llvm::StructType *CtorStructTy = llvm::StructType::get(
-      Int32Ty, llvm::PointerType::getUnqual(CtorFTy), VoidPtrTy, NULL);
+      Int32Ty, llvm::PointerType::getUnqual(CtorFTy), VoidPtrTy, nullptr);
 
   // Construct the constructor and destructor arrays.
   SmallVector<llvm::Constant*, 8> Ctors;
@@ -3349,6 +3349,7 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
     if (DebugInfo &&
         Spec->getSpecializationKind() == TSK_ExplicitInstantiationDefinition)
       DebugInfo->completeTemplateDefinition(*Spec);
+    break;
   }
 
   default:
@@ -3356,6 +3357,7 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
     // non-top-level decl.  FIXME: Would be nice to have an isTopLevelDeclKind
     // function. Need to recode Decl::Kind to do that easily.
     assert(isa<TypeDecl>(D) && "Unsupported decl kind");
+    break;
   }
 }
 
