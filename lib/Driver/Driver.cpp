@@ -2326,8 +2326,8 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
                                           IsOpenMPTargetToolchain);
         break;
       }
-      if (Target.getObjectFormat() == llvm::Triple::MachO) {
-        *TC = new toolchains::MachO(*this, Target, Args);
+      if (Target.isOSBinFormatMachO()) {
+        TC = new toolchains::MachO(*this, Target, Args);
         break;
       }
       *TC = new toolchains::Generic_GCC(*this, Target, Args,
