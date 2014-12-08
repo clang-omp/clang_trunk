@@ -2327,7 +2327,7 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
         break;
       }
       if (Target.isOSBinFormatMachO()) {
-        TC = new toolchains::MachO(*this, Target, Args);
+        *TC = new toolchains::MachO(*this, Target, Args);
         break;
       }
       *TC = new toolchains::Generic_GCC(*this, Target, Args,
