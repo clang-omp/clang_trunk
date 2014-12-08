@@ -2126,7 +2126,7 @@ enum CXCursorKind {
    */
   CXCursor_MSAsmStmt                     = 229,
 
-  /** \brief The null satement ";": C99 6.8.3p3.
+  /** \brief The null statement ";": C99 6.8.3p3.
    *
    * This cursor kind is used to describe the null statement.
    */
@@ -3303,7 +3303,7 @@ CINDEX_LINKAGE enum CX_CXXAccessSpecifier clang_getCXXAccessSpecifier(CXCursor);
 
 /**
  * \brief Represents the storage classes as declared in the source. CX_SC_Invalid
- * was added for the clase that the passed cursor in not a declaration.
+ * was added for the case that the passed cursor in not a declaration.
  */
 enum CX_StorageClass {
   CX_SC_Invalid,

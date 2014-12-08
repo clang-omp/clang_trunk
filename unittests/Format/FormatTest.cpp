@@ -2069,6 +2069,21 @@ TEST_F(FormatTest, FormatsNSEnums) {
                      "  // Information about aThirdDecentlyLongValue.\n"
                      "  aThirdDecentlyLongValue\n"
                      "};");
+  verifyGoogleFormat("typedef NS_OPTIONS(NSInteger, MyType) {\n"
+                     "  a = 1,\n"
+                     "  b = 2,\n"
+                     "  c = 3,\n"
+                     "};");
+  verifyGoogleFormat("typedef CF_ENUM(NSInteger, MyType) {\n"
+                     "  a = 1,\n"
+                     "  b = 2,\n"
+                     "  c = 3,\n"
+                     "};");
+  verifyGoogleFormat("typedef CF_OPTIONS(NSInteger, MyType) {\n"
+                     "  a = 1,\n"
+                     "  b = 2,\n"
+                     "  c = 3,\n"
+                     "};");
 }
 
 TEST_F(FormatTest, FormatsBitfields) {
@@ -8357,6 +8372,11 @@ TEST_F(FormatTest, AllmanBraceBreaking) {
                "  [object someMethod:@{ @\"a\" : @\"b\" }];\n"
                "}",
                AllmanBraceStyle);
+  verifyFormat("int f()\n"
+               "{ // comment\n"
+               "  return 42;\n"
+               "}",
+               AllmanBraceStyle);
 
   AllmanBraceStyle.ColumnLimit = 19;
   verifyFormat("void f() { int i; }", AllmanBraceStyle);
@@ -9358,6 +9378,7 @@ TEST_F(FormatTest, FormatsLambdas) {
   verifyFormat("int c = []() -> vector<int> { return {2}; }();\n");
   verifyFormat("Foo([]() -> std::vector<int> { return {2}; }());");
   verifyGoogleFormat("auto a = [&b, c](D* d) -> D* {};");
+  verifyGoogleFormat("auto a = [&b, c](D* d) -> pair<D*, D*> {};");
   verifyGoogleFormat("auto a = [&b, c](D* d) -> D& {};");
   verifyGoogleFormat("auto a = [&b, c](D* d) -> const D* {};");
   verifyFormat("auto aaaaaaaa = [](int i, // break for some reason\n"

@@ -137,6 +137,7 @@ std::string HeaderSearch::getModuleFileName(StringRef ModuleName,
     // error if they are imported in the same translation.
     SmallString<256> AbsModuleMapPath(ModuleMapPath);
     llvm::sys::fs::make_absolute(AbsModuleMapPath);
+    llvm::sys::path::native(AbsModuleMapPath);
     llvm::APInt Code(64, llvm::hash_value(AbsModuleMapPath.str().lower()));
     SmallString<128> HashStr;
     Code.toStringUnsigned(HashStr, /*Radix*/36);
@@ -568,18 +569,6 @@ const FileEntry *HeaderSearch::LookupFile(
     ArrayRef<std::pair<const FileEntry *, const DirectoryEntry *>> Includers,
     SmallVectorImpl<char> *SearchPath, SmallVectorImpl<char> *RelativePath,
     ModuleMap::KnownHeader *SuggestedModule, bool SkipCache) {
-  if (!HSOpts->ModuleMapFiles.empty()) {
-    // Preload all explicitly specified module map files. This enables modules
-    // map files lying in a directory structure separate from the header files
-    // that they describe. These cannot be loaded lazily upon encountering a
-    // header file, as there is no other known mapping from a header file to its
-    // module map file.
-    for (const auto &Filename : HSOpts->ModuleMapFiles)
-      if (const FileEntry *File = FileMgr.getFile(Filename))
-        loadModuleMapFile(File, /*IsSystem=*/false);
-    HSOpts->ModuleMapFiles.clear();
-  }
-
   if (SuggestedModule)
     *SuggestedModule = ModuleMap::KnownHeader();
     
