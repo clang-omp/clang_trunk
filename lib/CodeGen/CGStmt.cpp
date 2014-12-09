@@ -663,7 +663,9 @@ void CodeGenFunction::EmitCondBrHints(llvm::LLVMContext &Context,
     return;
 
   // Add vectorize and unroll hints to the metadata on the conditional branch.
-  SmallVector<llvm::Value *, 2> Metadata(1);
+  //
+  // FIXME: Should this really start with a size of 1?
+  SmallVector<llvm::Metadata *, 2> Metadata(1);
   for (const auto *Attr : Attrs) {
     const LoopHintAttr *LH = dyn_cast<LoopHintAttr>(Attr);
 
@@ -701,7 +703,7 @@ void CodeGenFunction::EmitCondBrHints(llvm::LLVMContext &Context,
       ValueInt = static_cast<int>(ValueAPS.getSExtValue());
     }
 
-    llvm::Value *Value;
+    llvm::Constant *Value;
     llvm::MDString *Name;
     switch (Option) {
     case LoopHintAttr::Vectorize:
@@ -728,15 +730,16 @@ void CodeGenFunction::EmitCondBrHints(llvm::LLVMContext &Context,
       break;
     }
 
-    SmallVector<llvm::Value *, 2> OpValues;
+    SmallVector<llvm::Metadata *, 2> OpValues;
     OpValues.push_back(Name);
     if (Value)
-      OpValues.push_back(Value);
+      OpValues.push_back(llvm::ConstantAsMetadata::get(Value));
 
     // Set or overwrite metadata indicated by Name.
     Metadata.push_back(llvm::MDNode::get(Context, OpValues));
   }
 
+  // FIXME: This condition is never false.  Should it be an assert?
   if (!Metadata.empty()) {
     // Add llvm.loop MDNode to CondBr.
     llvm::MDNode *LoopID = llvm::MDNode::get(Context, Metadata);
@@ -1835,10 +1838,10 @@ llvm::Value* CodeGenFunction::EmitAsmInput(
 /// asm.
 static llvm::MDNode *getAsmSrcLocInfo(const StringLiteral *Str,
                                       CodeGenFunction &CGF) {
-  SmallVector<llvm::Value *, 8> Locs;
+  SmallVector<llvm::Metadata *, 8> Locs;
   // Add the location of the first line to the MDNode.
-  Locs.push_back(llvm::ConstantInt::get(CGF.Int32Ty,
-                                        Str->getLocStart().getRawEncoding()));
+  Locs.push_back(llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
+      CGF.Int32Ty, Str->getLocStart().getRawEncoding())));
   StringRef StrVal = Str->getString();
   if (!StrVal.empty()) {
     const SourceManager &SM = CGF.CGM.getContext().getSourceManager();
@@ -1850,8 +1853,8 @@ static llvm::MDNode *getAsmSrcLocInfo(const StringLiteral *Str,
       if (StrVal[i] != '\n') continue;
       SourceLocation LineLoc = Str->getLocationOfByte(i+1, SM, LangOpts,
                                                       CGF.getTarget());
-      Locs.push_back(llvm::ConstantInt::get(CGF.Int32Ty,
-                                            LineLoc.getRawEncoding()));
+      Locs.push_back(llvm::ConstantAsMetadata::get(
+          llvm::ConstantInt::get(CGF.Int32Ty, LineLoc.getRawEncoding())));
     }
   }
 
@@ -2121,7 +2124,9 @@ void CodeGenFunction::EmitAsmStmt(const AsmStmt &S) {
   } else {
     // At least put the line number on MS inline asm blobs.
     auto Loc = llvm::ConstantInt::get(Int32Ty, S.getAsmLoc().getRawEncoding());
-    Result->setMetadata("srcloc", llvm::MDNode::get(getLLVMContext(), Loc));
+    Result->setMetadata("srcloc",
+                        llvm::MDNode::get(getLLVMContext(),
+                                          llvm::ConstantAsMetadata::get(Loc)));
   }
 
   // Extract all of the register value results from the asm.
