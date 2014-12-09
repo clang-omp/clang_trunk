@@ -1437,7 +1437,11 @@ RValue CodeGenFunction::EmitLoadOfGlobalRegLValue(LValue LV) {
 /// lvalue, where both are guaranteed to the have the same type, and that type
 /// is 'Ty'.
 void CodeGenFunction::EmitStoreThroughLValue(RValue Src, LValue Dst,
-                                             bool isInit) {
+                                             bool isInit,
+                                             SourceLocation DbgLoc) {
+  if (auto *DI = getDebugInfo())
+    DI->EmitLocation(Builder, DbgLoc);
+
   if (!Dst.isSimple()) {
     if (Dst.isVectorElt()) {
       // Read/modify/write the vector, inserting the new element.
@@ -3130,6 +3134,8 @@ LValue CodeGenFunction::EmitBinaryOperatorLValue(const BinaryOperator *E) {
 
     RValue RV = EmitAnyExpr(E->getRHS());
     LValue LV = EmitCheckedLValue(E->getLHS(), TCK_Store);
+    if (CGDebugInfo *DI = getDebugInfo())
+      DI->EmitLocation(Builder, E->getLocStart());
     EmitStoreThroughLValue(RV, LV);
     return LV;
   }

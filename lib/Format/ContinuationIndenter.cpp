@@ -206,9 +206,12 @@ bool ContinuationIndenter::mustBreak(const LineState &State) {
   if (Current.is(TT_SelectorName) && State.Stack.back().ObjCSelectorNameFound &&
       State.Stack.back().BreakBeforeParameter)
     return true;
-  if (Previous.ClosesTemplateDeclaration && Current.NestingLevel == 0 &&
-      !Current.isTrailingComment())
-    return true;
+  if (Current.NestingLevel == 0 && !Current.isTrailingComment()) {
+    if (Previous.ClosesTemplateDeclaration)
+      return true;
+    if (Previous.is(TT_LeadingJavaAnnotation) && Current.isNot(tok::l_paren))
+      return true;
+  }
 
   // If the return type spans multiple lines, wrap before the function name.
   if (Current.isOneOf(TT_FunctionDeclarationName ,tok::kw_operator) &&
@@ -763,7 +766,8 @@ void ContinuationIndenter::moveStatePastFakeLParens(LineState &State,
     //       ParameterToInnerFunction));
     if (*I > prec::Unknown)
       NewParenState.LastSpace = std::max(NewParenState.LastSpace, State.Column);
-    NewParenState.StartOfFunctionCall = State.Column;
+    if (*I != prec::Conditional)
+      NewParenState.StartOfFunctionCall = State.Column;
 
     // Always indent conditional expressions. Never indent expression where
     // the 'operator' is ',', ';' or an assignment (i.e. *I <=

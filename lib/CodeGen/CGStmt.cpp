@@ -2287,8 +2287,6 @@ CodeGenFunction::GenerateCapturedStmtFunction(const CapturedStmt &S) {
   PGO.assignRegionCounters(CD, F);
   CapturedStmtInfo->EmitBody(*this, CD->getBody());
   FinishFunction(CD->getBodyRBrace());
-  PGO.emitInstrumentationData();
-  PGO.destroyRegionCounters();
 
   CGM.OpenMPSupport.endOpenMPRegion();
 
