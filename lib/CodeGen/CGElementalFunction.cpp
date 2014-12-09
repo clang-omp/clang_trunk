@@ -26,10 +26,11 @@ typedef CodeGenModule::CilkElementalGroup CilkElementalGroup;
 static llvm::MDNode *MakeVecLengthMetadata(CodeGenModule &CGM, StringRef Name,
                                            QualType T, uint64_t VL) {
   llvm::LLVMContext &Context = CGM.getLLVMContext();
-  llvm::Value *attrMDArgs[] = {
+  llvm::Metadata *attrMDArgs[] = {
     llvm::MDString::get(Context, Name),
-    llvm::UndefValue::get(CGM.getTypes().ConvertType(T)),
-    llvm::ConstantInt::get(CGM.Int32Ty, VL)
+    llvm::ConstantAsMetadata::get(llvm::UndefValue::get(CGM.getTypes()
+      .ConvertType(T))),
+    llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(CGM.Int32Ty, VL))
   };
   return llvm::MDNode::get(Context, attrMDArgs);
 }
@@ -74,26 +75,30 @@ static bool CheckElementalArguments(CodeGenModule &CGM, const FunctionDecl *FD,
 /// Otherwise returns false.
 static bool handleParameter(CodeGenModule &CGM, CilkElementalGroup &G,
                             StringRef ParmName,
-                            SmallVectorImpl<llvm::Value *> &StepArgs,
-                            SmallVectorImpl<llvm::Value *> &AligArgs) {
+                            SmallVectorImpl<llvm::Metadata *> &StepArgs,
+                            SmallVectorImpl<llvm::Metadata *> &AligArgs) {
   // Update the alignment args.
   unsigned Alignment;
   if (G.getAlignedAttr(ParmName, &Alignment)) {
-    AligArgs.push_back(llvm::ConstantInt::get(CGM.IntTy, Alignment));
+    AligArgs.push_back(llvm::ConstantAsMetadata::get(
+      llvm::ConstantInt::get(CGM.IntTy, Alignment)));
   }
   else {
-    AligArgs.push_back(llvm::UndefValue::get(CGM.IntTy));
+    AligArgs.push_back(llvm::ConstantAsMetadata::get(
+      llvm::UndefValue::get(CGM.IntTy)));
   }
   // Update the step args.
   std::pair<int,std::string> LinStep;
   if (G.getUniformAttr(ParmName)) {
     // If this is uniform, then use step 0 as placeholder.
-    StepArgs.push_back(llvm::ConstantInt::get(CGM.IntTy, 0));
+    StepArgs.push_back(llvm::ConstantAsMetadata::get(
+      llvm::ConstantInt::get(CGM.IntTy, 0)));
     return false;
   }
   else if (G.getLinearAttr(ParmName, &LinStep)) {
     if (LinStep.first != 0) {
-      StepArgs.push_back(llvm::ConstantInt::get(CGM.IntTy, LinStep.first));
+      StepArgs.push_back(llvm::ConstantAsMetadata::get(
+        llvm::ConstantInt::get(CGM.IntTy, LinStep.first)));
     }
     else {
       StepArgs.push_back(llvm::MDString::get(CGM.getLLVMContext(),
@@ -102,7 +107,8 @@ static bool handleParameter(CodeGenModule &CGM, CilkElementalGroup &G,
     return false;
   }
   // If this is non-linear and non-uniform, use undefined step as placeholder.
-  StepArgs.push_back(llvm::UndefValue::get(CGM.IntTy));
+  StepArgs.push_back(llvm::ConstantAsMetadata::get(
+    llvm::UndefValue::get(CGM.IntTy)));
   return true;
 }
 
@@ -125,18 +131,20 @@ void CodeGenModule::EmitVectorVariantsMetadata(const CGFunctionInfo &FnInfo,
   // Common metadata nodes.
   llvm::NamedMDNode *CilkElementalMetadata =
     getModule().getOrInsertNamedMetadata("cilk.functions");
-  llvm::Value *ElementalMDArgs[] = {
+  llvm::Metadata *ElementalMDArgs[] = {
     llvm::MDString::get(Context, "elemental")
   };
   llvm::MDNode *ElementalNode = llvm::MDNode::get(Context, ElementalMDArgs);
-  llvm::Value *MaskMDArgs[] = {
+  llvm::Metadata *MaskMDArgs[] = {
     llvm::MDString::get(Context, "mask"),
-    llvm::ConstantInt::get(llvm::IntegerType::getInt1Ty(Context), 1)
+    llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
+      llvm::IntegerType::getInt1Ty(Context), 1))
   };
   llvm::MDNode *MaskNode = llvm::MDNode::get(Context, MaskMDArgs);
-  MaskMDArgs[1] = llvm::ConstantInt::get(llvm::IntegerType::getInt1Ty(Context), 0);
+  MaskMDArgs[1] = llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
+                    llvm::IntegerType::getInt1Ty(Context), 0));
   llvm::MDNode *NoMaskNode = llvm::MDNode::get(Context, MaskMDArgs);
-  SmallVector<llvm::Value*, 8> ParameterNameArgs;
+  SmallVector<llvm::Metadata*, 8> ParameterNameArgs;
   ParameterNameArgs.push_back(llvm::MDString::get(Context, "arg_name"));
   llvm::MDNode *ParameterNameNode = 0;
 
@@ -154,8 +162,8 @@ void CodeGenModule::EmitVectorVariantsMetadata(const CGFunctionInfo &FnInfo,
 
     // Parameter information.
     QualType FirstNonStepParmType;
-    SmallVector<llvm::Value *, 8> AligArgs;
-    SmallVector<llvm::Value *, 8> StepArgs;
+    SmallVector<llvm::Metadata *, 8> AligArgs;
+    SmallVector<llvm::Metadata *, 8> StepArgs;
     AligArgs.push_back(llvm::MDString::get(Context, "arg_alig"));
     StepArgs.push_back(llvm::MDString::get(Context, "arg_step"));
 
@@ -277,8 +285,8 @@ void CodeGenModule::EmitVectorVariantsMetadata(const CGFunctionInfo &FnInfo,
             = MakeVecLengthMetadata(*this, "vec_length", *TI, VL);
 
           {
-            SmallVector <llvm::Value*, 7> kernelMDArgs;
-            kernelMDArgs.push_back(Fn);
+            SmallVector <llvm::Metadata*, 7> kernelMDArgs;
+            kernelMDArgs.push_back(llvm::ValueAsMetadata::get(Fn));
             kernelMDArgs.push_back(ElementalNode);
             kernelMDArgs.push_back(ParameterNameNode);
             kernelMDArgs.push_back(StepNode);
@@ -338,13 +346,13 @@ enum ParamKind {
 
 struct ParamInfo {
   ParamKind Kind;
-  llvm::Value *Step;
+  llvm::Metadata *Step;
 
   ParamInfo(ParamKind Kind)
   : Kind(Kind), Step(0)
   {}
 
-  ParamInfo(ParamKind Kind, llvm::Value *Step)
+  ParamInfo(ParamKind Kind, llvm::Metadata *Step)
   : Kind(Kind), Step(Step)
   {}
 };
@@ -432,13 +440,20 @@ static llvm::FunctionType *encodeParameters(llvm::Function *Func,
   SmallVector<llvm::Type*, 4> Tys;
   llvm::Function::const_arg_iterator Arg = Func->arg_begin();
   for (unsigned i = 1, ie = 1 + ArgSize; i < ie; ++i, ++Arg) {
-    llvm::Value *Step = ArgStep->getOperand(i);
-    if (isa<llvm::UndefValue>(Step)) {
+    llvm::Metadata *Step = ArgStep->getOperand(i);
+    if (isa<llvm::ConstantAsMetadata>(Step) &&
+          isa<llvm::UndefValue>(
+            cast<llvm::ConstantAsMetadata>(Step)->getValue())) {
       MangledParams << "v";
       unsigned VL = VectorDataTy->getVectorNumElements();
       Tys.push_back(llvm::VectorType::get(Arg->getType(), VL));
       Info.push_back(ParamInfo(PK_Vector));
-    } else if (llvm::ConstantInt *C = dyn_cast<llvm::ConstantInt>(Step)) {
+    } else if (isa<llvm::ConstantAsMetadata>(Step) &&
+          isa<llvm::ConstantInt>(
+            cast<llvm::ConstantAsMetadata>(Step)->getValue())) {
+      llvm::ConstantInt *C =
+        cast<llvm::ConstantInt>(
+          cast<llvm::ConstantAsMetadata>(Step)->getValue());
       if (C->isZero()) {
         MangledParams << "u";
         Tys.push_back(Arg->getType());
@@ -448,14 +463,14 @@ static llvm::FunctionType *encodeParameters(llvm::Function *Func,
         if (!C->isOne())
           MangledParams << C->getZExtValue();
         Tys.push_back(Arg->getType());
-        Info.push_back(ParamInfo(PK_LinearConst, C));
+        Info.push_back(ParamInfo(PK_LinearConst, Step));
       }
     } else if (llvm::MDString *StepName = dyn_cast<llvm::MDString>(Step)) {
       // Search parameter names for StepName to determine the index.
       unsigned Idx = 0, NumParams = ArgName->getNumOperands() - 1;
       for (; Idx < NumParams; ++Idx) {
         // The first operand is the argument name kind metadata.
-        llvm::Value *V = ArgName->getOperand(Idx + 1);
+        llvm::Metadata *V = ArgName->getOperand(Idx + 1);
         assert(isa<llvm::MDString>(V) && "invalid metadata");
         llvm::MDString *MS = cast<llvm::MDString>(V);
         if (MS->getString().equals(StepName->getString()))
@@ -466,7 +481,8 @@ static llvm::FunctionType *encodeParameters(llvm::Function *Func,
       MangledParams << "s" << Idx;
       Tys.push_back(Arg->getType());
       llvm::LLVMContext &Context = Func->getContext();
-      Step = llvm::ConstantInt::get(llvm::Type::getInt32Ty(Context), Idx);
+      Step = llvm::ConstantAsMetadata::get(
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(Context), Idx));
       Info.push_back(ParamInfo(PK_Linear, Step));
     } else
       llvm_unreachable("invalid step metadata");
@@ -571,11 +587,14 @@ static void createVectorVariantWrapper(llvm::Function *ScalarFunc,
                "Wrong number of elements");
         break;
       case PK_LinearConst:
-        Arg = buildLinearArg(Builder, VLen, Arg, I->Step);
+        Arg = buildLinearArg(Builder, VLen, Arg,
+          cast<llvm::ConstantAsMetadata>(I->Step)->getValue());
         Arg->setName(VI->getName() + ".linear");
         break;
       case PK_Linear: {
-        unsigned Number = cast<llvm::ConstantInt>(I->Step)->getZExtValue();
+        unsigned Number =
+          cast<llvm::ConstantInt>(
+            cast<llvm::ConstantAsMetadata>(I->Step)->getValue())->getZExtValue();
         llvm::Function::arg_iterator ArgI = VectorFunc->arg_begin();
         std::advance(ArgI, Number);
         llvm::Value *Step = ArgI;
@@ -675,7 +694,9 @@ static bool createVectorVariant(llvm::MDNode *Root,
 
   if (Root->getNumOperands() == 0)
     return false;
-  llvm::Function *Func = dyn_cast<llvm::Function>(Root->getOperand(0));
+  llvm::Function *Func =
+    dyn_cast<llvm::Function>(cast<llvm::ValueAsMetadata>(
+      Root->getOperand(0))->getValue());
   if (Func != F)
     return false;
 
@@ -723,10 +744,6 @@ static bool createVectorVariant(llvm::MDNode *Root,
     return false;
   }
 
-  if (llvm::Value *V = Variant->getOperand(1))
-    if (!V->getType()->isVoidTy())
-      return false;
-
   // The default processor is pentium_4.
   std::string ProcessorName = "pentium_4";
   if (Processor) {
@@ -745,7 +762,9 @@ static bool createVectorVariant(llvm::MDNode *Root,
   if (Mask) {
     if (Mask->getNumOperands() != 2)
       return false;
-    llvm::ConstantInt *C = dyn_cast<llvm::ConstantInt>(Mask->getOperand(1));
+    llvm::ConstantInt *C =
+      dyn_cast_or_null<llvm::ConstantInt>(dyn_cast<llvm::ConstantAsMetadata>(
+        Mask->getOperand(1))->getValue());
     if (!C)
       return false;
     IsMasked = C->isOne();
@@ -756,11 +775,14 @@ static bool createVectorVariant(llvm::MDNode *Root,
   {
     if (VecLength->getNumOperands() != 3)
       return false;
-    llvm::Type *Ty = VecLength->getOperand(1)->getType();
+    llvm::Type *Ty =
+      cast<llvm::ConstantAsMetadata>(
+        VecLength->getOperand(1))->getValue()->getType();
     if (!llvm::VectorType::isValidElementType(Ty))
       return false;
 
-    llvm::Value *VL = VecLength->getOperand(2);
+    llvm::Value *VL =
+      cast<llvm::ConstantAsMetadata>(VecLength->getOperand(2))->getValue();
     assert(isa<llvm::ConstantInt>(VL) && "vector length constant expected");
     VLen = cast<llvm::ConstantInt>(VL)->getZExtValue();
     VectorDataTy = llvm::VectorType::get(Ty, VLen);
@@ -805,9 +827,9 @@ static bool createVectorVariant(llvm::MDNode *Root,
   {
     assert(VariantIndex && "invalid variant index");
     llvm::LLVMContext &Context = Func->getContext();
-    llvm::Value *VariantMDArgs[] = {
+    llvm::Metadata *VariantMDArgs[] = {
       llvm::MDString::get(Context, "variant"),
-      NewFunc
+      llvm::ValueAsMetadata::get(NewFunc)
     };
     llvm::MDNode *VariantNode = llvm::MDNode::get(Context, VariantMDArgs);
     Root->replaceOperandWith(VariantIndex, VariantNode);

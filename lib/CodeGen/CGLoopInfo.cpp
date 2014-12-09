@@ -40,6 +40,7 @@ static llvm::MDNode *CreateMetadata(llvm::LLVMContext &Ctx,
     Args.push_back(MDNode::get(Ctx, Vals));
   }
 
+#if 0
   // Setting vectorizer.unroll
   if (Attrs.VectorizerUnroll > 0) {
     Metadata *Vals[] = {MDString::get(Ctx, "llvm.loop.interleave.count"),
@@ -47,14 +48,15 @@ static llvm::MDNode *CreateMetadata(llvm::LLVMContext &Ctx,
                             Type::getInt32Ty(Ctx), Attrs.VectorizerUnroll))};
     Args.push_back(MDNode::get(Ctx, Vals));
   }
+#endif
 
   // Setting vectorizer.enable
-  if (Attrs.VectorizerEnable != LoopAttributes::VecUnspecified) {
+  if (Attrs.VectorizerEnable != LoopAttributes::LVEC_UNSPECIFIED) {
     Metadata *Vals[] = {
         MDString::get(Ctx, "llvm.loop.vectorize.enable"),
         ConstantAsMetadata::get(ConstantInt::get(
             Type::getInt1Ty(Ctx),
-            (Attrs.VectorizerEnable == LoopAttributes::VecEnable)))};
+            (Attrs.VectorizerEnable == LoopAttributes::LVEC_ENABLE)))};
     Args.push_back(MDNode::get(Ctx, Vals));
   }
 

@@ -837,10 +837,11 @@ public:
     llvm::NamedMDNode *MD = M.getOrInsertNamedMetadata("nvvm.annotations");
 
     // Create !{<func-ref>, metadata !"kernel", i32 1} node
-    llvm::SmallVector<llvm::Value *, 3> MDVals;
-    MDVals.push_back(F);
+    llvm::SmallVector<llvm::Metadata *, 3> MDVals;
+    MDVals.push_back(llvm::ValueAsMetadata::get(F));
     MDVals.push_back(llvm::MDString::get(C, "kernel"));
-    MDVals.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(C), 1));
+    MDVals.push_back(llvm::ConstantAsMetadata::get(
+      llvm::ConstantInt::get(llvm::Type::getInt32Ty(C), 1)));
 
     // Append metadata to nvvm.annotations
     MD->addOperand(llvm::MDNode::get(C, MDVals));
