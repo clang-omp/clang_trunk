@@ -1673,8 +1673,7 @@ public:
   /// EmitExprAsInit - Emits the code necessary to initialize a
   /// location in memory with the given initializer.
   void EmitExprAsInit(const Expr *init, const ValueDecl *D, LValue lvalue,
-                      bool capturedByInit,
-                      SourceLocation DbgLoc = SourceLocation());
+                      bool capturedByInit, SourceLocation DbgLoc);
 
   /// hasVolatileMember - returns true if aggregate type has a volatile
   /// member.
@@ -2774,10 +2773,12 @@ public:
 
   /// EmitComplexExprIntoLValue - Emit the given expression of complex
   /// type and place its result into the specified l-value.
-  void EmitComplexExprIntoLValue(const Expr *E, LValue dest, bool isInit);
+  void EmitComplexExprIntoLValue(const Expr *E, LValue dest, bool isInit,
+                                 SourceLocation DbgLoc = SourceLocation());
 
   /// EmitStoreOfComplex - Store a complex number into the specified l-value.
-  void EmitStoreOfComplex(ComplexPairTy V, LValue dest, bool isInit);
+  void EmitStoreOfComplex(ComplexPairTy V, LValue dest, bool isInit,
+                          SourceLocation DbgLoc = SourceLocation());
 
   /// EmitLoadOfComplex - Load a complex number from the specified l-value.
   ComplexPairTy EmitLoadOfComplex(LValue src, SourceLocation loc);

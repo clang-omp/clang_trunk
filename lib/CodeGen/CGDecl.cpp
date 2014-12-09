@@ -1136,7 +1136,7 @@ void CodeGenFunction::EmitAutoVarInit(const AutoVarEmission &emission) {
   if (!constant) {
     LValue lv = MakeAddrLValue(Loc, type, alignment);
     lv.setNonGC(true);
-    return EmitExprAsInit(Init, &D, lv, capturedByInit);
+    return EmitExprAsInit(Init, &D, lv, capturedByInit, D.getLocation());
   }
 
   if (!emission.IsConstantAggregate) {
@@ -1221,7 +1221,7 @@ void CodeGenFunction::EmitExprAsInit(const Expr *init, const ValueDecl *D,
     ComplexPairTy complex = EmitComplexExpr(init);
     if (capturedByInit)
       drillIntoBlockVariable(*this, lvalue, cast<VarDecl>(D));
-    EmitStoreOfComplex(complex, lvalue, /*init*/ true);
+    EmitStoreOfComplex(complex, lvalue, /*init*/ true, DbgLoc);
     return;
   }
   case TEK_Aggregate:
