@@ -2404,6 +2404,9 @@ LValue CodeGenFunction::EmitArraySubscriptExpr(const ArraySubscriptExpr *E,
     // The element count here is the total number of non-VLA elements.
     llvm::Value *numElements = getVLASize(vla).first;
 
+    if (auto *DI = getDebugInfo())
+      DI->EmitLocation(Builder, E->getLocStart());
+
     // Effectively, the multiply by the VLA size is part of the GEP.
     // GEP indexes are signed, and scaling an index isn't permitted to
     // signed-overflow, so we use the same semantics for our explicit
@@ -2449,6 +2452,9 @@ LValue CodeGenFunction::EmitArraySubscriptExpr(const ArraySubscriptExpr *E,
     // Propagate the alignment from the array itself to the result.
     ArrayAlignment = ArrayLV.getAlignment();
 
+    if (auto *DI = getDebugInfo())
+      DI->EmitLocation(Builder, E->getLocStart());
+
     if (getLangOpts().isSignedOverflowDefined())
       Address = Builder.CreateGEP(ArrayPtr, Args, "arrayidx");
     else
@@ -2456,6 +2462,8 @@ LValue CodeGenFunction::EmitArraySubscriptExpr(const ArraySubscriptExpr *E,
   } else {
     // The base must be a pointer, which is not an aggregate.  Emit it.
     llvm::Value *Base = EmitScalarExpr(E->getBase());
+    if (auto *DI = getDebugInfo())
+      DI->EmitLocation(Builder, E->getLocStart());
     if (getLangOpts().isSignedOverflowDefined())
       Address = Builder.CreateGEP(Base, Idx, "arrayidx");
     else

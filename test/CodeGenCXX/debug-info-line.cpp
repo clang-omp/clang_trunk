@@ -2,8 +2,8 @@
 
 int &src();
 int *sink();
-__complex float complex_src();
-__complex float *complex_sink();
+extern "C" __complex float complex_src();
+extern "C" __complex float *complex_sink();
 
 // CHECK-LABEL: define
 void f1() {
@@ -33,10 +33,7 @@ foo::foo()
       (complex_src()) {
 }
 
-// skip C1
-// CHECK-LABEL: define
-
-// CHECK-LABEL: define
+// CHECK-LABEL: define {{.*}}f2{{.*}}
 void f2() {
 #line 300
   * // CHECK: store float {{.*}} !dbg [[DBG_F2:!.*]]
@@ -64,6 +61,44 @@ void f5() {
       = complex_src();
 }
 
+struct agg { int i; };
+agg agg_src();
+
+// CHECK-LABEL: define
+void f6() {
+  agg x;
+#line 700
+  x // CHECK: call void @llvm.memcpy{{.*}} !dbg [[DBG_F6:!.*]]
+      = agg_src();
+}
+
+// CHECK-LABEL: define
+void f7() {
+  int *src1();
+  int src2();
+#line 800
+  int x = ( // CHECK: load {{.*}} !dbg [[DBG_F7:!.*]]
+      src1())[src2()];
+}
+
+// CHECK-LABEL: define
+void f8() {
+  int src1[1];
+  int src2();
+#line 900
+  int x = ( // CHECK: load {{.*}} !dbg [[DBG_F8:!.*]]
+      src1)[src2()];
+}
+
+// CHECK-LABEL: define
+void f9(int i) {
+  int src1[1][i];
+  int src2();
+#line 1000
+  auto x = ( // CHECK: getelementptr {{.*}} !dbg [[DBG_F9:!.*]]
+      src1)[src2()];
+}
+
 // CHECK: [[DBG_F1]] = metadata !{i32 100,
 // CHECK: [[DBG_FOO_VALUE]] = metadata !{i32 200,
 // CHECK: [[DBG_FOO_REF]] = metadata !{i32 202,
@@ -72,3 +107,7 @@ void f5() {
 // CHECK: [[DBG_F3]] = metadata !{i32 400,
 // CHECK: [[DBG_F4]] = metadata !{i32 500,
 // CHECK: [[DBG_F5]] = metadata !{i32 600,
+// CHECK: [[DBG_F6]] = metadata !{i32 700,
+// CHECK: [[DBG_F7]] = metadata !{i32 800,
+// CHECK: [[DBG_F8]] = metadata !{i32 900,
+// CHECK: [[DBG_F9]] = metadata !{i32 1000,
