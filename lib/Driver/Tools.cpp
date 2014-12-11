@@ -873,6 +873,7 @@ void Clang::AddARMTargetArgs(const ArgList &Args,
   // Select the ABI to use.
   //
   // FIXME: Support -meabi.
+  // FIXME: Parts of this are duplicated in the backend, unify this somehow.
   const char *ABIName = nullptr;
   if (Arg *A = Args.getLastArg(options::OPT_mabi_EQ)) {
     ABIName = A->getValue();
@@ -901,11 +902,10 @@ void Clang::AddARMTargetArgs(const ArgList &Args,
     case llvm::Triple::EABI:
       ABIName = "aapcs";
       break;
+    // This is also the case for netbsd.
+    case llvm::Triple::GNU:
     default:
-      if (Triple.getOS() == llvm::Triple::NetBSD)
-        ABIName = "apcs-gnu";
-      else
-        ABIName = "aapcs";
+      ABIName = "apcs-gnu";
       break;
     }
   }
