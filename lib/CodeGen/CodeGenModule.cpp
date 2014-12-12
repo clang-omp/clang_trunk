@@ -726,7 +726,8 @@ void CodeGenModule::SetLLVMFunctionAttributesForDefinition(const Decl *D,
   }
 
   if (D->hasAttr<ColdAttr>()) {
-    B.addAttribute(llvm::Attribute::OptimizeForSize);
+    if (!D->hasAttr<OptimizeNoneAttr>())
+      B.addAttribute(llvm::Attribute::OptimizeForSize);
     B.addAttribute(llvm::Attribute::Cold);
   }
 
@@ -767,7 +768,9 @@ void CodeGenModule::SetLLVMFunctionAttributesForDefinition(const Decl *D,
     F->addFnAttr(llvm::Attribute::NoInline);
 
     // OptimizeNone wins over OptimizeForSize, MinSize, AlwaysInline.
-    F->removeFnAttr(llvm::Attribute::OptimizeForSize);
+    assert(!F->hasFnAttribute(llvm::Attribute::OptimizeForSize) &&
+           "OptimizeNone and OptimizeForSize on same function!");
+    // FIXME: Change these to asserts.
     F->removeFnAttr(llvm::Attribute::MinSize);
     F->removeFnAttr(llvm::Attribute::AlwaysInline);
 
