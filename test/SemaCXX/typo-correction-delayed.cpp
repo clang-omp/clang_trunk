@@ -119,3 +119,14 @@ class SomeClass {
 public:
   explicit SomeClass() : Kind(kSum) {}  // expected-error {{use of undeclared identifier 'kSum'; did you mean 'kNum'?}}
 };
+
+// There used to be an issue with typo resolution inside overloads.
+struct AssertionResult { ~AssertionResult(); };
+AssertionResult Overload(const char *a);
+AssertionResult Overload(int a);
+void UseOverload() {
+  // expected-note@+1 {{'result' declared here}}
+  const char *result;
+  // expected-error@+1 {{use of undeclared identifier 'resulta'; did you mean 'result'?}}
+  Overload(resulta);
+}
