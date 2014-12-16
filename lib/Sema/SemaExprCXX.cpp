@@ -6079,7 +6079,7 @@ class TransformTypos : public TreeTransform<TransformTypos> {
       return ME->getMemberDecl();
     // FIXME: Add any other expr types that could be be seen by the delayed typo
     // correction TreeTransform for which the corresponding TypoCorrection could
-    // contain multple decls.
+    // contain multiple decls.
     return nullptr;
   }
 
@@ -6205,10 +6205,11 @@ ExprResult Sema::CorrectDelayedTyposInExpr(
     auto TyposResolved = DelayedTypos.size();
     auto Result = TransformTypos(*this, Filter).Transform(E);
     TyposResolved -= DelayedTypos.size();
-    if (TyposResolved) {
+    if (Result.isInvalid() || Result.get() != E) {
       ExprEvalContexts.back().NumTypos -= TyposResolved;
       return Result;
     }
+    assert(TyposResolved == 0 && "Corrected typo but got same Expr back?");
   }
   return E;
 }
