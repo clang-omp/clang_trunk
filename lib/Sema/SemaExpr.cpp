@@ -7314,7 +7314,7 @@ static void diagnoseStringPlusInt(Sema &Self, SourceLocation OpLoc,
 
   bool IsStringPlusInt = StrExpr &&
       IndexExpr->getType()->isIntegralOrUnscopedEnumerationType();
-  if (!IsStringPlusInt)
+  if (!IsStringPlusInt || IndexExpr->isValueDependent())
     return;
 
   llvm::APSInt index;
@@ -7344,13 +7344,13 @@ static void diagnoseStringPlusInt(Sema &Self, SourceLocation OpLoc,
 /// \brief Emit a warning when adding a char literal to a string.
 static void diagnoseStringPlusChar(Sema &Self, SourceLocation OpLoc,
                                    Expr *LHSExpr, Expr *RHSExpr) {
-  const DeclRefExpr *StringRefExpr =
-      dyn_cast<DeclRefExpr>(LHSExpr->IgnoreImpCasts());
+  const Expr *StringRefExpr = LHSExpr;
   const CharacterLiteral *CharExpr =
       dyn_cast<CharacterLiteral>(RHSExpr->IgnoreImpCasts());
-  if (!StringRefExpr) {
-    StringRefExpr = dyn_cast<DeclRefExpr>(RHSExpr->IgnoreImpCasts());
+
+  if (!CharExpr) {
     CharExpr = dyn_cast<CharacterLiteral>(LHSExpr->IgnoreImpCasts());
+    StringRefExpr = RHSExpr;
   }
 
   if (!CharExpr || !StringRefExpr)
