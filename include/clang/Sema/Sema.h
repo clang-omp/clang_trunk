@@ -8638,9 +8638,6 @@ public:
 
   CUDAFunctionTarget IdentifyCUDATarget(const FunctionDecl *D);
 
-  bool CheckCUDATarget(CUDAFunctionTarget CallerTarget,
-                       CUDAFunctionTarget CalleeTarget);
-
   bool CheckCUDATarget(const FunctionDecl *Caller, const FunctionDecl *Callee);
 
   /// Given a implicit special member, infer its CUDA target from the
