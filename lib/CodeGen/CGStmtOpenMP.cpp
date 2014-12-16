@@ -3080,21 +3080,6 @@ void CodeGenFunction::EmitPreOMPCopyinClause(const OMPCopyinClause &C,
   SetFirstprivateInsertPt(*this);
 }
 
-/// \brief Determine whether the given initializer is trivial in the sense
-/// that it requires no code to be generated.
-static bool isTrivialInitializer(const Expr *Init) {
-  if (!Init)
-    return true;
-
-  if (const CXXConstructExpr *Construct = dyn_cast<CXXConstructExpr>(Init))
-    if (CXXConstructorDecl *Constructor = Construct->getConstructor())
-      if (Constructor->isTrivial() && Constructor->isDefaultConstructor() &&
-          !Construct->requiresZeroInitialization())
-        return true;
-
-  return false;
-}
-
 void CodeGenFunction::EmitPreOMPPrivateClause(const OMPPrivateClause &C,
                                               const OMPExecutableDirective &) {
   // Type1 tmp1;
