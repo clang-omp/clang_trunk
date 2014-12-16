@@ -8,10 +8,10 @@ void g(int x, int y)
 // Tests for global-function-template with 'omp declare simd'
 
 // Metadata for g:
-// CHECK: [[G1:![0-9]+]] = metadata !{void (i32, i32)* @_Z1gii[[GMETA:(, metadata ![0-9]+)+]]}
-// CHECK: [[GN:![0-9]+]] = metadata !{metadata !"arg_name", metadata !"x", metadata !"y"}
-// CHECK: [[GS:![0-9]+]] = metadata !{metadata !"arg_step", i32 0, i32 4}
-// CHECK: [[GT:![0-9]+]] = metadata !{metadata !"vec_length", i32 undef, i32 {{[0-9]+}}}
+// CHECK: [[G1:![0-9]+]] = !{void (i32, i32)* @_Z1gii[[GMETA:(, ![0-9]+)+]]}
+// CHECK: [[GN:![0-9]+]] = !{!"arg_name", !"x", !"y"}
+// CHECK: [[GS:![0-9]+]] = !{!"arg_step", i32 0, i32 4}
+// CHECK: [[GT:![0-9]+]] = !{!"vec_length", i32 undef, i32 {{[0-9]+}}}
 
 #define MY_ALIGN 2*9
 
@@ -38,10 +38,10 @@ void h(int *hp, int *hp2, int *hq, int *lin)
 // For the function template h we have 2 template instantiations
 // (one implicit with <C=float> and one explicit with <C=int>) and
 // each of them should have 2 simd-variants, as specified by the pragma.
-// CHECK: [[HI1:![0-9]+]] = metadata !{void (i32*, i32*, i32*, i32*)* @_Z1hIiEvPT_S1_S1_S1_[[HI1META:(, metadata ![0-9]+)+]]}
-// CHECK: [[HI2:![0-9]+]] = metadata !{void (i32*, i32*, i32*, i32*)* @_Z1hIiEvPT_S1_S1_S1_[[HI2META:(, metadata ![0-9]+)+]]}
-// CHECK: [[HF1:![0-9]+]] = metadata !{void (float*, float*, float*, float*)* @_Z1hIfEvPT_S1_S1_S1_[[HF1META:(, metadata ![0-9]+)+]]}
-// CHECK: [[HF2:![0-9]+]] = metadata !{void (float*, float*, float*, float*)* @_Z1hIfEvPT_S1_S1_S1_[[HF2META:(, metadata ![0-9]+)+]]}
+// CHECK: [[HI1:![0-9]+]] = !{void (i32*, i32*, i32*, i32*)* @_Z1hIiEvPT_S1_S1_S1_[[HI1META:(, ![0-9]+)+]]}
+// CHECK: [[HI2:![0-9]+]] = !{void (i32*, i32*, i32*, i32*)* @_Z1hIiEvPT_S1_S1_S1_[[HI2META:(, ![0-9]+)+]]}
+// CHECK: [[HF1:![0-9]+]] = !{void (float*, float*, float*, float*)* @_Z1hIfEvPT_S1_S1_S1_[[HF1META:(, ![0-9]+)+]]}
+// CHECK: [[HF2:![0-9]+]] = !{void (float*, float*, float*, float*)* @_Z1hIfEvPT_S1_S1_S1_[[HF2META:(, ![0-9]+)+]]}
 
 
 // Tests for special cases for class method and for class-template method
@@ -75,9 +75,9 @@ void f() {
 }
 
 // Metadata for the class
-// CHECK: [[C01:![0-9]+]] = metadata !{float (%class.VV*, float*, float*)* @_ZN2VV5addpfEPfS0_[[C01META:(, metadata ![0-9]+)+]]}
+// CHECK: [[C01:![0-9]+]] = !{float (%class.VV*, float*, float*)* @_ZN2VV5addpfEPfS0_[[C01META:(, ![0-9]+)+]]}
 //
 // Metadata for the class-template
-// CHECK: [[CT1:![0-9]+]] = metadata !{float (%class.TVV*, float*, float*)* @_ZN3TVVILi16EE6taddpfEPfS1_[[CT1META:(, metadata ![0-9]+)+]]}
+// CHECK: [[CT1:![0-9]+]] = !{float (%class.TVV*, float*, float*)* @_ZN3TVVILi16EE6taddpfEPfS1_[[CT1META:(, ![0-9]+)+]]}
 
 
