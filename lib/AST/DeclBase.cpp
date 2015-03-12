@@ -600,6 +600,7 @@ unsigned Decl::getIdentifierNamespaceForKind(Kind DeclKind) {
     case Block:
     case Captured:
     case TranslationUnit:
+    case ExternCContext:
 
     case UsingDirective:
     case ClassTemplateSpecialization:
@@ -914,6 +915,7 @@ bool DeclContext::Encloses(const DeclContext *DC) const {
 DeclContext *DeclContext::getPrimaryContext() {
   switch (DeclKind) {
   case Decl::TranslationUnit:
+  case Decl::ExternCContext:
   case Decl::LinkageSpec:
   case Decl::Block:
   case Decl::Captured:

@@ -3286,9 +3286,10 @@ llvm::Constant *MicrosoftCXXABI::getCatchableType(QualType T,
   auto *GV = new llvm::GlobalVariable(
       CGM.getModule(), CTType, /*Constant=*/true, getLinkageForRTTI(T),
       llvm::ConstantStruct::get(CTType, Fields), StringRef(MangledName));
+  GV->setUnnamedAddr(true);
+  GV->setSection(".xdata");
   if (GV->isWeakForLinker())
     GV->setComdat(CGM.getModule().getOrInsertComdat(GV->getName()));
-  GV->setUnnamedAddr(true);
   return getImageRelativeConstant(GV);
 }
 
@@ -3367,7 +3368,7 @@ llvm::GlobalVariable *MicrosoftCXXABI::getCatchableTypeArray(QualType T) {
   //         - a standard pointer conversion (4.10) not involving conversions to
   //           pointers to private or protected or ambiguous classes
   //
-  // All pointers are convertible to void so ensure that it is in the
+  // All pointers are convertible to pointer-to-void so ensure that it is in the
   // CatchableTypeArray.
   if (IsPointer)
     CatchableTypes.insert(getCatchableType(getContext().VoidPtrTy));
@@ -3391,13 +3392,16 @@ llvm::GlobalVariable *MicrosoftCXXABI::getCatchableTypeArray(QualType T) {
   CTA = new llvm::GlobalVariable(
       CGM.getModule(), CTAType, /*Constant=*/true, getLinkageForRTTI(T),
       llvm::ConstantStruct::get(CTAType, Fields), StringRef(MangledName));
+  CTA->setUnnamedAddr(true);
+  CTA->setSection(".xdata");
   if (CTA->isWeakForLinker())
     CTA->setComdat(CGM.getModule().getOrInsertComdat(CTA->getName()));
-  CTA->setUnnamedAddr(true);
   return CTA;
 }
 
 llvm::GlobalVariable *MicrosoftCXXABI::getThrowInfo(QualType T) {
+  T = getContext().getExceptionObjectType(T);
+
   // C++14 [except.handle]p3:
   //   A handler is a match for an exception object of type E if [...]
   //     - the handler is of type cv T or const T& where T is a pointer type and
@@ -3409,7 +3413,17 @@ llvm::GlobalVariable *MicrosoftCXXABI::getThrowInfo(QualType T) {
     IsConst = PointeeType.isConstQualified();
     IsVolatile = PointeeType.isVolatileQualified();
   }
-  T = getContext().getExceptionObjectType(T);
+
+  // Member pointer types like "const int A::*" are represented by having RTTI
+  // for "int A::*" and separately storing the const qualifier.
+  if (const auto *MPTy = T->getAs<MemberPointerType>())
+    T = getContext().getMemberPointerType(PointeeType.getUnqualifiedType(),
+                                          MPTy->getClass());
+
+  // Pointer types like "const int * const *" are represented by having RTTI
+  // for "const int **" and separately storing the const qualifier.
+  if (T->isPointerType())
+    T = getContext().getPointerType(PointeeType.getUnqualifiedType());
 
   // The CatchableTypeArray enumerates the various (CV-unqualified) types that
   // the exception object may be caught as.
@@ -3467,9 +3481,10 @@ llvm::GlobalVariable *MicrosoftCXXABI::getThrowInfo(QualType T) {
   auto *GV = new llvm::GlobalVariable(
       CGM.getModule(), TIType, /*Constant=*/true, getLinkageForRTTI(T),
       llvm::ConstantStruct::get(TIType, Fields), StringRef(MangledName));
+  GV->setUnnamedAddr(true);
+  GV->setSection(".xdata");
   if (GV->isWeakForLinker())
     GV->setComdat(CGM.getModule().getOrInsertComdat(GV->getName()));
-  GV->setUnnamedAddr(true);
   return GV;
 }
 
