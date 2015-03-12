@@ -63,3 +63,4 @@ int main(int argc, char **argv) {
 // CHECK: call void @__omp_threadprivate_vec_arr_x()
 // CHECK: ret void
 
+
