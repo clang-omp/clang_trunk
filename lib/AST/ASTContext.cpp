@@ -8190,6 +8190,19 @@ MangleNumberingContext *ASTContext::createMangleNumberingContext() const {
   return ABI->createMangleNumberingContext();
 }
 
+const CXXConstructorDecl *
+ASTContext::getCopyConstructorForExceptionObject(CXXRecordDecl *RD) {
+  return ABI->getCopyConstructorForExceptionObject(
+      cast<CXXRecordDecl>(RD->getFirstDecl()));
+}
+
+void ASTContext::addCopyConstructorForExceptionObject(CXXRecordDecl *RD,
+                                                      CXXConstructorDecl *CD) {
+  return ABI->addCopyConstructorForExceptionObject(
+      cast<CXXRecordDecl>(RD->getFirstDecl()),
+      cast<CXXConstructorDecl>(CD->getFirstDecl()));
+}
+
 void ASTContext::setParameterIndex(const ParmVarDecl *D, unsigned int index) {
   ParamIndices[D] = index;
 }
