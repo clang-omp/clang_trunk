@@ -807,7 +807,7 @@ LValue CodeGenFunction::EmitCheckedLValue(const Expr *E, TypeCheckKind TCK) {
 /// length type, this is not possible.
 ///
 LValue CodeGenFunction::EmitLValue(const Expr *E) {
-  ApplyDebugLocation DL(*this, E->getLocStart());
+  ApplyDebugLocation DL(*this, E);
   switch (E->getStmtClass()) {
   default: return EmitUnsupportedLValue(E, "l-value expression");
 
@@ -3069,8 +3069,6 @@ RValue CodeGenFunction::EmitRValueForField(LValue LV,
 
 RValue CodeGenFunction::EmitCallExpr(const CallExpr *E,
                                      ReturnValueSlot ReturnValue) {
-  ApplyDebugLocation DL(*this, E->getLocStart());
-
   // Builtins never have block type.
   if (E->getCallee()->getType()->isBlockPointerType())
     return EmitBlockCallExpr(E, ReturnValue);
