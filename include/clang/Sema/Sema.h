@@ -8905,6 +8905,7 @@ public:
     FST_Strfmon,
     FST_Kprintf,
     FST_FreeBSDKPrintf,
+    FST_OSTrace,
     FST_Unknown
   };
   static FormatStringType GetFormatStringType(const FormatAttr *Format);

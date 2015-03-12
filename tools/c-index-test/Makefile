@@ -14,9 +14,6 @@ TOOLNAME = c-index-test
 # when installing c-index-test.
 INTERNAL_TOOL = 1
 
-# No plugins, optimize startup time.
-TOOL_NO_EXPORTS = 1
-
 # Include this here so we can get the configuration of the targets that have
 # been configured for construction. We have to do this early so we can set up
 # LINK_COMPONENTS before including Makefile.rules
@@ -30,7 +27,7 @@ LINK_COMPONENTS := $(TARGETS_TO_BUILD) asmparser bitreader bitwriter \
 USEDLIBS = clang.a \
 	   clangIndex.a clangFormat.a clangRewrite.a \
            clangCodeGen.a \
-	   clangFrontend.a clangDriver.a \
+	   clangFrontend.a clangCodeGen.a clangDriver.a \
 	   clangTooling.a \
 	   clangToolingCore.a \
 	   clangSerialization.a clangParse.a clangSema.a \

@@ -2086,6 +2086,15 @@ void Sema::DeclareGlobalAllocationFunction(DeclarationName Name,
       }
     }
   }
+  
+  // If the function is sized operator delete and has not already been
+  // declared, and weak definitions have been disabled, do not declare
+  // it implicitly. Instead, let deallocation function lookup pick up
+  // unsized delete.
+  // FIXME: We should remove this guard once backward compatibility is
+  // no longer an issue
+  if (NumParams == 2 && !getLangOpts().DefineSizedDeallocation)
+    return;
 
   FunctionProtoType::ExtProtoInfo EPI;
 
@@ -3538,8 +3547,8 @@ static bool EvaluateUnaryTypeTrait(Sema &Self, TypeTrait UTT,
 
       bool FoundConstructor = false;
       unsigned FoundTQs;
-      DeclContext::lookup_const_result R = Self.LookupConstructors(RD);
-      for (DeclContext::lookup_const_iterator Con = R.begin(),
+      DeclContext::lookup_result R = Self.LookupConstructors(RD);
+      for (DeclContext::lookup_iterator Con = R.begin(),
            ConEnd = R.end(); Con != ConEnd; ++Con) {
         // A template constructor is never a copy constructor.
         // FIXME: However, it may actually be selected at the actual overload
@@ -3578,8 +3587,8 @@ static bool EvaluateUnaryTypeTrait(Sema &Self, TypeTrait UTT,
         return true;
 
       bool FoundConstructor = false;
-      DeclContext::lookup_const_result R = Self.LookupConstructors(RD);
-      for (DeclContext::lookup_const_iterator Con = R.begin(),
+      DeclContext::lookup_result R = Self.LookupConstructors(RD);
+      for (DeclContext::lookup_iterator Con = R.begin(),
            ConEnd = R.end(); Con != ConEnd; ++Con) {
         // FIXME: In C++0x, a constructor template can be a default constructor.
         if (isa<FunctionTemplateDecl>(*Con))

@@ -128,7 +128,7 @@ public:
       ASTSym->setSection("__clangast");
 
     // Use the LLVM backend to emit the pcm.
-    EmitBackendOutput(Diags, CodeGenOpts, TargetOpts, LangOpts,
+    clang::EmitBackendOutput(Diags, CodeGenOpts, TargetOpts, LangOpts,
                       Ctx.getTargetInfo().getTargetDescription(), M.get(),
                       BackendAction::Backend_EmitObj, OS);
 
