@@ -696,6 +696,7 @@ public:
   const TargetInfo &getTarget() const { return Target; }
   const llvm::Triple &getTriple() const;
   bool supportsCOMDAT() const;
+  void maybeSetTrivialComdat(const Decl &D, llvm::GlobalObject &GO);
 
   CGCXXABI &getCXXABI() const { return *ABI; }
   llvm::LLVMContext &getLLVMContext() { return VMContext; }
@@ -1083,7 +1084,7 @@ public:
 
   void EmitTentativeDefinition(const VarDecl *D);
 
-  void EmitVTable(CXXRecordDecl *Class, bool DefinitionRequired);
+  void EmitVTable(CXXRecordDecl *Class);
 
   /// Emit the RTTI descriptors for the builtin types.
   void EmitFundamentalRTTIDescriptors();

@@ -66,8 +66,7 @@ namespace clang {
         : Diags(_Diags), Action(action), CodeGenOpts(compopts),
           TargetOpts(targetopts), LangOpts(langopts), AsmOutStream(OS),
           Context(nullptr), LLVMIRGeneration("LLVM IR Generation Time"),
-          Gen(CreateLLVMCodeGen(Diags, infile, compopts,
-                                targetopts, C, CoverageInfo)),
+          Gen(CreateLLVMCodeGen(Diags, infile, compopts, C, CoverageInfo)),
           LinkModule(LinkModule) {
       llvm::TimePassesIsEnabled = TimePasses;
     }
@@ -196,8 +195,8 @@ namespace clang {
       Gen->CompleteTentativeDefinition(D);
     }
 
-    void HandleVTable(CXXRecordDecl *RD, bool DefinitionRequired) override {
-      Gen->HandleVTable(RD, DefinitionRequired);
+    void HandleVTable(CXXRecordDecl *RD) override {
+      Gen->HandleVTable(RD);
     }
 
     void HandleLinkerOptionPragma(llvm::StringRef Opts) override {
