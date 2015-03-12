@@ -3144,6 +3144,12 @@ TEST(InitListExpression, MatchesInitListExpression) {
                       initListExpr(hasType(asString("int [2]")))));
   EXPECT_TRUE(matches("struct B { int x, y; }; B b = { 5, 6 };",
                       initListExpr(hasType(recordDecl(hasName("B"))))));
+  EXPECT_TRUE(matches("struct S { S(void (*a)()); };"
+                      "void f();"
+                      "S s[1] = { &f };",
+                      declRefExpr(to(functionDecl(hasName("f"))))));
+  EXPECT_TRUE(
+      matches("int i[1] = {42, [0] = 43};", integerLiteral(equals(42))));
 }
 
 TEST(UsingDeclaration, MatchesUsingDeclarations) {

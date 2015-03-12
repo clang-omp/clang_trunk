@@ -10,6 +10,7 @@
 #include "Tools.h"
 #include "InputInfo.h"
 #include "ToolChains.h"
+#include "clang/Basic/CharInfo.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/ObjCRuntime.h"
 #include "clang/Basic/Version.h"
@@ -1871,7 +1872,7 @@ static bool DecodeAArch64Mcpu(const Driver &D, StringRef Mcpu, StringRef &CPU,
                               std::vector<const char *> &Features) {
   std::pair<StringRef, StringRef> Split = Mcpu.split("+");
   CPU = Split.first;
-  if (CPU == "cyclone" || CPU == "cortex-a53" || CPU == "cortex-a57") {
+  if (CPU == "cyclone" || CPU == "cortex-a53" || CPU == "cortex-a57" || CPU == "cortex-a72") {
     Features.push_back("+neon");
     Features.push_back("+crc");
     Features.push_back("+crypto");
@@ -2427,27 +2428,49 @@ static bool addSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
   return !StaticRuntimes.empty();
 }
 
+static bool areOptimizationsEnabled(const ArgList &Args) {
+  // Find the last -O arg and see if it is non-zero.
+  if (Arg *A = Args.getLastArg(options::OPT_O_Group))
+    return !A->getOption().matches(options::OPT_O0);
+  // Defaults to -O0.
+  return false;
+}
+
 static bool shouldUseFramePointerForTarget(const ArgList &Args,
                                            const llvm::Triple &Triple) {
-  switch (Triple.getArch()) {
-  // Don't use a frame pointer on linux if optimizing for certain targets.
-  case llvm::Triple::mips64:
-  case llvm::Triple::mips64el:
-  case llvm::Triple::mips:
-  case llvm::Triple::mipsel:
-  case llvm::Triple::systemz:
-  case llvm::Triple::x86:
-  case llvm::Triple::x86_64:
-    if (Triple.isOSLinux())
-      if (Arg *A = Args.getLastArg(options::OPT_O_Group))
-        if (!A->getOption().matches(options::OPT_O0))
-          return false;
-    return true;
-  case llvm::Triple::xcore:
+  // XCore never wants frame pointers, regardless of OS.
+  if (Triple.getArch() == llvm::Triple::xcore) {
     return false;
-  default:
-    return true;
   }
+
+  if (Triple.isOSLinux()) {
+    switch (Triple.getArch()) {
+    // Don't use a frame pointer on linux if optimizing for certain targets.
+    case llvm::Triple::mips64:
+    case llvm::Triple::mips64el:
+    case llvm::Triple::mips:
+    case llvm::Triple::mipsel:
+    case llvm::Triple::systemz:
+    case llvm::Triple::x86:
+    case llvm::Triple::x86_64:
+      return !areOptimizationsEnabled(Args);
+    default:
+      return true;
+    }
+  }
+
+  if (Triple.isOSWindows()) {
+    switch (Triple.getArch()) {
+    case llvm::Triple::x86:
+      return !areOptimizationsEnabled(Args);
+    default:
+      // All other supported Windows ISAs use xdata unwind information, so frame
+      // pointers are not generally useful.
+      return false;
+    }
+  }
+
+  return true;
 }
 
 static bool shouldUseFramePointer(const ArgList &Args,
@@ -2610,7 +2633,7 @@ static void appendUserToPath(SmallVectorImpl<char> &Result) {
     // Validate that LoginName can be used in a path, and get its length.
     size_t Len = 0;
     for (const char *P = Username; *P; ++P, ++Len) {
-      if (!isalnum(*P) && *P != '_') {
+      if (!isAlphanumeric(*P) && *P != '_') {
         Username = nullptr;
         break;
       }
@@ -5704,7 +5727,7 @@ const char *arm::getLLVMArchSuffixForARM(StringRef CPU) {
     .Cases("cortex-m4", "cortex-m7", "v7em")
     .Case("swift", "v7s")
     .Case("cyclone", "v8")
-    .Cases("cortex-a53", "cortex-a57", "v8")
+    .Cases("cortex-a53", "cortex-a57", "cortex-a72", "v8")
     .Default("");
 }
 

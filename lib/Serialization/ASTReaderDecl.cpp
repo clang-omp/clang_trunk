@@ -2644,6 +2644,11 @@ DeclContext *ASTDeclReader::getPrimaryContextForMerging(ASTReader &Reader,
     return ED->getASTContext().getLangOpts().CPlusPlus? ED->getDefinition()
                                                       : nullptr;
 
+  // We can see the TU here only if we have no Sema object. In that case,
+  // there's no TU scope to look in, so using the DC alone is sufficient.
+  if (auto *TU = dyn_cast<TranslationUnitDecl>(DC))
+    return TU;
+
   return nullptr;
 }
 
@@ -3714,7 +3719,8 @@ void ASTDeclReader::UpdateDecl(Decl *D, ModuleFile &ModuleFile,
       auto *RD = cast<CXXRecordDecl>(D);
       auto *OldDD = RD->DefinitionData.getNotUpdated();
       bool HadRealDefinition =
-          OldDD && !Reader.PendingFakeDefinitionData.count(OldDD);
+          OldDD && (OldDD->Definition != RD ||
+                    !Reader.PendingFakeDefinitionData.count(OldDD));
       ReadCXXRecordDefinition(RD, /*Update*/true);
 
       // Visible update is handled separately.
