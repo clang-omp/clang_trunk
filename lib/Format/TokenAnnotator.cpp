@@ -838,10 +838,8 @@ private:
                (!Current.Previous || Current.Previous->isNot(tok::l_square))) {
       Current.Type = TT_BinaryOperator;
     } else if (Current.is(tok::comment)) {
-      if (Current.TokenText.startswith("//"))
-        Current.Type = TT_LineComment;
-      else
-        Current.Type = TT_BlockComment;
+      Current.Type =
+          Current.TokenText.startswith("/*") ? TT_BlockComment : TT_LineComment;
     } else if (Current.is(tok::r_paren)) {
       if (rParenEndsCast(Current))
         Current.Type = TT_CastRParen;
@@ -1361,7 +1359,7 @@ static bool isFunctionDeclarationName(const FormatToken &Current) {
   assert(Next->is(tok::l_paren));
   if (Next->Next == Next->MatchingParen)
     return true;
-  for (const FormatToken *Tok = Next->Next; Tok != Next->MatchingParen;
+  for (const FormatToken *Tok = Next->Next; Tok && Tok != Next->MatchingParen;
        Tok = Tok->Next) {
     if (Tok->is(tok::kw_const) || Tok->isSimpleTypeSpecifier() ||
         Tok->isOneOf(TT_PointerOrReference, TT_StartOfName))

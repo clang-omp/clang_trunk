@@ -27,8 +27,8 @@ static llvm::MDNode *CreateMetadata(llvm::LLVMContext &Ctx,
 
   SmallVector<Metadata *, 4> Args;
   // Reserve operand 0 for loop id self reference.
-  MDNode *TempNode = MDNode::getTemporary(Ctx, None);
-  Args.push_back(TempNode);
+  auto TempNode = MDNode::getTemporary(Ctx, None);
+  Args.push_back(TempNode.get());
 
   // Setting vectorizer.width
   // TODO: For a correct implementation of 'safelen' clause
@@ -63,7 +63,6 @@ static llvm::MDNode *CreateMetadata(llvm::LLVMContext &Ctx,
   // Set the first operand to itself.
   MDNode *LoopID = MDNode::get(Ctx, Args);
   LoopID->replaceOperandWith(0, LoopID);
-  MDNode::deleteTemporary(TempNode);
   return LoopID;
 }
 
