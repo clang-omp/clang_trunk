@@ -263,7 +263,7 @@ int nested___finally___except() {
 // CHECK-NEXT: br label %[[trycont:[^ ]*]]
 
 // CHECK: [[g1_lpad]]
-// CHECK:  br label %[[except]]
+// CHECK:  br label %[[except:[^ ]*]]
 
 // CHECK: [[except]]
 // CHECK-NEXT: invoke void bitcast (void (...)* @g to void ()*)()
