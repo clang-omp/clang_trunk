@@ -2274,7 +2274,7 @@ public:
   /// getCallReturnType - Get the return type of the call expr. This is not
   /// always the type of the expr itself, if the return type is a reference
   /// type.
-  QualType getCallReturnType() const;
+  QualType getCallReturnType(const ASTContext &Ctx) const;
 
   SourceLocation getRParenLoc() const { return RParenLoc; }
   void setRParenLoc(SourceLocation L) { RParenLoc = L; }

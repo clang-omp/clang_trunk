@@ -325,7 +325,7 @@ public:
   Value *VisitCastExpr(CastExpr *E);
 
   Value *VisitCallExpr(const CallExpr *E) {
-    if (E->getCallReturnType()->isReferenceType())
+    if (E->getCallReturnType(CGF.getContext())->isReferenceType())
       return EmitLoadOfLValue(E);
 
     Value *V = CGF.EmitCallExpr(E).getScalarVal();
