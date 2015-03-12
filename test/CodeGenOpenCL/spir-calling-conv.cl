@@ -8,7 +8,7 @@ kernel void foo(global int *A)
 // CHECK: define spir_kernel void @foo(i32 addrspace(1)* %A)
 {
   int id = get_dummy_id(0);
-  // CHECK: %call = tail call spir_func i32 @get_dummy_id(i32 0)
+  // CHECK: %{{[a-z0-9_]+}} = tail call spir_func i32 @get_dummy_id(i32 0)
   A[id] = id;
   bar(A);
   // CHECK: tail call spir_kernel void @bar(i32 addrspace(1)* %A)

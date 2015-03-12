@@ -1534,6 +1534,8 @@ llvm::Function *MicrosoftCXXABI::EmitVirtualMemPtrThunk(
   ThunkFn->setLinkage(MD->isExternallyVisible()
                           ? llvm::GlobalValue::LinkOnceODRLinkage
                           : llvm::GlobalValue::InternalLinkage);
+  if (MD->isExternallyVisible())
+    ThunkFn->setComdat(CGM.getModule().getOrInsertComdat(ThunkFn->getName()));
 
   CGM.SetLLVMFunctionAttributes(MD, FnInfo, ThunkFn);
   CGM.SetLLVMFunctionAttributesForDefinition(MD, ThunkFn);
@@ -1923,6 +1925,9 @@ void MicrosoftCXXABI::EmitGuardedInit(CodeGenFunction &CGF, const VarDecl &D,
                                  GV->getLinkage(), Zero, GuardName.str());
     GI->Guard->setVisibility(GV->getVisibility());
     GI->Guard->setDLLStorageClass(GV->getDLLStorageClass());
+    if (GI->Guard->isWeakForLinker())
+      GI->Guard->setComdat(
+          CGM.getModule().getOrInsertComdat(GI->Guard->getName()));
   } else {
     assert(GI->Guard->getLinkage() == GV->getLinkage() &&
            "static local from the same function had different linkage");
