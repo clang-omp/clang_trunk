@@ -1037,7 +1037,7 @@ void CXXNameMangler::mangleUnqualifiedName(const NamedDecl *ND,
     Str += llvm::utostr(AnonStructId);
 
     Out << Str.size();
-    Out << Str.str();
+    Out << Str;
     break;
   }
 
