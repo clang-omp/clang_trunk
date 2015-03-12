@@ -490,5 +490,38 @@ TEST_F(FormatTestJS, RegexLiteralExamples) {
   verifyFormat("var regex = search.match(/(?:\?|&)times=([^?&]+)/i);");
 }
 
+TEST_F(FormatTestJS, TypeAnnotations) {
+  verifyFormat("var x: string;");
+  verifyFormat("function x(): string {\n  return 'x';\n}");
+  verifyFormat("function x(y: string): string {\n  return 'x';\n}");
+  verifyFormat("for (var y: string in x) {\n  x();\n}");
+  verifyFormat("((a: string, b: number): string => a + b);");
+  verifyFormat("var x: (y: number) => string;");
+  verifyFormat("var x: P<string, (a: number) => string>;");
+}
+
+TEST_F(FormatTestJS, ClassDeclarations) {
+  verifyFormat("class C {\n  x: string = 12;\n}");
+  verifyFormat("class C {\n  x(): string => 12;\n}");
+  verifyFormat("class C {\n  ['x' + 2]: string = 12;\n}");
+  verifyFormat("class C {\n  private x: string = 12;\n}");
+  verifyFormat("class C {\n  private static x: string = 12;\n}");
+  verifyFormat("class C {\n  static x(): string { return 'asd'; }\n}");
+  verifyFormat("class C extends P implements I {}");
+}
+
+TEST_F(FormatTestJS, MetadataAnnotations) {
+  verifyFormat("@A\nclass C {\n}");
+  verifyFormat("@A({arg: 'value'})\nclass C {\n}");
+  verifyFormat("@A\n@B\nclass C {\n}");
+  verifyFormat("class C {\n  @A x: string;\n}");
+  verifyFormat("class C {\n"
+               "  @A\n"
+               "  private x(): string {\n"
+               "    return 'y';\n"
+               "  }\n"
+               "}");
+}
+
 } // end namespace tooling
 } // end namespace clang
