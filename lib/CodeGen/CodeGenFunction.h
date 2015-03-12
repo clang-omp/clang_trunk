@@ -425,6 +425,9 @@ public:
   /// potentially set the return value.
   bool SawAsmBlock;
 
+  /// Codegen is currently inside an SEH try block.
+  bool IsSEHTryScope;
+
   const CodeGen::CGBlockInfo *BlockInfo;
   llvm::Value *BlockPointer;
 
@@ -1248,6 +1251,11 @@ public:
   void disableExceptions() { ExceptionsDisabled = true; }
   void enableExceptions() { ExceptionsDisabled = false; }
 
+  bool currentFunctionUsesSEHTry() const {
+    const auto *FD = dyn_cast_or_null<FunctionDecl>(CurCodeDecl);
+    return FD && FD->usesSEHTry();
+  }
+
   const TargetInfo &getTarget() const { return Target; }
   llvm::LLVMContext &getLLVMContext() { return CGM.getLLVMContext(); }
 
@@ -1419,7 +1427,8 @@ public:
   /// legal to call this function even if there is no current insertion point.
   void FinishFunction(SourceLocation EndLoc=SourceLocation());
 
-  void StartThunk(llvm::Function *Fn, GlobalDecl GD, const CGFunctionInfo &FnInfo);
+  void StartThunk(llvm::Function *Fn, GlobalDecl GD,
+                  const CGFunctionInfo &FnInfo);
 
   void EmitCallAndReturnForThunk(llvm::Value *Callee, const ThunkInfo *Thunk);
 
@@ -2453,8 +2462,8 @@ public:
   /// Emit an l-value for an assignment (simple or compound) of complex type.
   LValue EmitComplexAssignmentLValue(const BinaryOperator *E);
   LValue EmitComplexCompoundAssignmentLValue(const CompoundAssignOperator *E);
-  LValue EmitScalarCompooundAssignWithComplex(const CompoundAssignOperator *E,
-                                              llvm::Value *&Result);
+  LValue EmitScalarCompoundAssignWithComplex(const CompoundAssignOperator *E,
+                                             llvm::Value *&Result);
 
   // Note: only available for agg return types
   LValue EmitBinaryOperatorLValue(const BinaryOperator *E);

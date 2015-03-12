@@ -21,6 +21,7 @@
 #include "clang/AST/StmtObjC.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/Support/SaveAndRestore.h"
 
 using namespace clang;
 using namespace CodeGen;
@@ -453,7 +454,8 @@ llvm::Value *CodeGenFunction::getSelectorFromSlot() {
 
 llvm::Value *CodeGenFunction::getAbnormalTerminationSlot() {
   if (!AbnormalTerminationSlot)
-    AbnormalTerminationSlot = CreateTempAlloca(Int8Ty, "abnormal.termination.slot");
+    AbnormalTerminationSlot =
+        CreateTempAlloca(Int8Ty, "abnormal.termination.slot");
   return AbnormalTerminationSlot;
 }
 
@@ -585,8 +587,9 @@ static void emitFilterDispatchBlock(CodeGenFunction &CGF,
 
     llvm::Value *zero = CGF.Builder.getInt32(0);
     llvm::Value *failsFilter =
-      CGF.Builder.CreateICmpSLT(selector, zero, "ehspec.fails");
-    CGF.Builder.CreateCondBr(failsFilter, unexpectedBB, CGF.getEHResumeBlock(false));
+        CGF.Builder.CreateICmpSLT(selector, zero, "ehspec.fails");
+    CGF.Builder.CreateCondBr(failsFilter, unexpectedBB,
+                             CGF.getEHResumeBlock(false));
 
     CGF.EmitBlock(unexpectedBB);
   }
@@ -743,8 +746,7 @@ llvm::BasicBlock *CodeGenFunction::getInvokeDestImpl() {
   if (!LO.Exceptions) {
     if (!LO.Borland && !LO.MicrosoftExt)
       return nullptr;
-    const auto *FD = dyn_cast_or_null<FunctionDecl>(CurCodeDecl);
-    if (!FD || !FD->usesSEHTry())
+    if (!currentFunctionUsesSEHTry())
       return nullptr;
   }
 
@@ -1565,6 +1567,8 @@ static llvm::Constant *getClangCallTerminateFn(CodeGenModule &CGM) {
     // we don't want it to turn into an exported symbol.
     fn->setLinkage(llvm::Function::LinkOnceODRLinkage);
     fn->setVisibility(llvm::Function::HiddenVisibility);
+    if (CGM.supportsCOMDAT())
+      fn->setComdat(CGM.getModule().getOrInsertComdat(fn->getName()));
 
     // Set up the function.
     llvm::BasicBlock *entry =
@@ -1702,7 +1706,11 @@ void CodeGenFunction::EmitSEHTryStmt(const SEHTryStmt &S) {
 
   SEHFinallyInfo FI;
   EnterSEHTryStmt(S, FI);
-  EmitStmt(S.getTryBlock());
+  {
+    // Disable inlining inside SEH __try scopes.
+    SaveAndRestore<bool> Saver(IsSEHTryScope, true);
+    EmitStmt(S.getTryBlock());
+  }
   ExitSEHTryStmt(S, FI);
 }
 

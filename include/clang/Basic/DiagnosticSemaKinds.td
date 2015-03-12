@@ -1645,6 +1645,10 @@ def err_auto_var_init_multiple_expressions : Error<
 def err_auto_var_init_paren_braces : Error<
   "cannot deduce type for variable %0 with type %1 from "
   "parenthesized initializer list">;
+def warn_auto_var_direct_list_init : Warning<
+  "direct list initialization of a variable with a deduced type will change "
+  "meaning in a future version of Clang; insert an '=' to avoid a change in "
+  "behavior">, InGroup<FutureCompat>;
 def err_auto_new_ctor_multiple_expressions : Error<
   "new expression for type %0 contains multiple constructor arguments">;
 def err_auto_missing_trailing_return : Error<
@@ -4167,9 +4171,10 @@ def warn_missing_field_initializers : Warning<
   "missing field %0 initializer">,
   InGroup<MissingFieldInitializers>, DefaultIgnore;
 def warn_braces_around_scalar_init : Warning<
-  "braces around scalar initializer">;
+  "braces around scalar initializer">, InGroup<DiagGroup<"braced-scalar-init">>;
 def ext_many_braces_around_scalar_init : ExtWarn<
-  "too many braces around scalar initializer">;
+  "too many braces around scalar initializer">,
+  InGroup<DiagGroup<"many-braces-around-scalar-init">>;
 def ext_complex_component_init : Extension<
   "complex initialization specifying real and imaginary components "
   "is an extension">, InGroup<DiagGroup<"complex-component-init">>;
