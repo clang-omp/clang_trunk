@@ -4291,7 +4291,7 @@ TypoCorrection Sema::CorrectTypo(const DeclarationNameInfo &TypoName,
   // Record the failure's location if needed and return an empty correction. If
   // this was an unqualified lookup and we believe the callback object did not
   // filter out possible corrections, also cache the failure for the typo.
-  return FailedCorrection(Typo, TypoName.getLoc(), RecordFailure);
+  return FailedCorrection(Typo, TypoName.getLoc(), RecordFailure && !SecondBestTC);
 }
 
 /// \brief Try to "correct" a typo in the source code by finding
@@ -4344,9 +4344,7 @@ TypoExpr *Sema::CorrectTypoDelayed(
   TypoCorrection Empty;
   auto Consumer = makeTypoCorrectionConsumer(
       TypoName, LookupKind, S, SS, std::move(CCC), MemberContext,
-      EnteringContext, OPT,
-      /*SearchModules=*/(Mode == CTK_ErrorRecovery) && getLangOpts().Modules &&
-          getLangOpts().ModulesSearchAll);
+      EnteringContext, OPT, Mode == CTK_ErrorRecovery);
 
   if (!Consumer || Consumer->empty())
     return nullptr;
