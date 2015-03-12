@@ -147,113 +147,47 @@ void CodeGenFunction::EmitStmt(const Stmt *S) {
     EmitCapturedStmt(*CS, CS->getCapturedRegionKind());
     }
     break;
-    // "One-call" OMP Directives
-    case Stmt::OMPBarrierDirectiveClass:
-      EmitOMPBarrierDirective(cast<OMPBarrierDirective>(*S));
-      break;
-    case Stmt::OMPTaskyieldDirectiveClass:
-      EmitOMPTaskyieldDirective(cast<OMPTaskyieldDirective>(*S));
-      break;
-    case Stmt::OMPTaskwaitDirectiveClass:
-      EmitOMPTaskwaitDirective(cast<OMPTaskwaitDirective>(*S));
-      break;
-    case Stmt::OMPFlushDirectiveClass:
-      EmitOMPFlushDirective(cast<OMPFlushDirective>(*S));
-      break;
-    // Atomic OMP Directive -- pattern match and emit one call
-    case Stmt::OMPAtomicDirectiveClass:
-      EmitOMPAtomicDirective(cast<OMPAtomicDirective>(*S));
-      break;
-    // "Two-calls" OMP Directives
-    case Stmt::OMPMasterDirectiveClass:
-      EmitOMPMasterDirective(cast<OMPMasterDirective>(*S));
-      break;
-    case Stmt::OMPSingleDirectiveClass:
-      EmitOMPSingleDirective(cast<OMPSingleDirective>(*S));
-      break;
-    case Stmt::OMPCriticalDirectiveClass:
-      EmitOMPCriticalDirective(cast<OMPCriticalDirective>(*S));
-      break;
-    case Stmt::OMPOrderedDirectiveClass:
-      EmitOMPOrderedDirective(cast<OMPOrderedDirective>(*S));
-      break;
     // A more advanced stuff
-    case Stmt::OMPParallelDirectiveClass:
-      EmitOMPParallelDirective(cast<OMPParallelDirective>(*S));
-      break;
-    case Stmt::OMPParallelForDirectiveClass:
-      EmitOMPParallelForDirective(cast<OMPParallelForDirective>(*S));
-      break;
-    case Stmt::OMPSimdDirectiveClass:
-      EmitOMPSimdDirective(cast<OMPSimdDirective>(*S));
-      break;
-    case Stmt::OMPForSimdDirectiveClass:
-      EmitOMPForSimdDirective(cast<OMPForSimdDirective>(*S));
-      break;
-    case Stmt::OMPParallelForSimdDirectiveClass:
-      EmitOMPParallelForSimdDirective(cast<OMPParallelForSimdDirective>(*S));
-      break;
-    case Stmt::OMPDistributeSimdDirectiveClass:
-      EmitOMPDistributeSimdDirective(cast<OMPDistributeSimdDirective>(*S));
-      break;
-    case Stmt::OMPDistributeParallelForDirectiveClass:
-      EmitOMPDistributeParallelForDirective(
-          cast<OMPDistributeParallelForDirective>(*S));
-      break;
-    case Stmt::OMPDistributeParallelForSimdDirectiveClass:
-      EmitOMPDistributeParallelForSimdDirective(
-          cast<OMPDistributeParallelForSimdDirective>(*S));
-      break;
-    case Stmt::OMPTeamsDistributeParallelForDirectiveClass:
-      EmitOMPTeamsDistributeParallelForDirective(
-          cast<OMPTeamsDistributeParallelForDirective>(*S));
-      break;
-    case Stmt::OMPTeamsDistributeParallelForSimdDirectiveClass:
-      EmitOMPTeamsDistributeParallelForSimdDirective(
-          cast<OMPTeamsDistributeParallelForSimdDirective>(*S));
-      break;
-    case Stmt::OMPTargetTeamsDistributeParallelForDirectiveClass:
-      EmitOMPTargetTeamsDistributeParallelForDirective(
-          cast<OMPTargetTeamsDistributeParallelForDirective>(*S));
-      break;
-    case Stmt::OMPTargetTeamsDistributeParallelForSimdDirectiveClass:
-      EmitOMPTargetTeamsDistributeParallelForSimdDirective(
-          cast<OMPTargetTeamsDistributeParallelForSimdDirective>(*S));
-      break;
-    case Stmt::OMPTaskDirectiveClass:
-      EmitOMPTaskDirective(cast<OMPTaskDirective>(*S));
-      break;
-    case Stmt::OMPForDirectiveClass:
-      EmitOMPForDirective(cast<OMPForDirective>(*S));
-      break;
-    case Stmt::OMPSectionsDirectiveClass:
-      EmitOMPSectionsDirective(cast<OMPSectionsDirective>(*S));
-      break;
-    case Stmt::OMPParallelSectionsDirectiveClass:
-      EmitOMPParallelSectionsDirective(cast<OMPParallelSectionsDirective>(*S));
-      break;
-    case Stmt::OMPSectionDirectiveClass:
-      EmitOMPSectionDirective(cast<OMPSectionDirective>(*S));
-      break;
-    case Stmt::OMPTaskgroupDirectiveClass:
-      EmitOMPTaskgroupDirective(cast<OMPTaskgroupDirective>(*S));
-      break;
-    case Stmt::OMPTeamsDirectiveClass:
-      EmitOMPTeamsDirective(cast<OMPTeamsDirective>(*S));
-      break;
-    case Stmt::OMPDistributeDirectiveClass:
-      EmitOMPDistributeDirective(cast<OMPDistributeDirective>(*S));
-      break;
-    case Stmt::OMPCancelDirectiveClass:
-      EmitOMPCancelDirective(cast<OMPCancelDirective>(*S));
-      break;
-    case Stmt::OMPCancellationPointDirectiveClass:
-      EmitOMPCancellationPointDirective(
-          cast<OMPCancellationPointDirective>(*S));
-      break;
-    case Stmt::OMPTargetDirectiveClass:
-      EmitOMPTargetDirective(cast<OMPTargetDirective>(*S));
-      break;
+  case Stmt::OMPDistributeSimdDirectiveClass:
+    EmitOMPDistributeSimdDirective(cast<OMPDistributeSimdDirective>(*S));
+    break;
+  case Stmt::OMPDistributeParallelForDirectiveClass:
+    EmitOMPDistributeParallelForDirective(
+        cast<OMPDistributeParallelForDirective>(*S));
+    break;
+  case Stmt::OMPDistributeParallelForSimdDirectiveClass:
+    EmitOMPDistributeParallelForSimdDirective(
+        cast<OMPDistributeParallelForSimdDirective>(*S));
+    break;
+  case Stmt::OMPTeamsDistributeParallelForDirectiveClass:
+    EmitOMPTeamsDistributeParallelForDirective(
+        cast<OMPTeamsDistributeParallelForDirective>(*S));
+    break;
+  case Stmt::OMPTeamsDistributeParallelForSimdDirectiveClass:
+    EmitOMPTeamsDistributeParallelForSimdDirective(
+        cast<OMPTeamsDistributeParallelForSimdDirective>(*S));
+    break;
+  case Stmt::OMPTargetTeamsDistributeParallelForDirectiveClass:
+    EmitOMPTargetTeamsDistributeParallelForDirective(
+        cast<OMPTargetTeamsDistributeParallelForDirective>(*S));
+    break;
+  case Stmt::OMPTargetTeamsDistributeParallelForSimdDirectiveClass:
+    EmitOMPTargetTeamsDistributeParallelForSimdDirective(
+        cast<OMPTargetTeamsDistributeParallelForSimdDirective>(*S));
+    break;
+  case Stmt::OMPTaskgroupDirectiveClass:
+    EmitOMPTaskgroupDirective(cast<OMPTaskgroupDirective>(*S));
+    break;
+  case Stmt::OMPDistributeDirectiveClass:
+    EmitOMPDistributeDirective(cast<OMPDistributeDirective>(*S));
+    break;
+  case Stmt::OMPCancelDirectiveClass:
+    EmitOMPCancelDirective(cast<OMPCancelDirective>(*S));
+    break;
+  case Stmt::OMPCancellationPointDirectiveClass:
+    EmitOMPCancellationPointDirective(
+        cast<OMPCancellationPointDirective>(*S));
+    break;
   case Stmt::OMPTargetDataDirectiveClass:
     EmitOMPTargetDataDirective(cast<OMPTargetDataDirective>(*S));
     break;
@@ -308,9 +242,6 @@ void CodeGenFunction::EmitStmt(const Stmt *S) {
     break;
   case Stmt::SEHTryStmtClass:
     EmitSEHTryStmt(cast<SEHTryStmt>(*S));
-    break;
-  case Stmt::SEHLeaveStmtClass:
-    EmitSEHLeaveStmt(cast<SEHLeaveStmt>(*S));
     break;
   case Stmt::OMPParallelDirectiveClass:
     EmitOMPParallelDirective(cast<OMPParallelDirective>(*S));

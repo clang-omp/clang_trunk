@@ -1945,7 +1945,7 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
     }
 
     // Check for captured variables.
-    if (E->refersToCapturedVariable()) {
+    if (E->refersToEnclosingLocal()) {
       if (auto *FD = LambdaCaptureFields.lookup(VD))
         return EmitCapturedFieldLValue(*this, FD, CXXABIThisValue);
       else if (CapturedStmtInfo) {
