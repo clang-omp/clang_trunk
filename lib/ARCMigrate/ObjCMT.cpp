@@ -245,6 +245,10 @@ namespace {
         (Msg->getReceiverKind() != ObjCMessageExpr::Instance &&
          Msg->getReceiverKind() != ObjCMessageExpr::SuperInstance))
       return false;
+    if (const Expr *Receiver = Msg->getInstanceReceiver())
+      if (Receiver->getType()->isObjCBuiltinType())
+        return false;
+      
     const ObjCMethodDecl *Method = Msg->getMethodDecl();
     if (!Method)
       return false;
@@ -305,6 +309,10 @@ namespace {
       BegLoc = PP.getLocForEndOfToken(BegLoc);
       SourceLocation EndLoc = RHS->getLocStart();
       EndLoc = EndLoc.getLocWithOffset(-1);
+      const char *colon = PP.getSourceManager().getCharacterData(EndLoc);
+      // Add a space after '=' if there is no space between RHS and '='
+      if (colon && colon[0] == ':')
+        PropertyDotString += " ";
       SourceRange Range(BegLoc, EndLoc);
       commit.replace(Range, PropertyDotString);
       // remove '[' ']'

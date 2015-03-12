@@ -1,5 +1,5 @@
-// RUN: %clang_cc1 -gline-tables-only -std=c++11 -fexceptions -fcxx-exceptions -S -emit-llvm %s -o - | FileCheck %s
-// RUN: %clang_cc1 -gline-tables-only -std=c++11 -fexceptions -fcxx-exceptions -S -emit-llvm %s -o - -triple i686-linux-gnu | FileCheck %s
+// RUN: %clang_cc1 -w -gline-tables-only -std=c++11 -fexceptions -fcxx-exceptions -S -emit-llvm %s -o - | FileCheck %s
+// RUN: %clang_cc1 -w -gline-tables-only -std=c++11 -fexceptions -fcxx-exceptions -S -emit-llvm %s -o - -triple i686-linux-gnu | FileCheck %s
 
 // XFAIL: win32
 
@@ -199,6 +199,14 @@ void f16(__complex float f) {
       f + 1;
 }
 
+// CHECK-LABEL: define
+void f17(int *x) {
+  1,
+// CHECK: getelementptr {{.*}}, !dbg [[DBG_F17:![0-9]*]]
+#line 1900
+      x[1];
+}
+
 // CHECK: [[DBG_F1]] = !MDLocation(line: 100,
 // CHECK: [[DBG_FOO_VALUE]] = !MDLocation(line: 200,
 // CHECK: [[DBG_FOO_REF]] = !MDLocation(line: 202,
@@ -221,3 +229,4 @@ void f16(__complex float f) {
 // CHECK: [[DBG_F14_CTOR_CALL]] = !MDLocation(line: 1600,
 // CHECK: [[DBG_F15]] = !MDLocation(line: 1700,
 // CHECK: [[DBG_F16]] = !MDLocation(line: 1800,
+// CHECK: [[DBG_F17]] = !MDLocation(line: 1900,
