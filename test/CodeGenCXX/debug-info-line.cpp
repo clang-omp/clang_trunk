@@ -166,22 +166,38 @@ void f13() {
   F13_IMPL;
 }
 
-struct f14 {
-  f14(int);
+struct f14_impl {
+  f14_impl(int);
 };
 
 // CHECK-LABEL: define
-// CHECK-LABEL: define
-// CHECK-LABEL: define
-// CHECK: call {{.*}}, !dbg [[DBG_F14_CTOR_CALL:![0-9]*]]
-// FIXME: The ctor call should be attributed to the line of the NSDMI, not the
-// start of this declaration.
+struct f14_use {
+// CHECK: call {{.*}}f14_impl{{.*}}, !dbg [[DBG_F14_CTOR_CALL:![0-9]*]]
 #line 1600
-struct {
-  f14 v = 1;
-} f14_inst;
+  f14_impl v{//
+             1};
+  f14_use();
+};
+
+f14_use::f14_use() = default;
 
 // CHECK-LABEL: define
+// CHECK-LABEL: define
+void func(foo);
+void f15(foo *f) {
+  func(
+// CHECK: getelementptr {{.*}}, !dbg [[DBG_F15:![0-9]*]]
+#line 1700
+      f[3]);
+}
+
+// CHECK-LABEL: define
+void f16(__complex float f) {
+  __complex float g = //
+// CHECK: add {{.*}}, !dbg [[DBG_F16:![0-9]*]]
+#line 1800
+      f + 1;
+}
 
 // CHECK: [[DBG_F1]] = !MDLocation(line: 100,
 // CHECK: [[DBG_FOO_VALUE]] = !MDLocation(line: 200,
@@ -203,3 +219,5 @@ struct {
 // CHECK: [[DBG_F12]] = !MDLocation(line: 1400,
 // CHECK: [[DBG_F13]] = !MDLocation(line: 1500,
 // CHECK: [[DBG_F14_CTOR_CALL]] = !MDLocation(line: 1600,
+// CHECK: [[DBG_F15]] = !MDLocation(line: 1700,
+// CHECK: [[DBG_F16]] = !MDLocation(line: 1800,
