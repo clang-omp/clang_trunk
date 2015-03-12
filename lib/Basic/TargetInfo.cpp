@@ -459,7 +459,9 @@ bool TargetInfo::validateOutputConstraint(ConstraintInfo &Info) const {
         // Eventually, an unknown constraint should just be treated as 'g'.
         return false;
       }
+      break;
     case '&': // early clobber.
+      Info.setEarlyClobber();
       break;
     case '%': // commutative.
       // FIXME: Check that there is a another register after this one.
@@ -484,15 +486,25 @@ bool TargetInfo::validateOutputConstraint(ConstraintInfo &Info) const {
       if (Name[1] == '=' || Name[1] == '+')
         Name++;
       break;
+    case '#': // Ignore as constraint.
+      while (Name[1] && Name[1] != ',')
+        Name++;
+      if (Name[1] != ',')
+        return false;
+      break;
     case '?': // Disparage slightly code.
     case '!': // Disparage severely.
-    case '#': // Ignore as constraint.
     case '*': // Ignore for choosing register preferences.
       break;  // Pass them.
     }
 
     Name++;
   }
+
+  // Early clobber with a read-write constraint which doesn't permit registers
+  // is invalid.
+  if (Info.earlyClobber() && Info.isReadWrite() && !Info.allowsRegister())
+    return false;
 
   // If a constraint allows neither memory nor register operands it contains
   // only modifiers. Reject it.
@@ -536,11 +548,17 @@ bool TargetInfo::validateInputConstraint(ConstraintInfo *OutputConstraints,
     default:
       // Check if we have a matching constraint
       if (*Name >= '0' && *Name <= '9') {
-        unsigned i = *Name - '0';
+        const char *DigitStart = Name;
+        while (Name[1] >= '0' && Name[1] <= '9')
+          Name++;
+        const char *DigitEnd = Name;
+        unsigned i;
+        if (StringRef(DigitStart, DigitEnd - DigitStart + 1)
+                .getAsInteger(10, i))
+          return false;
 
         // Check if matching constraint is out of bounds.
-        if (i >= NumOutputs)
-          return false;
+        if (i >= NumOutputs) return false;
 
         // A number must refer to an output only operand.
         if (OutputConstraints[i].isReadWrite())
@@ -569,6 +587,10 @@ bool TargetInfo::validateInputConstraint(ConstraintInfo *OutputConstraints,
       // If the constraint is already tied, it must be tied to the 
       // same operand referenced to by the number.
       if (Info.hasTiedOperand() && Info.getTiedOperand() != Index)
+        return false;
+
+      // A number must refer to an output only operand.
+      if (OutputConstraints[Index].isReadWrite())
         return false;
 
       Info.setTiedOperand(Index, OutputConstraints[Index]);
@@ -612,9 +634,14 @@ bool TargetInfo::validateInputConstraint(ConstraintInfo *OutputConstraints,
       break;
     case ',': // multiple alternative constraint.  Ignore comma.
       break;
+    case '#': // Ignore as constraint.
+      while (Name[1] && Name[1] != ',')
+        Name++;
+      if (Name[1] != ',')
+        return false;
+      break;
     case '?': // Disparage slightly code.
     case '!': // Disparage severely.
-    case '#': // Ignore as constraint.
     case '*': // Ignore for choosing register preferences.
       break;  // Pass them.
     }

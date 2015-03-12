@@ -1728,6 +1728,12 @@ SimplifyConstraint(const char *Constraint, const TargetInfo &Target,
       while (Constraint[1] && Constraint[1] != ',')
         Constraint++;
       break;
+    case '&':
+    case '%':
+      Result += *Constraint;
+      while (Constraint[1] && Constraint[1] == *Constraint)
+        Constraint++;
+      break;
     case ',':
       Result += "|";
       break;
