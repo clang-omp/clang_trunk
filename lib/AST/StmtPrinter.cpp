@@ -1962,7 +1962,9 @@ void StmtPrinter::VisitCXXBindTemporaryExpr(CXXBindTemporaryExpr *Node) {
 
 void StmtPrinter::VisitCXXTemporaryObjectExpr(CXXTemporaryObjectExpr *Node) {
   Node->getType().print(OS, Policy);
-  if (Node->isListInitialization())
+  if (Node->isStdInitListInitialization())
+    /* Nothing to do; braces are part of creating the std::initializer_list. */;
+  else if (Node->isListInitialization())
     OS << "{";
   else
     OS << "(";
@@ -1975,7 +1977,9 @@ void StmtPrinter::VisitCXXTemporaryObjectExpr(CXXTemporaryObjectExpr *Node) {
       OS << ", ";
     PrintExpr(*Arg);
   }
-  if (Node->isListInitialization())
+  if (Node->isStdInitListInitialization())
+    /* See above. */;
+  else if (Node->isListInitialization())
     OS << "}";
   else
     OS << ")";
@@ -2144,7 +2148,7 @@ void StmtPrinter::VisitCXXPseudoDestructorExpr(CXXPseudoDestructorExpr *E) {
 }
 
 void StmtPrinter::VisitCXXConstructExpr(CXXConstructExpr *E) {
-  if (E->isListInitialization())
+  if (E->isListInitialization() && !E->isStdInitListInitialization())
     OS << "{";
 
   for (unsigned i = 0, e = E->getNumArgs(); i != e; ++i) {
@@ -2157,7 +2161,7 @@ void StmtPrinter::VisitCXXConstructExpr(CXXConstructExpr *E) {
     PrintExpr(E->getArg(i));
   }
 
-  if (E->isListInitialization())
+  if (E->isListInitialization() && !E->isStdInitListInitialization())
     OS << "}";
 }
 
