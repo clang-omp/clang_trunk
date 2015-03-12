@@ -17,6 +17,7 @@
 #include "clang/Driver/DriverDiagnostic.h"
 #include "clang/Driver/Job.h"
 #include "clang/Driver/Options.h"
+#include "clang/Driver/SanitizerArgs.h"
 #include "clang/Driver/Tool.h"
 #include "clang/Driver/ToolChain.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -1411,6 +1412,11 @@ void Driver::BuildActions(const ToolChain &TC, DerivedArgList &Args,
 
       if (NothingElseToDo)
         break;
+
+      // Otherwise construct the appropriate action.
+      Current = ConstructPhaseAction(TC, Args, Phase, std::move(Current));
+      if (Current->getType() == types::TY_Nothing)
+        break;
     }
 
     // If we ended with something, add to the output list.
@@ -1470,7 +1476,8 @@ void Driver::BuildActions(const ToolChain &TC, DerivedArgList &Args,
 }
 
 std::unique_ptr<Action>
-Driver::ConstructPhaseAction(const ArgList &Args, phases::ID Phase,
+Driver::ConstructPhaseAction(const ToolChain &TC, const ArgList &Args,
+                             phases::ID Phase,
                              std::unique_ptr<Action> Input) const {
   llvm::PrettyStackTraceString CrashInfo("Constructing phase actions");
   // Build the appropriate action.
@@ -1529,7 +1536,7 @@ Driver::ConstructPhaseAction(const ArgList &Args, phases::ID Phase,
                                                types::TY_LLVM_BC);
   }
   case phases::Backend: {
-    if (IsUsingLTO(Args)) {
+    if (IsUsingLTO(TC, Args)) {
       types::ID Output =
         Args.hasArg(options::OPT_S) ? types::TY_LTO_IR : types::TY_LTO_BC;
       return llvm::make_unique<BackendJobAction>(std::move(Input), Output);
@@ -1550,7 +1557,10 @@ Driver::ConstructPhaseAction(const ArgList &Args, phases::ID Phase,
   llvm_unreachable("invalid phase in ConstructPhaseAction");
 }
 
-bool Driver::IsUsingLTO(const ArgList &Args) const {
+bool Driver::IsUsingLTO(const ToolChain &TC, const ArgList &Args) const {
+  if (TC.getSanitizerArgs().needsLTO())
+    return true;
+
   if (Args.hasFlag(options::OPT_flto, options::OPT_fno_lto, false))
     return true;
 

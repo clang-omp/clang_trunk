@@ -1397,6 +1397,12 @@ public:
   void setAliasAttributes(const Decl *D, llvm::GlobalValue *GV);
 
   void addReplacement(StringRef Name, llvm::Constant *C);
+
+  /// Emit bit set entries for the given vtable using the given layout if
+  /// vptr CFI is enabled.
+  void EmitVTableBitSetEntries(llvm::GlobalVariable *VTable,
+                               const VTableLayout &VTLayout);
+
 private:
   llvm::Constant *
   GetOrCreateLLVMFunction(StringRef MangledName, llvm::Type *Ty, GlobalDecl D,
