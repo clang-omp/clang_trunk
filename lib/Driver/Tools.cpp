@@ -34,7 +34,6 @@
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Format.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
@@ -4147,10 +4146,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     llvm::sys::fs::file_status Status;
     if (llvm::sys::fs::status(A->getValue(), Status))
       D.Diag(diag::err_drv_no_such_file) << A->getValue();
-    char TimeStamp[48];
-    snprintf(TimeStamp, sizeof(TimeStamp), "-fbuild-session-timestamp=%" PRIu64,
-             (uint64_t)Status.getLastModificationTime().toEpochTime());
-    CmdArgs.push_back(Args.MakeArgString(TimeStamp));
+    CmdArgs.push_back(Args.MakeArgString(
+        "-fbuild-session-timestamp=" +
+        Twine((uint64_t)Status.getLastModificationTime().toEpochTime())));
   }
 
   if (Args.getLastArg(options::OPT_fmodules_validate_once_per_build_session)) {
@@ -4413,6 +4411,11 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (!Args.hasFlag(options::OPT_fassume_sane_operator_new,
                     options::OPT_fno_assume_sane_operator_new))
     CmdArgs.push_back("-fno-assume-sane-operator-new");
+  
+  // -def-sized-delete: default implementation of sized delete as a
+  // weak definition.
+  if (Args.hasArg(options::OPT_fdef_sized_delete))
+    CmdArgs.push_back("-fdef-sized-delete");
 
   // -fconstant-cfstrings is default, and may be subject to argument translation
   // on Darwin.
