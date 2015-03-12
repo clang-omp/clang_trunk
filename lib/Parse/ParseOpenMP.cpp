@@ -1890,12 +1890,10 @@ bool Parser::ParseOpenMPDeclarativeVarListClause(
     }
   }
   bool MayHaveTail = (CKind == OMPC_linear) || (CKind == OMPC_aligned);
-  bool MustHaveTail = false;
   TailExpr = 0;
   if (MayHaveTail) {
     // Parse "':' linear-step" or "':' alignment"
     if (Tok.is(tok::colon)) {
-      MustHaveTail = true;
       ConsumeAnyToken();
       ColonProtectionRAIIObject ColonRAII(*this);
       TailLoc = Tok.getLocation();

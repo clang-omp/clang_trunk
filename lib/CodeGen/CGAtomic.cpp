@@ -130,38 +130,6 @@ namespace {
   };
 }
 
-AtomicExpr::AtomicOrderingKind
-AtomicInfo::translateAtomicOrdering(const llvm::AtomicOrdering AO) {
-  switch (AO) {
-  case llvm::Unordered:
-  case llvm::NotAtomic:
-  case llvm::Monotonic:
-    return AtomicExpr::AO_ABI_memory_order_relaxed;
-  case llvm::Acquire:
-    return AtomicExpr::AO_ABI_memory_order_acquire;
-  case llvm::Release:
-    return AtomicExpr::AO_ABI_memory_order_release;
-  case llvm::AcquireRelease:
-    return AtomicExpr::AO_ABI_memory_order_acq_rel;
-  case llvm::SequentiallyConsistent:
-    return AtomicExpr::AO_ABI_memory_order_seq_cst;
-  }
-  llvm_unreachable("Unhandled AtomicOrdering");
-}
-
-llvm::Value *AtomicInfo::CreateTempAlloca() const {
-  auto *TempAlloca = CGF.CreateMemTemp(
-      (LVal.isBitField() && ValueSizeInBits > AtomicSizeInBits) ? ValueTy
-                                                                : AtomicTy,
-      "atomic-temp");
-  TempAlloca->setAlignment(getAtomicAlignment().getQuantity());
-  // Cast to pointer to value type for bitfields.
-  if (LVal.isBitField())
-    return CGF.Builder.CreatePointerBitCastOrAddrSpaceCast(
-        TempAlloca, getAtomicAddress()->getType());
-  return TempAlloca;
-}
-
 static RValue emitAtomicLibcall(CodeGenFunction &CGF,
                                 StringRef fnName,
                                 QualType resultType,

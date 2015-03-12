@@ -3306,9 +3306,6 @@ StmtResult Sema::ActOnCXXTryBlock(SourceLocation TryLoc, Stmt *TryBlock,
       !getSourceManager().isInSystemHeader(TryLoc))
       Diag(TryLoc, diag::err_exceptions_disabled) << "try";
 
-  if (getCurScope() && getCurScope()->isOpenMPSimdDirectiveScope())
-    Diag(TryLoc, diag::err_omp_simd_region_cannot_use_stmt) << "try";
-
   sema::FunctionScopeInfo *FSI = getCurFunction();
 
   // C++ try is incompatible with SEH __try.

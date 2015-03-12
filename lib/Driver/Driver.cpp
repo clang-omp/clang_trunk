@@ -1391,7 +1391,7 @@ void Driver::BuildActions(const ToolChain &TC, DerivedArgList &Args,
 
         // Build the phase action. This passes
         ActionsForTarget[tgt-1].reset(
-            ConstructPhaseAction(Args, Phase,
+            ConstructPhaseAction(TC, Args, Phase,
                                  std::move(CurrentInput)).release());
 
         if (ActionsForTarget[tgt-1]->getType() == types::TY_Nothing)
@@ -1414,11 +1414,6 @@ void Driver::BuildActions(const ToolChain &TC, DerivedArgList &Args,
       }
 
       if (NothingElseToDo)
-        break;
-
-      // Otherwise construct the appropriate action.
-      Current = ConstructPhaseAction(TC, Args, Phase, std::move(Current));
-      if (Current->getType() == types::TY_Nothing)
         break;
     }
 
