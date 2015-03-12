@@ -111,11 +111,21 @@ void f10() {
       new (void_src()) int(src()));
 }
 
+// CHECK-LABEL: define
 __complex double f11() {
   __complex double f;
-  // CHECK: store {{.*}} !dbg [[DBG_F11:!.*]]
+// CHECK: store {{.*}} !dbg [[DBG_F11:!.*]]
 #line 1200
   return f;
+}
+
+// CHECK-LABEL: define
+void f12() {
+  int f12_1();
+  void f12_2(int = f12_1());
+// CHECK: call i32 {{.*}} !dbg [[DBG_F12:!.*]]
+#line 1300
+  f12_2();
 }
 
 // CHECK: [[DBG_F1]] = !{i32 100,
@@ -133,3 +143,4 @@ __complex double f11() {
 // CHECK: [[DBG_F10_ICMP]] = !{i32 1100,
 // CHECK: [[DBG_F10_STORE]] = !{i32 1100,
 // CHECK: [[DBG_F11]] = !{i32 1200,
+// CHECK: [[DBG_F12]] = !{i32 1300,

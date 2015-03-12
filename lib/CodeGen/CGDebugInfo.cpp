@@ -76,7 +76,10 @@ ApplyDebugLocation::ApplyDebugLocation(CodeGenFunction &CGF,
 }
 
 ApplyDebugLocation::~ApplyDebugLocation() {
-  CGF.Builder.SetCurrentDebugLocation(OriginalLocation);
+  // Query CGF so the location isn't overwritten when location updates are
+  // temporarily disabled (for C++ default function arguments)
+  if (CGF.getDebugInfo())
+    CGF.Builder.SetCurrentDebugLocation(OriginalLocation);
 }
 
 /// ArtificialLocation - An RAII object that temporarily switches to
