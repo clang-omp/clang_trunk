@@ -289,6 +289,10 @@ TEST_F(FormatTestJava, Generics) {
 
   verifyFormat("private Foo<X, Y>[] foos;");
   verifyFormat("Foo<X, Y>[] foos = this.foos;");
+  verifyFormat("return (a instanceof List<?>)\n"
+               "    ? aaaaaaaaaaaaaaaaaaaaaaa(aaaaaaaaaaaaaaaaaaaaa)\n"
+               "    : aaaaaaaaaaaaaaaaaaaaaaa;",
+               getStyleWithColumns(60));
 
   verifyFormat(
       "SomeLoooooooooooooooooooooongType name =\n"
@@ -387,6 +391,11 @@ TEST_F(FormatTestJava, FormatsInnerBlocks) {
                "    System.out.println(42);\n"
                "  }\n"
                "}, someOtherParameter);");
+  verifyFormat("someFunction(new Runnable() {\n"
+               "  public void run() {\n"
+               "    System.out.println(42);\n"
+               "  }\n"
+               "});");
   verifyFormat("someObject.someFunction(\n"
                "    new Runnable() {\n"
                "      @Override\n"
