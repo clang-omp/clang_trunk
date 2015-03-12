@@ -1557,9 +1557,8 @@ void Driver::BuildJobs(Compilation &C) const {
   // files.
   if (FinalOutput) {
     unsigned NumOutputs = 0;
-    for (ActionList::const_iterator it = C.getActions().begin(),
-           ie = C.getActions().end(); it != ie; ++it)
-      if ((*it)->getType() != types::TY_Nothing)
+    for (const Action *A : C.getActions())
+      if (A->getType() != types::TY_Nothing)
         ++NumOutputs;
 
     if (NumOutputs > 1) {
@@ -1797,8 +1796,7 @@ void Driver::BuildJobsForAction(Compilation &C,
 
   // Only use pipes when there is exactly one input.
   InputInfoList InputInfos;
-  for (ActionList::const_iterator it = Inputs->begin(), ie = Inputs->end();
-       it != ie; ++it) {
+  for (const Action *Input : *Inputs) {
     // Treat dsymutil and verify sub-jobs as being at the top-level too, they
     // shouldn't get temporary output names.
     // FIXME: Clean this up.
@@ -1807,7 +1805,7 @@ void Driver::BuildJobsForAction(Compilation &C,
       SubJobAtTopLevel = true;
 
     InputInfo II;
-    BuildJobsForAction(C, *it, TC, BoundArch, SubJobAtTopLevel, MultipleArchs,
+    BuildJobsForAction(C, Input, TC, BoundArch, SubJobAtTopLevel, MultipleArchs,
                        LinkingOutput, II);
     InputInfos.push_back(II);
   }
