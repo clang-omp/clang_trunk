@@ -473,6 +473,9 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
                                        OPT_fno_function_sections, false);
   Opts.DataSections = Args.hasFlag(OPT_fdata_sections,
                                    OPT_fno_data_sections, false);
+  Opts.UniqueSectionNames = Args.hasFlag(OPT_funique_section_names,
+                                         OPT_fno_unique_section_names, true);
+
   Opts.MergeFunctions = Args.hasArg(OPT_fmerge_functions);
 
   Opts.MSVolatile = Args.hasArg(OPT_fms_volatile);
@@ -1514,6 +1517,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.ModulesErrorRecovery = !Args.hasArg(OPT_fno_modules_error_recovery);
   Opts.ModulesImplicitMaps = Args.hasFlag(OPT_fmodules_implicit_maps,
                                           OPT_fno_modules_implicit_maps, true);
+  Opts.ImplicitModules = !Args.hasArg(OPT_fno_implicit_modules);
   Opts.CharIsSigned = Opts.OpenCL || !Args.hasArg(OPT_fno_signed_char);
   Opts.WChar = Opts.CPlusPlus && !Args.hasArg(OPT_fno_wchar);
   Opts.ShortWChar = Args.hasFlag(OPT_fshort_wchar, OPT_fno_short_wchar, false);
@@ -1523,6 +1527,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.NoMathBuiltin = Args.hasArg(OPT_fno_math_builtin);
   Opts.AssumeSaneOperatorNew = !Args.hasArg(OPT_fno_assume_sane_operator_new);
   Opts.SizedDeallocation |= Args.hasArg(OPT_fsized_deallocation);
+  Opts.SizedDeallocation &= !Args.hasArg(OPT_fno_sized_deallocation);
   Opts.DefineSizedDeallocation = Opts.SizedDeallocation &&
       Args.hasArg(OPT_fdefine_sized_deallocation);
   Opts.HeinousExtensions = Args.hasArg(OPT_fheinous_gnu_extensions);

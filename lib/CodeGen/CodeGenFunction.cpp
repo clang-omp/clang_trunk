@@ -809,6 +809,9 @@ static void EmitSizedDeallocationFunction(CodeGenFunction &CGF,
                                           const FunctionDecl *UnsizedDealloc) {
   // This is a weak discardable definition of the sized deallocation function.
   CGF.CurFn->setLinkage(llvm::Function::LinkOnceAnyLinkage);
+  if (CGF.CGM.supportsCOMDAT())
+    CGF.CurFn->setComdat(
+        CGF.CGM.getModule().getOrInsertComdat(CGF.CurFn->getName()));
 
   // Call the unsized deallocation function and forward the first argument
   // unchanged.

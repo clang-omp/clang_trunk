@@ -154,6 +154,7 @@ public:
   /// \returns true to indicate the header search options are invalid, or false
   /// otherwise.
   virtual bool ReadHeaderSearchOptions(const HeaderSearchOptions &HSOpts,
+                                       StringRef SpecificModuleCachePath,
                                        bool Complain) {
     return false;
   }
@@ -231,6 +232,7 @@ public:
                              bool Complain) override;
 
   bool ReadHeaderSearchOptions(const HeaderSearchOptions &HSOpts,
+                               StringRef SpecificModuleCachePath,
                                bool Complain) override;
   bool ReadPreprocessorOptions(const PreprocessorOptions &PPOpts,
                                bool Complain,
@@ -262,6 +264,9 @@ public:
                              bool Complain) override;
   bool ReadPreprocessorOptions(const PreprocessorOptions &PPOpts, bool Complain,
                                std::string &SuggestedPredefines) override;
+  bool ReadHeaderSearchOptions(const HeaderSearchOptions &HSOpts,
+                               StringRef SpecificModuleCachePath,
+                               bool Complain) override;
   void ReadCounter(const serialization::ModuleFile &M, unsigned Value) override;
 
 private:
@@ -1497,7 +1502,8 @@ public:
                                   FileManager &FileMgr,
                                   const LangOptions &LangOpts,
                                   const TargetOptions &TargetOpts,
-                                  const PreprocessorOptions &PPOpts);
+                                  const PreprocessorOptions &PPOpts,
+                                  std::string ExistingModuleCachePath);
 
   /// \brief Returns the suggested contents of the predefines buffer,
   /// which contains a (typically-empty) subset of the predefines
