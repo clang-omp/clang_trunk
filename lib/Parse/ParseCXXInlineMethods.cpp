@@ -337,12 +337,16 @@ void Parser::ParseLexedMethodDeclaration(LateParsedMethodDeclaration &LM) {
         DefArgResult = ParseBraceInitializer();
       } else
         DefArgResult = ParseAssignmentExpression();
+      bool DefArgTokenFound =
+          Tok.is(tok::eof) && Tok.getEofData() == LM.DefaultArgs[I].Param;
+      if (DefArgTokenFound)
+        ConsumeAnyToken();
       DefArgResult = Actions.CorrectDelayedTyposInExpr(DefArgResult);
-      if (DefArgResult.isInvalid())
+      if (DefArgResult.isInvalid()) {
         Actions.ActOnParamDefaultArgumentError(LM.DefaultArgs[I].Param,
                                                EqualLoc);
-      else {
-        if (!TryConsumeToken(tok::cxx_defaultarg_end)) {
+      } else {
+        if (!DefArgTokenFound) {
           // The last two tokens are the terminator and the saved value of
           // Tok; the last token in the default argument is the one before
           // those.
@@ -360,8 +364,11 @@ void Parser::ParseLexedMethodDeclaration(LateParsedMethodDeclaration &LM) {
              "ParseAssignmentExpression went over the default arg tokens!");
       // There could be leftover tokens (e.g. because of an error).
       // Skip through until we reach the original token position.
-      while (Tok.getLocation() != origLoc && Tok.isNot(tok::eof))
+      while (Tok.getLocation() != origLoc) {
+        if (Tok.is(tok::eof) && Tok.getEofData() != LM.DefaultArgs[I].Param)
+          break;
         ConsumeAnyToken();
+      }
 
       delete Toks;
       LM.DefaultArgs[I].Toks = nullptr;
@@ -411,7 +418,7 @@ void Parser::ParseLexedMethodDeclaration(LateParsedMethodDeclaration &LM) {
                                        ExceptionSpecTokens);
 
     // Clean up the remaining tokens.
-    if (Tok.is(tok::cxx_exceptspec_end))
+    if (Tok.is(tok::eof) && Tok.getEofData() == Actions.CurScope)
       ConsumeToken();
     else if (EST != EST_None)
       Diag(Tok.getLocation(), diag::err_except_spec_unparsed);
@@ -430,8 +437,11 @@ void Parser::ParseLexedMethodDeclaration(LateParsedMethodDeclaration &LM) {
 
     // There could be leftover tokens (e.g. because of an error).
     // Skip through until we reach the original token position.
-    while (Tok.getLocation() != origLoc && Tok.isNot(tok::eof))
+    while (Tok.getLocation() != origLoc) {
+      if (Tok.is(tok::eof) && Tok.getEofData() != Actions.CurScope)
+        break;
       ConsumeAnyToken();
+    }
 
     delete Toks;
     LM.ExceptionSpecTokens = nullptr;
