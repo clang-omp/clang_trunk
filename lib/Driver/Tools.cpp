@@ -1203,17 +1203,6 @@ static void getMIPSTargetFeatures(const Driver &D, const llvm::Triple &Triple,
   mips::getMipsCPUAndABI(Args, Triple, CPUName, ABIName);
   ABIName = getGnuCompatibleMipsABIName(ABIName);
 
-  // Always override the backend's default ABI.
-  std::string ABIFeature = llvm::StringSwitch<StringRef>(ABIName)
-                               .Case("32", "+o32")
-                               .Case("n32", "+n32")
-                               .Case("64", "+n64")
-                               .Case("eabi", "+eabi")
-                               .Default(("+" + ABIName).str());
-  Features.push_back("-o32");
-  Features.push_back("-n64");
-  Features.push_back(Args.MakeArgString(ABIFeature));
-
   AddTargetFeature(Args, Features, options::OPT_mno_abicalls,
                    options::OPT_mabicalls, "noabicalls");
 
@@ -4126,20 +4115,47 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                    false))
     CmdArgs.push_back("-fno-elide-constructors");
 
-  // -frtti is default.
-  if (!Args.hasFlag(options::OPT_frtti, options::OPT_fno_rtti) ||
+  // -frtti is default, except for the PS4 CPU.
+  if (!Args.hasFlag(options::OPT_frtti, options::OPT_fno_rtti,
+                    !Triple.isPS4CPU()) ||
       KernelOrKext) {
-    CmdArgs.push_back("-fno-rtti");
+    bool RTTIEnabled = false;
+    Arg *NoRTTIArg = Args.getLastArg(
+        options::OPT_mkernel, options::OPT_fapple_kext, options::OPT_fno_rtti);
+
+    // PS4 requires rtti when exceptions are enabled. If -fno-rtti was
+    // explicitly passed, error out. Otherwise enable rtti and emit a
+    // warning.
+    if (Triple.isPS4CPU()) {
+      if (Arg *A = Args.getLastArg(options::OPT_fcxx_exceptions)) {
+        if (NoRTTIArg)
+          D.Diag(diag::err_drv_argument_not_allowed_with)
+              << NoRTTIArg->getAsString(Args) << A->getAsString(Args);
+        else {
+          RTTIEnabled = true;
+          D.Diag(diag::warn_drv_enabling_rtti_with_exceptions);
+        }
+      }
+    }
 
     // -fno-rtti cannot usefully be combined with -fsanitize=vptr.
     if (Sanitize.sanitizesVptr()) {
-      std::string NoRttiArg =
-        Args.getLastArg(options::OPT_mkernel,
-                        options::OPT_fapple_kext,
-                        options::OPT_fno_rtti)->getAsString(Args);
-      D.Diag(diag::err_drv_argument_not_allowed_with)
-        << "-fsanitize=vptr" << NoRttiArg;
+      // If rtti was explicitly disabled and the vptr sanitizer is on, error
+      // out. Otherwise, warn that vptr will be disabled unless -frtti is
+      // passed.
+      if (NoRTTIArg) {
+        D.Diag(diag::err_drv_argument_not_allowed_with)
+            << "-fsanitize=vptr" << NoRTTIArg->getAsString(Args);
+      } else {
+        D.Diag(diag::warn_drv_disabling_vptr_no_rtti_default);
+        // All sanitizer switches have been pushed. This -fno-sanitize
+        // will override any -fsanitize={vptr,undefined} passed before it.
+        CmdArgs.push_back("-fno-sanitize=vptr");
+      }
     }
+
+    if (!RTTIEnabled)
+      CmdArgs.push_back("-fno-rtti");
   }
 
   // -fshort-enums=0 is default for all architectures except Hexagon.
@@ -4962,10 +4978,10 @@ void Clang::AddClangCLArgs(const ArgList &Args, ArgStringList &CmdArgs) const {
   const Driver &D = getToolChain().getDriver();
   EHFlags EH = parseClangCLEHFlags(D, Args);
   // FIXME: Do something with NoExceptC.
-  if (EH.Synch || EH.Asynch) {
-    CmdArgs.push_back("-fexceptions");
+  if (EH.Synch || EH.Asynch)
     CmdArgs.push_back("-fcxx-exceptions");
-  }
+  // Always add -fexceptions to allow SEH __try.
+  CmdArgs.push_back("-fexceptions");
 
   // /EP should expand to -E -P.
   if (Args.hasArg(options::OPT__SLASH_EP)) {
@@ -5015,6 +5031,17 @@ visualstudio::Compile *Clang::getCLFallback() const {
   if (!CLFallback)
     CLFallback.reset(new visualstudio::Compile(getToolChain()));
   return CLFallback.get();
+}
+
+void ClangAs::AddMIPSTargetArgs(const ArgList &Args,
+                                ArgStringList &CmdArgs) const {
+  StringRef CPUName;
+  StringRef ABIName;
+  const llvm::Triple &Triple = getToolChain().getTriple();
+  mips::getMipsCPUAndABI(Args, Triple, CPUName, ABIName);
+
+  CmdArgs.push_back("-target-abi");
+  CmdArgs.push_back(ABIName.data());
 }
 
 void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
@@ -5123,6 +5150,19 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   // FIXME: Add -static support, once we have it.
+
+  // Add target specific flags.
+  switch(getToolChain().getArch()) {
+  default:
+    break;
+
+  case llvm::Triple::mips:
+  case llvm::Triple::mipsel:
+  case llvm::Triple::mips64:
+  case llvm::Triple::mips64el:
+    AddMIPSTargetArgs(Args, CmdArgs);
+    break;
+  }
 
   // Consume all the warning flags. Usually this would be handled more
   // gracefully by -cc1 (warning about unknown warning flags, etc) but -cc1as
@@ -5296,6 +5336,7 @@ void gcc::Compile::RenderExtraToolArgs(const JobAction &JA,
     break;
   case types::TY_PP_Asm:
     CmdArgs.push_back("-S");
+    break;
   case types::TY_Nothing:
     CmdArgs.push_back("-fsyntax-only");
     break;
@@ -7725,6 +7766,13 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
         D.DyldPrefix + getLinuxDynamicLinker(Args, ToolChain,
                                              JA.getOffloadingDevice())));
   }
+
+  // Work around a bug in GNU ld (and gold) linker versions up to 2.25
+  // that may mis-optimize code generated by this version of clang/LLVM
+  // to access general-dynamic or local-dynamic TLS variables.
+  if (ToolChain.getArch() == llvm::Triple::ppc64 ||
+      ToolChain.getArch() == llvm::Triple::ppc64le)
+    CmdArgs.push_back("--no-tls-optimize");
 
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());

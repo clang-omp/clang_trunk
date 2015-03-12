@@ -15,7 +15,9 @@ target_link_libraries(clang-format
   ${CLANG_FORMAT_LIB_DEPS}
   )
 
-add_subdirectory(fuzzer)
+if( LLVM_USE_SANITIZE_COVERAGE )
+  add_subdirectory(fuzzer)
+endif()
 
 install(TARGETS clang-format RUNTIME DESTINATION bin)
 install(PROGRAMS clang-format-bbedit.applescript DESTINATION share/clang)
