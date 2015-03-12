@@ -2394,6 +2394,13 @@ def warn_fun_excludes_mutex : Warning<
 def warn_cannot_resolve_lock : Warning<
   "cannot resolve lock expression">,
   InGroup<ThreadSafetyAnalysis>, DefaultIgnore;
+def warn_acquired_before : Warning<
+  "%0 '%1' must be acquired before '%2'">,
+  InGroup<ThreadSafetyAnalysis>, DefaultIgnore;
+def warn_acquired_before_after_cycle : Warning<
+  "Cycle in acquired_before/after dependencies, starting with '%0'">,
+  InGroup<ThreadSafetyAnalysis>, DefaultIgnore;
+
 
 // Thread safety warnings negative capabilities
 def warn_acquire_requires_negative_cap : Warning<
@@ -7204,6 +7211,8 @@ def err_filter_expression_integral : Error<
 
 def err_non_asm_stmt_in_naked_function : Error<
   "non-ASM statement in naked function is not supported">;
+def err_asm_naked_this_ref : Error<
+  "'this' pointer references not allowed in naked functions">;
 def err_asm_naked_parm_ref : Error<
   "parameter references not allowed in naked functions">;
 
