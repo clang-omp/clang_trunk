@@ -21,7 +21,6 @@
 #include "clang/AST/StmtObjC.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Intrinsics.h"
-#include "llvm/Support/SaveAndRestore.h"
 
 using namespace clang;
 using namespace CodeGen;
@@ -1707,9 +1706,16 @@ void CodeGenFunction::EmitSEHTryStmt(const SEHTryStmt &S) {
   SEHFinallyInfo FI;
   EnterSEHTryStmt(S, FI);
   {
-    // Disable inlining inside SEH __try scopes.
-    SaveAndRestore<bool> Saver(IsSEHTryScope, true);
+    JumpDest TryExit = getJumpDestInCurrentScope("__try.__leave");
+
+    SEHTryEpilogueStack.push_back(&TryExit);
     EmitStmt(S.getTryBlock());
+    SEHTryEpilogueStack.pop_back();
+
+    if (!TryExit.getBlock()->use_empty())
+      EmitBlock(TryExit.getBlock(), /*IsFinished=*/true);
+    else
+      delete TryExit.getBlock();
   }
   ExitSEHTryStmt(S, FI);
 }
@@ -1988,5 +1994,13 @@ void CodeGenFunction::ExitSEHTryStmt(const SEHTryStmt &S, SEHFinallyInfo &FI) {
 }
 
 void CodeGenFunction::EmitSEHLeaveStmt(const SEHLeaveStmt &S) {
-  CGM.ErrorUnsupported(&S, "SEH __leave");
+  // If this code is reachable then emit a stop point (if generating
+  // debug info). We have to do this ourselves because we are on the
+  // "simple" statement path.
+  if (HaveInsertPoint())
+    EmitStopPoint(&S);
+
+  assert(!SEHTryEpilogueStack.empty() &&
+         "sema should have rejected this __leave");
+  EmitBranchThroughCleanup(*SEHTryEpilogueStack.back());
 }

@@ -92,6 +92,7 @@ void CodeGenFunction::EmitStmt(const Stmt *S) {
   case Stmt::ContinueStmtClass:
   case Stmt::DefaultStmtClass:
   case Stmt::CaseStmtClass:
+  case Stmt::SEHLeaveStmtClass:
     llvm_unreachable("should have emitted these statements as simple");
 
 #define STMT(Type, Base)
@@ -311,6 +312,69 @@ void CodeGenFunction::EmitStmt(const Stmt *S) {
   case Stmt::SEHLeaveStmtClass:
     EmitSEHLeaveStmt(cast<SEHLeaveStmt>(*S));
     break;
+  case Stmt::OMPParallelDirectiveClass:
+    EmitOMPParallelDirective(cast<OMPParallelDirective>(*S));
+    break;
+  case Stmt::OMPSimdDirectiveClass:
+    EmitOMPSimdDirective(cast<OMPSimdDirective>(*S));
+    break;
+  case Stmt::OMPForDirectiveClass:
+    EmitOMPForDirective(cast<OMPForDirective>(*S));
+    break;
+  case Stmt::OMPForSimdDirectiveClass:
+    EmitOMPForSimdDirective(cast<OMPForSimdDirective>(*S));
+    break;
+  case Stmt::OMPSectionsDirectiveClass:
+    EmitOMPSectionsDirective(cast<OMPSectionsDirective>(*S));
+    break;
+  case Stmt::OMPSectionDirectiveClass:
+    EmitOMPSectionDirective(cast<OMPSectionDirective>(*S));
+    break;
+  case Stmt::OMPSingleDirectiveClass:
+    EmitOMPSingleDirective(cast<OMPSingleDirective>(*S));
+    break;
+  case Stmt::OMPMasterDirectiveClass:
+    EmitOMPMasterDirective(cast<OMPMasterDirective>(*S));
+    break;
+  case Stmt::OMPCriticalDirectiveClass:
+    EmitOMPCriticalDirective(cast<OMPCriticalDirective>(*S));
+    break;
+  case Stmt::OMPParallelForDirectiveClass:
+    EmitOMPParallelForDirective(cast<OMPParallelForDirective>(*S));
+    break;
+  case Stmt::OMPParallelForSimdDirectiveClass:
+    EmitOMPParallelForSimdDirective(cast<OMPParallelForSimdDirective>(*S));
+    break;
+  case Stmt::OMPParallelSectionsDirectiveClass:
+    EmitOMPParallelSectionsDirective(cast<OMPParallelSectionsDirective>(*S));
+    break;
+  case Stmt::OMPTaskDirectiveClass:
+    EmitOMPTaskDirective(cast<OMPTaskDirective>(*S));
+    break;
+  case Stmt::OMPTaskyieldDirectiveClass:
+    EmitOMPTaskyieldDirective(cast<OMPTaskyieldDirective>(*S));
+    break;
+  case Stmt::OMPBarrierDirectiveClass:
+    EmitOMPBarrierDirective(cast<OMPBarrierDirective>(*S));
+    break;
+  case Stmt::OMPTaskwaitDirectiveClass:
+    EmitOMPTaskwaitDirective(cast<OMPTaskwaitDirective>(*S));
+    break;
+  case Stmt::OMPFlushDirectiveClass:
+    EmitOMPFlushDirective(cast<OMPFlushDirective>(*S));
+    break;
+  case Stmt::OMPOrderedDirectiveClass:
+    EmitOMPOrderedDirective(cast<OMPOrderedDirective>(*S));
+    break;
+  case Stmt::OMPAtomicDirectiveClass:
+    EmitOMPAtomicDirective(cast<OMPAtomicDirective>(*S));
+    break;
+  case Stmt::OMPTargetDirectiveClass:
+    EmitOMPTargetDirective(cast<OMPTargetDirective>(*S));
+    break;
+  case Stmt::OMPTeamsDirectiveClass:
+    EmitOMPTeamsDirective(cast<OMPTeamsDirective>(*S));
+    break;
   }
 }
 
@@ -328,6 +392,7 @@ bool CodeGenFunction::EmitSimpleStmt(const Stmt *S) {
   case Stmt::ContinueStmtClass: EmitContinueStmt(cast<ContinueStmt>(*S)); break;
   case Stmt::DefaultStmtClass:  EmitDefaultStmt(cast<DefaultStmt>(*S));   break;
   case Stmt::CaseStmtClass:     EmitCaseStmt(cast<CaseStmt>(*S));         break;
+  case Stmt::SEHLeaveStmtClass: EmitSEHLeaveStmt(cast<SEHLeaveStmt>(*S)); break;
   }
 
   return true;

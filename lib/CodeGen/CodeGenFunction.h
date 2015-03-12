@@ -425,9 +425,6 @@ public:
   /// potentially set the return value.
   bool SawAsmBlock;
 
-  /// Codegen is currently inside an SEH try block.
-  bool IsSEHTryScope;
-
   const CodeGen::CGBlockInfo *BlockInfo;
   llvm::Value *BlockPointer;
 
@@ -440,6 +437,7 @@ public:
 
   EHScopeStack EHStack;
   llvm::SmallVector<char, 256> LifetimeExtendedCleanupStack;
+  llvm::SmallVector<const JumpDest *, 2> SEHTryEpilogueStack;
 
   /// Header for data within LifetimeExtendedCleanupStack.
   struct LifetimeExtendedCleanupHeader {
@@ -525,6 +523,9 @@ public:
     llvm::BasicBlock *ContBB;
     llvm::BasicBlock *ResumeBB;
   };
+
+  /// Returns true inside SEH __try blocks.
+  bool isSEHTryScope() const { return !SEHTryEpilogueStack.empty(); }
 
   /// pushFullExprCleanup - Push a cleanup to be run at the end of the
   /// current full-expression.  Safe against the possibility that
