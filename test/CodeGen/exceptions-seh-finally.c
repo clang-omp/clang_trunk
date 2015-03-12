@@ -193,8 +193,8 @@ int nested___finally___finally() {
 // CHECK-NEXT: br label %[[finally:[^ ]*]]
 //
 // CHECK: [[finally]]
-// CHECK-NEXT:  store i32 1, i32* %cleanup.dest.slot
-// CHECK-NEXT:  store i8 0, i8* %abnormal.termination.slot
+// CHECK-NEXT:  store i32 1, i32* %
+// CHECK-NEXT:  store i8 0, i8* %
 // CHECK-NEXT: br label %[[outerfinally:[^ ]*]]
 //
 // CHECK: [[outerfinally]]
