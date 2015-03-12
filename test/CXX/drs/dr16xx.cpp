@@ -7,18 +7,13 @@
 // expected-no-diagnostics
 #endif
 
-void dr1891() { // dr1891: 3.6
+namespace dr1684 { // dr1684: 3.6
 #if __cplusplus >= 201103L
-  int n;
-  auto a = []{}; // expected-note 2{{candidate}}
-  auto b = [=]{ return n; }; // expected-note 2{{candidate}}
-  typedef decltype(a) A;
-  typedef decltype(b) B;
-
-  static_assert(!__has_trivial_constructor(A), "");
-  static_assert(!__has_trivial_constructor(B), "");
-
-  A x; // expected-error {{no matching constructor}}
-  B y; // expected-error {{no matching constructor}}
+  struct NonLiteral { // expected-note {{because}}
+    NonLiteral();
+    constexpr int f() { return 0; } // expected-warning 0-1{{will not be implicitly 'const'}}
+  };
+  constexpr int f(NonLiteral &) { return 0; }
+  constexpr int f(NonLiteral) { return 0; } // expected-error {{not a literal type}}
 #endif
 }
