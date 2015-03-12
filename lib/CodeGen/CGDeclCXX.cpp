@@ -262,15 +262,7 @@ void CodeGenModule::EmitPointerToInitFunc(const VarDecl *D,
   addUsedGlobal(PtrArray);
 
   // If the GV is already in a comdat group, then we have to join it.
-  llvm::Comdat *C = GV->getComdat();
-
-  // LinkOnce and Weak linkage are lowered down to a single-member comdat group.
-  // Make an explicit group so we can join it.
-  if (!C && (GV->hasWeakLinkage() || GV->hasLinkOnceLinkage())) {
-    C = TheModule.getOrInsertComdat(GV->getName());
-    GV->setComdat(C);
-  }
-  if (C)
+  if (llvm::Comdat *C = GV->getComdat())
     PtrArray->setComdat(C);
 }
 
@@ -328,8 +320,9 @@ CodeGenModule::EmitCXXGlobalVarDeclInitFunc(const VarDecl *D,
     AddGlobalCtor(Fn, 65535, COMDATKey);
     DelayedCXXInitPosition.erase(D);
   } else if (D->hasAttr<SelectAnyAttr>()) {
-    // SelectAny globals will be comdat-folded. Put the initializer into a COMDAT
-    // group associated with the global, so the initializers get folded too.
+    // SelectAny globals will be comdat-folded. Put the initializer into a
+    // COMDAT group associated with the global, so the initializers get folded
+    // too.
     AddGlobalCtor(Fn, 65535, COMDATKey);
     DelayedCXXInitPosition.erase(D);
   } else {

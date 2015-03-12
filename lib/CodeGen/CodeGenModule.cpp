@@ -1947,6 +1947,31 @@ void CodeGenModule::MaybeHandleStaticInExternC(const SomeDecl *D,
     R.first->second = nullptr;
 }
 
+static bool shouldBeInCOMDAT(CodeGenModule &CGM, const Decl &D) {
+  if (!CGM.supportsCOMDAT())
+    return false;
+
+  if (D.hasAttr<SelectAnyAttr>())
+    return true;
+
+  GVALinkage Linkage;
+  if (auto *VD = dyn_cast<VarDecl>(&D))
+    Linkage = CGM.getContext().GetGVALinkageForVariable(VD);
+  else
+    Linkage = CGM.getContext().GetGVALinkageForFunction(cast<FunctionDecl>(&D));
+
+  switch (Linkage) {
+  case GVA_Internal:
+  case GVA_AvailableExternally:
+  case GVA_StrongExternal:
+    return false;
+  case GVA_DiscardableODR:
+  case GVA_StrongODR:
+    return true;
+  }
+  llvm_unreachable("No such linkage");
+}
+
 void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D) {
 
   // If we are generating code for a target we only generate the var definition
@@ -2095,6 +2120,9 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D) {
       CXXThreadLocals.push_back(std::make_pair(D, GV));
     setTLSMode(GV, *D);
   }
+
+  if (shouldBeInCOMDAT(*this, *D))
+    GV->setComdat(TheModule.getOrInsertComdat(GV->getName()));
 
   // Emit the initializer function if necessary.
   if (NeedsGlobalCtor || NeedsGlobalDtor)
@@ -2470,6 +2498,9 @@ void CodeGenModule::EmitGlobalFunctionDefinition(GlobalDecl GD,
   setGlobalVisibility(Fn, D);
 
   MaybeHandleStaticInExternC(D, Fn);
+
+  if (shouldBeInCOMDAT(*this, *D))
+    Fn->setComdat(TheModule.getOrInsertComdat(Fn->getName()));
 
   CodeGenFunction(*this).GenerateCode(D, Fn, FI);
 
