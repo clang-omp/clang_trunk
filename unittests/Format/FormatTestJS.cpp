@@ -521,6 +521,55 @@ TEST_F(FormatTestJS, MetadataAnnotations) {
                "    return 'y';\n"
                "  }\n"
                "}");
+  verifyFormat("class X {}\n"
+               "class Y {}");
+}
+
+TEST_F(FormatTestJS, Modules) {
+  verifyFormat("import SomeThing from 'some/module.js';");
+  verifyFormat("import {X, Y} from 'some/module.js';");
+  verifyFormat("import {\n"
+               "  VeryLongImportsAreAnnoying,\n"
+               "  VeryLongImportsAreAnnoying,\n"
+               "  VeryLongImportsAreAnnoying,\n"
+               "  VeryLongImportsAreAnnoying\n"
+               "} from 'some/module.js';");
+  verifyFormat("import {\n"
+               "  X,\n"
+               "  Y,\n"
+               "} from 'some/module.js';");
+  verifyFormat("import {\n"
+               "  X,\n"
+               "  Y,\n"
+               "} from 'some/long/module.js';",
+               getGoogleJSStyleWithColumns(20));
+  verifyFormat("import {X as myLocalX, Y as myLocalY} from 'some/module.js';");
+  verifyFormat("import * as lib from 'some/module.js';");
+  verifyFormat("var x = {\n  import: 1\n};\nx.import = 2;");
+
+  verifyFormat("export function fn() {\n"
+               "  return 'fn';\n"
+               "}");
+  verifyFormat("export const x = 12;");
+  verifyFormat("export default class X {}");
+  verifyFormat("export {X, Y} from 'some/module.js';");
+  verifyFormat("export {\n"
+               "  X,\n"
+               "  Y,\n"
+               "} from 'some/module.js';");
+  verifyFormat("export class C {\n"
+               "  x: number;\n"
+               "  y: string;\n"
+               "}");
+  verifyFormat("export class X { y: number; }");
+  verifyFormat("export default class X { y: number }");
+  verifyFormat("export default function() {\n  return 1;\n}");
+  verifyFormat("export var x = 12;");
+  verifyFormat("export var x: number = 12;");
+  verifyFormat("export const y = {\n"
+               "  a: 1,\n"
+               "  b: 2\n"
+               "};");
 }
 
 } // end namespace tooling

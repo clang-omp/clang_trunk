@@ -262,7 +262,7 @@ bool UnwrappedLineParser::parse() {
 void UnwrappedLineParser::parseFile() {
   ScopedDeclarationState DeclarationState(
       *Line, DeclarationScopeStack,
-      /*MustBeDeclaration=*/ !Line->InPPDirective);
+      /*MustBeDeclaration=*/!Line->InPPDirective);
   parseLevel(/*HasOpeningBrace=*/false);
   // Make sure to format the remaining tokens.
   flushComments(true);
@@ -734,9 +734,20 @@ void UnwrappedLineParser::parseStructuralElement() {
       }
     }
     break;
+  case tok::kw_export:
+    if (Style.Language == FormatStyle::LK_JavaScript) {
+      parseJavaScriptEs6ImportExport();
+      return;
+    }
+    break;
   case tok::identifier:
     if (FormatTok->IsForEachMacro) {
       parseForOrWhileLoop();
+      return;
+    }
+    if (Style.Language == FormatStyle::LK_JavaScript &&
+        FormatTok->is(Keywords.kw_import)) {
+      parseJavaScriptEs6ImportExport();
       return;
     }
     // In all other cases, parse the declaration.
@@ -965,7 +976,7 @@ void UnwrappedLineParser::tryToParseJSFunction() {
 
   // Consume function name.
   if (FormatTok->is(tok::identifier))
-      nextToken();
+    nextToken();
 
   if (FormatTok->isNot(tok::l_paren))
     return;
@@ -1519,7 +1530,8 @@ void UnwrappedLineParser::parseRecord() {
   // class A {} n, m;
   // will end up in one unwrapped line.
   // This does not apply for Java.
-  if (Style.Language == FormatStyle::LK_Java)
+  if (Style.Language == FormatStyle::LK_Java ||
+      Style.Language == FormatStyle::LK_JavaScript)
     addUnwrappedLine();
 }
 
@@ -1596,6 +1608,30 @@ void UnwrappedLineParser::parseObjCProtocol() {
 
   addUnwrappedLine();
   parseObjCUntilAtEnd();
+}
+
+void UnwrappedLineParser::parseJavaScriptEs6ImportExport() {
+  assert(FormatTok->isOneOf(Keywords.kw_import, tok::kw_export));
+  nextToken();
+
+  if (FormatTok->isOneOf(tok::kw_const, tok::kw_class, Keywords.kw_function,
+                         Keywords.kw_var))
+    return; // Fall through to parsing the corresponding structure.
+
+  if (FormatTok->is(tok::kw_default)) {
+    nextToken(); // export default ..., fall through after eating 'default'.
+    return;
+  }
+
+  if (FormatTok->is(tok::l_brace)) {
+    FormatTok->BlockKind = BK_Block;
+    parseBracedList();
+  }
+
+  while (!eof() && FormatTok->isNot(tok::semi) &&
+         FormatTok->isNot(tok::l_brace)) {
+    nextToken();
+  }
 }
 
 LLVM_ATTRIBUTE_UNUSED static void printDebugInfo(const UnwrappedLine &Line,
