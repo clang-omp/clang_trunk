@@ -2254,7 +2254,7 @@ def warn_attribute_wrong_decl_type : Warning<
   "struct or union|struct, union or class|types|"
   "Objective-C instance methods|init methods of interface or class extension declarations|"
   "variables, functions and classes|Objective-C protocols|"
-  "functions and global variables|structs or typedefs|"
+  "functions and global variables|structs, unions, and typedefs|structs and typedefs|"
   "interface or protocol declarations|kernel functions}1">,
   InGroup<IgnoredAttributes>;
 def err_attribute_wrong_decl_type : Error<warn_attribute_wrong_decl_type.Text>;
@@ -2734,6 +2734,10 @@ def warn_objc_implementation_missing_designated_init_override : Warning<
 // objc_bridge attribute diagnostics.
 def err_objc_attr_not_id : Error<
   "parameter of %0 attribute must be a single name of an Objective-C %select{class|protocol}1">;
+def err_objc_attr_typedef_not_id : Error<
+  "parameter of %0 attribute must be 'id' when used on a typedef">;
+def err_objc_attr_typedef_not_void_pointer : Error<
+  "'objc_bridge(id)' is only allowed on structs and typedefs of void pointers">;
 def err_objc_cf_bridged_not_interface : Error<
   "CF object of type %0 is bridged to %1, which is not an Objective-C class">;
 def err_objc_ns_bridged_invalid_cfobject : Error<
@@ -5443,6 +5447,10 @@ def err_exceptions_disabled : Error<
   "cannot use '%0' with exceptions disabled">;
 def err_objc_exceptions_disabled : Error<
   "cannot use '%0' with Objective-C exceptions disabled">;
+def err_mixing_cxx_try_seh_try : Error<
+  "cannot use C++ 'try' in the same function as SEH '__try'">;
+def note_conflicting_try_here : Note<
+  "conflicting %0 here">;
 def warn_non_virtual_dtor : Warning<
   "%0 has virtual functions but non-virtual destructor">,
   InGroup<NonVirtualDtor>, DefaultIgnore;

@@ -13,6 +13,7 @@
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/ObjCRuntime.h"
 #include "clang/Basic/Version.h"
+#include "clang/Config/config.h"
 #include "clang/Driver/Action.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/Driver.h"
@@ -1671,7 +1672,7 @@ static void AddGoldPlugin(const ToolChain &ToolChain, const ArgList &Args,
   // as gold requires -plugin to come before any -plugin-opt that -Wl might
   // forward.
   CmdArgs.push_back("-plugin");
-  std::string Plugin = ToolChain.getDriver().Dir + "/../lib/LLVMgold.so";
+  std::string Plugin = ToolChain.getDriver().Dir + "/../lib" CLANG_LIBDIR_SUFFIX "/LLVMgold.so";
   CmdArgs.push_back(Args.MakeArgString(Plugin));
 
   // Try to pass driver level flags relevant to LTO code generation down to
@@ -4119,6 +4120,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (!Args.hasFlag(options::OPT_frtti, options::OPT_fno_rtti,
                     !Triple.isPS4CPU()) ||
       KernelOrKext) {
+    bool IsCXX = types::isCXX(InputType);
     bool RTTIEnabled = false;
     Arg *NoRTTIArg = Args.getLastArg(
         options::OPT_mkernel, options::OPT_fapple_kext, options::OPT_fno_rtti);
@@ -4126,11 +4128,18 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     // PS4 requires rtti when exceptions are enabled. If -fno-rtti was
     // explicitly passed, error out. Otherwise enable rtti and emit a
     // warning.
-    if (Triple.isPS4CPU()) {
-      if (Arg *A = Args.getLastArg(options::OPT_fcxx_exceptions)) {
+    Arg *Exceptions = Args.getLastArg(
+        options::OPT_fcxx_exceptions, options::OPT_fno_cxx_exceptions,
+        options::OPT_fexceptions, options::OPT_fno_exceptions);
+    if (Triple.isPS4CPU() && Exceptions) {
+      bool CXXExceptions =
+          (IsCXX &&
+           Exceptions->getOption().matches(options::OPT_fexceptions)) ||
+          Exceptions->getOption().matches(options::OPT_fcxx_exceptions);
+      if (CXXExceptions) {
         if (NoRTTIArg)
           D.Diag(diag::err_drv_argument_not_allowed_with)
-              << NoRTTIArg->getAsString(Args) << A->getAsString(Args);
+              << NoRTTIArg->getAsString(Args) << Exceptions->getAsString(Args);
         else {
           RTTIEnabled = true;
           D.Diag(diag::warn_drv_enabling_rtti_with_exceptions);
@@ -4657,7 +4666,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // With -save-temps, we want to save the unoptimized bitcode output from the
   // CompileJobAction, so disable optimizations if they are not already
   // disabled.
-  if (Args.hasArg(options::OPT_save_temps) && !OptDisabled &&
+  if (C.getDriver().isSaveTempsEnabled() && !OptDisabled &&
       isa<CompileJobAction>(JA))
     CmdArgs.push_back("-disable-llvm-optzns");
 
