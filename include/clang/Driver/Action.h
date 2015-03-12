@@ -47,6 +47,7 @@ public:
     AnalyzeJobClass,
     MigrateJobClass,
     CompileJobClass,
+    BackendJobClass,
     AssembleJobClass,
     LinkJobClass,
     LipoJobClass,
@@ -216,6 +217,16 @@ public:
 
   static bool classof(const Action *A) {
     return A->getKind() == CompileJobClass;
+  }
+};
+
+class BackendJobAction : public JobAction {
+  void anchor() override;
+public:
+  BackendJobAction(std::unique_ptr<Action> Input, types::ID OutputType);
+
+  static bool classof(const Action *A) {
+    return A->getKind() == BackendJobClass;
   }
 };
 

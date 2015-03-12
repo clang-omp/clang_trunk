@@ -403,9 +403,10 @@ llvm::DIType CGDebugInfo::CreateType(const BuiltinType *BT) {
         DBuilder.createStructType(TheCU, "objc_object", getOrCreateMainFile(),
                                   0, 0, 0, 0, llvm::DIType(), llvm::DIArray());
 
-    ObjTy.setArrays(DBuilder.getOrCreateArray(
-        &*DBuilder.createMemberType(ObjTy, "isa", getOrCreateMainFile(), 0,
-                                    Size, 0, 0, 0, ISATy)));
+    DBuilder.replaceArrays(
+        ObjTy,
+        DBuilder.getOrCreateArray(&*DBuilder.createMemberType(
+            ObjTy, "isa", getOrCreateMainFile(), 0, Size, 0, 0, 0, ISATy)));
     return ObjTy;
   }
   case BuiltinType::ObjCSel: {
@@ -1574,7 +1575,7 @@ llvm::DIType CGDebugInfo::CreateTypeDefinition(const RecordType *Ty) {
   RegionMap.erase(Ty->getDecl());
 
   llvm::DIArray Elements = DBuilder.getOrCreateArray(EltTys);
-  FwdDecl.setArrays(Elements);
+  DBuilder.replaceArrays(FwdDecl, Elements);
 
   RegionMap[Ty->getDecl()].reset(FwdDecl);
   return FwdDecl;
@@ -1776,7 +1777,7 @@ llvm::DIType CGDebugInfo::CreateTypeDefinition(const ObjCInterfaceType *Ty,
   }
 
   llvm::DIArray Elements = DBuilder.getOrCreateArray(EltTys);
-  RealDecl.setArrays(Elements);
+  DBuilder.replaceArrays(RealDecl, Elements);
 
   LexicalBlockStack.pop_back();
   return RealDecl;
@@ -1869,7 +1870,8 @@ llvm::DIType CGDebugInfo::CreateType(const MemberPointerType *Ty,
   llvm::DIType ClassType = getOrCreateType(QualType(Ty->getClass(), 0), U);
   if (!Ty->getPointeeType()->isFunctionType())
     return DBuilder.createMemberPointerType(
-        getOrCreateType(Ty->getPointeeType(), U), ClassType);
+      getOrCreateType(Ty->getPointeeType(), U), ClassType,
+      CGM.PointerWidthInBits);
 
   const FunctionProtoType *FPT =
       Ty->getPointeeType()->getAs<FunctionProtoType>();
@@ -1877,7 +1879,7 @@ llvm::DIType CGDebugInfo::CreateType(const MemberPointerType *Ty,
       getOrCreateInstanceMethodType(CGM.getContext().getPointerType(QualType(
                                         Ty->getClass(), FPT->getTypeQuals())),
                                     FPT, U),
-      ClassType);
+      ClassType, CGM.PointerWidthInBits);
 }
 
 llvm::DIType CGDebugInfo::CreateType(const AtomicType *Ty, llvm::DIFile U) {
@@ -2185,7 +2187,7 @@ llvm::DIType CGDebugInfo::getOrCreateLimitedType(const RecordType *Ty,
   // Propagate members from the declaration to the definition
   // CreateType(const RecordType*) will overwrite this with the members in the
   // correct order if the full type is needed.
-  Res.setArrays(T.getElements());
+  DBuilder.replaceArrays(Res, T.getElements());
 
   // And update the type cache.
   TypeCache[QTy.getAsOpaquePtr()].reset(Res);
@@ -2241,8 +2243,8 @@ llvm::DICompositeType CGDebugInfo::CreateLimitedType(const RecordType *Ty) {
 
   if (const ClassTemplateSpecializationDecl *TSpecial =
           dyn_cast<ClassTemplateSpecializationDecl>(RD))
-    RealDecl.setArrays(llvm::DIArray(),
-                       CollectCXXTemplateParams(TSpecial, DefUnit));
+    DBuilder.replaceArrays(RealDecl, llvm::DIArray(),
+                           CollectCXXTemplateParams(TSpecial, DefUnit));
   return RealDecl;
 }
 
@@ -2267,7 +2269,7 @@ void CGDebugInfo::CollectContainingType(const CXXRecordDecl *RD,
   } else if (RD->isDynamicClass())
     ContainingType = RealDecl;
 
-  RealDecl.setContainingType(ContainingType);
+  DBuilder.replaceVTableHolder(RealDecl, ContainingType);
 }
 
 /// CreateMemberType - Create new member and increase Offset by FType's size.
@@ -3376,7 +3378,7 @@ void CGDebugInfo::finalize() {
     llvm::Metadata *Repl;
 
     auto it = DeclCache.find(p.first);
-    // If there has been no definition for the declaration, call RAUV
+    // If there has been no definition for the declaration, call RAUW
     // with ourselves, that will destroy the temporary MDNode and
     // replace it with a standard one, avoiding leaking memory.
     if (it == DeclCache.end())
