@@ -1363,6 +1363,9 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
     return RValue::get(Builder.CreateCall(F, Arg0));
   }
 
+  case Builtin::BI__builtin_pow:
+  case Builtin::BI__builtin_powf:
+  case Builtin::BI__builtin_powl:
   case Builtin::BIpow:
   case Builtin::BIpowf:
   case Builtin::BIpowl: {

@@ -1920,6 +1920,9 @@ void ExprEngine::VisitLvalArraySubscriptExpr(const ArraySubscriptExpr *A,
   getCheckerManager().runCheckersForPreStmt(checkerPreStmt, Pred, A, *this);
 
   StmtNodeBuilder Bldr(checkerPreStmt, Dst, *currBldrCtx);
+  assert(A->isGLValue() ||
+          (!AMgr.getLangOpts().CPlusPlus &&
+           A->getType().isCForbiddenLValueType()));
 
   for (ExplodedNodeSet::iterator it = checkerPreStmt.begin(),
                                  ei = checkerPreStmt.end(); it != ei; ++it) {
@@ -1928,7 +1931,6 @@ void ExprEngine::VisitLvalArraySubscriptExpr(const ArraySubscriptExpr *A,
     SVal V = state->getLValue(A->getType(),
                               state->getSVal(Idx, LCtx),
                               state->getSVal(Base, LCtx));
-    assert(A->isGLValue());
     Bldr.generateNode(A, *it, state->BindExpr(A, LCtx, V), nullptr,
                       ProgramPoint::PostLValueKind);
   }
