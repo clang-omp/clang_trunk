@@ -1062,7 +1062,8 @@ void ASTWriter::WriteBlockInfoBlock() {
 /// to an absolute path and removing nested './'s.
 ///
 /// \return \c true if the path was changed.
-bool cleanPathForOutput(FileManager &FileMgr, SmallVectorImpl<char> &Path) {
+static bool cleanPathForOutput(FileManager &FileMgr,
+                               SmallVectorImpl<char> &Path) {
   bool Changed = false;
 
   if (!llvm::sys::path::is_absolute(StringRef(Path.data(), Path.size()))) {
@@ -5221,13 +5222,10 @@ unsigned ASTWriter::getAnonymousDeclarationNumber(const NamedDecl *D) {
   // already done so.
   auto It = AnonymousDeclarationNumbers.find(D);
   if (It == AnonymousDeclarationNumbers.end()) {
-    unsigned Index = 0;
-    for (Decl *LexicalD : D->getLexicalDeclContext()->decls()) {
-      auto *ND = dyn_cast<NamedDecl>(LexicalD);
-      if (!ND || !needsAnonymousDeclarationNumber(ND))
-        continue;
-      AnonymousDeclarationNumbers[ND] = Index++;
-    }
+    auto *DC = D->getLexicalDeclContext();
+    numberAnonymousDeclsWithin(DC, [&](const NamedDecl *ND, unsigned Number) {
+      AnonymousDeclarationNumbers[ND] = Number;
+    });
 
     It = AnonymousDeclarationNumbers.find(D);
     assert(It != AnonymousDeclarationNumbers.end() &&
