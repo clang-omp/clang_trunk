@@ -2233,10 +2233,13 @@ static llvm::Triple computeTargetTriple(StringRef DefaultTargetTriple,
 const ToolChain &Driver::getToolChain(const ArgList &Args,
                                       StringRef DarwinArchName,
                                       const char *OpenMPTripleString) const {
-
-  llvm::Triple Target;
   ToolChain **TC;
   bool IsOpenMPTargetToolchain = OpenMPTripleString != nullptr;
+
+  llvm::Triple Target = computeTargetTriple(DefaultTargetTriple, Args,
+                                            DarwinArchName);
+  if (Target.isOSWindows())
+    DefaultImageName = "a.exe";
 
   // if a specific triple is passed, that means it was already parsed
   // before while creating the actions for OpenMP targets, therefore we should
