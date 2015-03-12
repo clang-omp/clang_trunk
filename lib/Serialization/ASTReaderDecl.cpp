@@ -230,6 +230,11 @@ namespace clang {
           TypedefNameForLinkage(nullptr), HasPendingBody(false) {}
 
     template <typename DeclT>
+    static Decl *getMostRecentDeclImpl(Redeclarable<DeclT> *D);
+    static Decl *getMostRecentDeclImpl(...);
+    static Decl *getMostRecentDecl(Decl *D);
+
+    template <typename DeclT>
     static void attachPreviousDeclImpl(ASTReader &Reader,
                                        Redeclarable<DeclT> *D, Decl *Previous);
     static void attachPreviousDeclImpl(ASTReader &Reader, ...);
@@ -1733,15 +1738,15 @@ ASTDeclReader::VisitRedeclarableTemplateDecl(RedeclarableTemplateDecl *D) {
 static DeclID *newDeclIDList(ASTContext &Context, DeclID *Old,
                              SmallVectorImpl<DeclID> &IDs) {
   assert(!IDs.empty() && "no IDs to add to list");
+  if (Old) {
+    IDs.insert(IDs.end(), Old + 1, Old + 1 + Old[0]);
+    std::sort(IDs.begin(), IDs.end());
+    IDs.erase(std::unique(IDs.begin(), IDs.end()), IDs.end());
+  }
 
-  size_t OldCount = Old ? *Old : 0;
-  size_t NewCount = OldCount + IDs.size();
-  auto *Result = new (Context) DeclID[1 + NewCount];
-  auto *Pos = Result;
-  *Pos++ = NewCount;
-  if (OldCount)
-    Pos = std::copy(Old + 1, Old + 1 + OldCount, Pos);
-  std::copy(IDs.begin(), IDs.end(), Pos);
+  auto *Result = new (Context) DeclID[1 + IDs.size()];
+  *Result = IDs.size();
+  std::copy(IDs.begin(), IDs.end(), Result + 1);
   return Result;
 }
 
@@ -2836,6 +2841,27 @@ ASTDeclReader::FindExistingResult ASTDeclReader::findExisting(NamedDecl *D) {
 }
 
 template<typename DeclT>
+Decl *ASTDeclReader::getMostRecentDeclImpl(Redeclarable<DeclT> *D) {
+  return D->RedeclLink.getLatestNotUpdated();
+}
+Decl *ASTDeclReader::getMostRecentDeclImpl(...) {
+  llvm_unreachable("getMostRecentDecl on non-redeclarable declaration");
+}
+
+Decl *ASTDeclReader::getMostRecentDecl(Decl *D) {
+  assert(D);
+
+  switch (D->getKind()) {
+#define ABSTRACT_DECL(TYPE)
+#define DECL(TYPE, BASE)                               \
+  case Decl::TYPE:                                     \
+    return getMostRecentDeclImpl(cast<TYPE##Decl>(D));
+#include "clang/AST/DeclNodes.inc"
+  }
+  llvm_unreachable("unknown decl kind");
+}
+
+template<typename DeclT>
 void ASTDeclReader::attachPreviousDeclImpl(ASTReader &Reader,
                                            Redeclarable<DeclT> *D,
                                            Decl *Previous) {
@@ -3425,9 +3451,14 @@ void ASTReader::loadPendingDeclChain(serialization::GlobalDeclID ID) {
   ArrayRef<Decl *> Chain = Visitor.getChain();
   if (Chain.empty())
     return;
-    
+
   // Hook up the chains.
-  Decl *MostRecent = CanonDecl->getMostRecentDecl();
+  //
+  // FIXME: We have three different dispatches on decl kind here; maybe
+  // we should instead generate one loop per kind and dispatch up-front?
+  Decl *MostRecent = ASTDeclReader::getMostRecentDecl(CanonDecl);
+  if (!MostRecent)
+    MostRecent = CanonDecl;
   for (unsigned I = 0, N = Chain.size(); I != N; ++I) {
     if (Chain[I] == CanonDecl)
       continue;
@@ -3435,8 +3466,7 @@ void ASTReader::loadPendingDeclChain(serialization::GlobalDeclID ID) {
     ASTDeclReader::attachPreviousDecl(*this, Chain[I], MostRecent);
     MostRecent = Chain[I];
   }
-  
-  ASTDeclReader::attachLatestDecl(CanonDecl, MostRecent);  
+  ASTDeclReader::attachLatestDecl(CanonDecl, MostRecent);
 }
 
 namespace {
