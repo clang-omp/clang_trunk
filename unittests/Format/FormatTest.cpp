@@ -2610,6 +2610,10 @@ TEST_F(FormatTest, MacroDefinitionsWithIncompleteCode) {
                getLLVMStyleWithColumns(28));
   verifyFormat("#d, = };");
   verifyFormat("#if \"a");
+
+  verifyNoCrash("#if a\na(\n#else\n#endif\n{a");
+  verifyNoCrash("a={0,1\n#if a\n#else\n;\n#endif\n}");
+  verifyNoCrash("#if a\na(\n#else\n#endif\n) a {a,b,c,d,f,g};");
 }
 
 TEST_F(FormatTest, MacrosWithoutTrailingSemicolon) {
@@ -7440,6 +7444,12 @@ TEST_F(FormatTest, BreaksWideAndNSStringLiterals) {
   EXPECT_EQ("@\"NSString \"\n"
             "@\"literal\";",
             format("@\"NSString literal\";", getGoogleStyleWithColumns(19)));
+
+  // This input makes clang-format try to split the incomplete unicode escape
+  // sequence, which used to lead to a crasher.
+  verifyNoCrash(
+      "aaaaaaaaaaaaaaaaaaaa = L\"\\udff\"'; // aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      getLLVMStyleWithColumns(60));
 }
 
 TEST_F(FormatTest, DoesNotBreakRawStringLiterals) {
