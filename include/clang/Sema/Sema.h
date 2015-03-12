@@ -2925,8 +2925,7 @@ public:
   void DiagnoseOwningPropertyGetterSynthesis(const ObjCImplementationDecl *D);
 
   void DiagnoseMissingDesignatedInitOverrides(
-                                          const ObjCImplementationDecl *ImplD,
-                                          const ObjCInterfaceDecl *IFD);
+                                          const ObjCImplementationDecl *ImplD);
 
   void DiagnoseDuplicateIvars(ObjCInterfaceDecl *ID, ObjCInterfaceDecl *SID);
 
