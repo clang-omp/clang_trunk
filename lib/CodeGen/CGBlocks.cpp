@@ -1106,6 +1106,8 @@ CodeGenFunction::GenerateBlockFunction(GlobalDecl GD,
   const BlockDecl *blockDecl = blockInfo.getBlockDecl();
 
   CurGD = GD;
+
+  CurEHLocation = blockInfo.getBlockExpr()->getLocEnd();
   
   BlockInfo = &blockInfo;
 
