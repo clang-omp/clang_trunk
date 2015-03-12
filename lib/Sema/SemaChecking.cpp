@@ -903,10 +903,7 @@ bool Sema::CheckX86BuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
   case X86::BI__builtin_ia32_vinsertf128_pd256:
   case X86::BI__builtin_ia32_vinsertf128_ps256:
   case X86::BI__builtin_ia32_vinsertf128_si256:
-  case X86::BI__builtin_ia32_insert128i256:
-  case X86::BI__builtin_ia32_blendpd: i = 2, l = 0; u = 1; break;
-  case X86::BI__builtin_ia32_blendps:
-  case X86::BI__builtin_ia32_blendpd256:
+  case X86::BI__builtin_ia32_insert128i256: i = 2, l = 0; u = 1; break;
   case X86::BI__builtin_ia32_sha1rnds4: i = 2, l = 0; u = 3; break;
   case X86::BI__builtin_ia32_vpermil2pd:
   case X86::BI__builtin_ia32_vpermil2pd256:
@@ -2396,7 +2393,7 @@ bool Sema::SemaBuiltinAssume(CallExpr *TheCall) {
   if (Arg->isInstantiationDependent()) return false;
 
   if (Arg->HasSideEffects(Context))
-    return Diag(Arg->getLocStart(), diag::warn_assume_side_effects)
+    Diag(Arg->getLocStart(), diag::warn_assume_side_effects)
       << Arg->getSourceRange()
       << cast<FunctionDecl>(TheCall->getCalleeDecl())->getIdentifier();
 
