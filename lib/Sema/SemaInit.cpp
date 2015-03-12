@@ -149,9 +149,9 @@ static void updateStringLiteralType(Expr *E, QualType Ty) {
 static void CheckStringInit(Expr *Str, QualType &DeclT, const ArrayType *AT,
                             Sema &S) {
   // Get the length of the string as parsed.
-  uint64_t StrLength =
-    cast<ConstantArrayType>(Str->getType())->getSize().getZExtValue();
-
+  auto *ConstantArrayTy =
+      cast<ConstantArrayType>(Str->getType()->getAsArrayTypeUnsafe());
+  uint64_t StrLength = ConstantArrayTy->getSize().getZExtValue();
 
   if (const IncompleteArrayType *IAT = dyn_cast<IncompleteArrayType>(AT)) {
     // C99 6.7.8p14. We have an array of character type with unknown size
@@ -5879,15 +5879,6 @@ InitializationSequence::Perform(Sema &S,
                                          CurInit.get()->getSourceRange(),
                                          &BasePath, IgnoreBaseAccess))
         return ExprError();
-
-      if (S.BasePathInvolvesVirtualBase(BasePath)) {
-        QualType T = SourceType;
-        if (const PointerType *Pointer = T->getAs<PointerType>())
-          T = Pointer->getPointeeType();
-        if (const RecordType *RecordTy = T->getAs<RecordType>())
-          S.MarkVTableUsed(CurInit.get()->getLocStart(),
-                           cast<CXXRecordDecl>(RecordTy->getDecl()));
-      }
 
       ExprValueKind VK =
           Step->Kind == SK_CastDerivedToBaseLValue ?
