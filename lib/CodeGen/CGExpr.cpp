@@ -1916,7 +1916,8 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
     // CodeGen for threadprivate variables.
     if (getLangOpts().OpenMP) {
       if (llvm::Value *Val =
-               CGM.getOpenMPRuntime().CreateOpenMPThreadPrivateCached(VD, E->getExprLoc(), *this))
+              CGM.getOpenMPRuntime().CreateOpenMPThreadPrivateCached(
+                  VD, E->getExprLoc(), *this))
         return MakeAddrLValue(Val, T, Alignment);
       // CodeGen for OpenMP private variables - works only in CapturedStmt.
       else if (llvm::Value *Val = CGM.OpenMPSupport.getOpenMPPrivateVar(VD))
@@ -1951,13 +1952,12 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
       else if (CapturedStmtInfo) {
         if (auto *V = LocalDeclMap.lookup(VD))
           return MakeAddrLValue(V, T, Alignment);
-        else
+        else if (CapturedStmtInfo->lookup(VD))
           return EmitCapturedFieldLValue(*this, CapturedStmtInfo->lookup(VD),
                                          CapturedStmtInfo->getContextValue());
-      }
-      assert(isa<BlockDecl>(CurCodeDecl));
-      return MakeAddrLValue(GetAddrOfBlockDecl(VD, VD->hasAttr<BlocksAttr>()),
-                            T, Alignment);
+      } else if (isa<BlockDecl>(CurCodeDecl))
+        return MakeAddrLValue(GetAddrOfBlockDecl(VD, VD->hasAttr<BlocksAttr>()),
+                              T, Alignment);
     }
   }
 
