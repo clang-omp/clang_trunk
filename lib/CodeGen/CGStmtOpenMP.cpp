@@ -40,6 +40,35 @@ using namespace clang;
 using namespace CodeGen;
 
 namespace {
+/// \brief RAII for emitting code of CapturedStmt without function outlining.
+class InlinedOpenMPRegion {
+  CodeGenFunction &CGF;
+  CodeGenFunction::CGCapturedStmtInfo *PrevCapturedStmtInfo;
+  const Decl *StoredCurCodeDecl;
+
+  /// \brief A class to emit CapturedStmt construct as inlined statement without
+  /// generating a function for outlined code.
+  class CGInlinedOpenMPRegionInfo : public CodeGenFunction::CGCapturedStmtInfo {
+  public:
+    CGInlinedOpenMPRegionInfo() : CGCapturedStmtInfo() {}
+  };
+
+public:
+  InlinedOpenMPRegion(CodeGenFunction &CGF, const Stmt *S)
+      : CGF(CGF), PrevCapturedStmtInfo(CGF.CapturedStmtInfo),
+        StoredCurCodeDecl(CGF.CurCodeDecl) {
+    CGF.CurCodeDecl = cast<CapturedStmt>(S)->getCapturedDecl();
+    CGF.CapturedStmtInfo = new CGInlinedOpenMPRegionInfo();
+  }
+  ~InlinedOpenMPRegion() {
+    delete CGF.CapturedStmtInfo;
+    CGF.CapturedStmtInfo = PrevCapturedStmtInfo;
+    CGF.CurCodeDecl = StoredCurCodeDecl;
+  }
+};
+} // namespace
+
+namespace {
 // Getters for fields of the loop-like directives. We may want to add a
 // common parent to all the loop-like directives to get rid of these.
 //
@@ -5217,6 +5246,7 @@ void CodeGenFunction::EmitOMPTeamsDirective(const OMPTeamsDirective &S) {
 
 // Generate the instructions for '#pragma omp simd' directive.
 void CodeGenFunction::EmitOMPSimdDirective(const OMPSimdDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   CGPragmaOmpSimd Wrapper(&S);
   EmitPragmaSimd(Wrapper);

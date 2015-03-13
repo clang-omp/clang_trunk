@@ -1986,6 +1986,21 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
       V = CGM.getOrCreateStaticVarDecl(
           *VD, CGM.getLLVMLinkageVarDefinition(VD, /*isConstant=*/false));
 
+    // Use special handling for lambdas. [for OpenMP only now]
+    if (!V) {
+      if (FieldDecl *FD = LambdaCaptureFields.lookup(VD)) {
+        return EmitCapturedFieldLValue(*this, FD, CXXABIThisValue);
+      } else if (CapturedStmtInfo) {
+        if (const FieldDecl *FD = CapturedStmtInfo->lookup(VD))
+          return EmitCapturedFieldLValue(*this, FD,
+                                         CapturedStmtInfo->getContextValue());
+      }
+
+      assert(isa<BlockDecl>(CurCodeDecl) && E->refersToCapturedVariable());
+      return MakeAddrLValue(GetAddrOfBlockDecl(VD, isBlockVariable),
+                            T, Alignment);
+    }
+
     assert(V && "DeclRefExpr not entered in LocalDeclMap?");
 
     if (isBlockVariable)

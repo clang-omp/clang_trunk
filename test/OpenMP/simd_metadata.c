@@ -78,5 +78,5 @@ void h4(float *c, float *a, float *b, int size)
 // CHECK: [[LOOP_H3_HEADER:![0-9]+]] = distinct !{[[LOOP_H3_HEADER]], [[LOOP_VEC_ENABLE]]}
 //
 // Metadata for h4:
-// CHECK: [[LOOP_H4_HEADER]] = !{[[LOOP_H4_HEADER]], [[LOOP_VEC_ENABLE]]}
+// CHECK: [[LOOP_H4_HEADER]] = distinct !{[[LOOP_H4_HEADER]], [[LOOP_VEC_ENABLE]]}
 //
