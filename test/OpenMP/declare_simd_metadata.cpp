@@ -74,10 +74,9 @@ void f() {
   float q = vv.addpf(&a, &b);
 }
 
-// Metadata for the class
-// CHECK: [[C01:![0-9]+]] = !{float (%class.VV*, float*, float*)* @_ZN2VV5addpfEPfS0_[[C01META:(, ![0-9]+)+]]}
-//
 // Metadata for the class-template
 // CHECK: [[CT1:![0-9]+]] = !{float (%class.TVV*, float*, float*)* @_ZN3TVVILi16EE6taddpfEPfS1_[[CT1META:(, ![0-9]+)+]]}
 
+// Metadata for the class
+// CHECK: [[C01:![0-9]+]] = !{float (%class.VV*, float*, float*)* @_ZN2VV5addpfEPfS0_[[C01META:(, ![0-9]+)+]]}
 
