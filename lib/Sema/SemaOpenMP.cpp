@@ -585,6 +585,25 @@ void Sema::InitDataSharingAttributesStack() {
 
 #define DSAStack static_cast<DSAStackTy *>(VarDataSharingAttributesStack)
 
+bool Sema::IsOpenMPCapturedVar(VarDecl *VD) {
+  assert(LangOpts.OpenMP && "OpenMP is not allowed");
+  if (DSAStack->getCurrentDirective() != OMPD_unknown) {
+    DeclRefExpr *PrevRef;
+    OpenMPClauseKind Kind = DSAStack->getTopDSA(VD, PrevRef);
+    if (Kind == OMPC_private || Kind == OMPC_firstprivate ||
+        Kind == OMPC_lastprivate || Kind == OMPC_reduction ||
+        Kind == OMPC_linear)
+      return true;
+    if (DSAStack->hasDSA(VD, OMPC_private, OMPD_unknown, PrevRef) ||
+        DSAStack->hasDSA(VD, OMPC_firstprivate, OMPD_unknown, PrevRef) ||
+        DSAStack->hasDSA(VD, OMPC_lastprivate, OMPD_unknown, PrevRef) ||
+        DSAStack->hasDSA(VD, OMPC_reduction, OMPD_unknown, PrevRef) ||
+        DSAStack->hasDSA(VD, OMPC_linear, OMPD_unknown, PrevRef))
+      return true;
+  }
+  return false;
+}
+
 void Sema::DestroyDataSharingAttributesStack() { delete DSAStack; }
 
 bool Sema::HasOpenMPRegion(OpenMPDirectiveKind Kind) {

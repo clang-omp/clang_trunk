@@ -176,6 +176,8 @@ public:
   /// \brief API for captured statement code generation.
   class CGCapturedStmtInfo {
   public:
+    explicit CGCapturedStmtInfo(CapturedRegionKind K = CR_Default)
+        : Kind(K), ThisValue(nullptr), CXXThisFieldDecl(nullptr) {}
     explicit CGCapturedStmtInfo(const CapturedStmt &S,
                                 CapturedRegionKind K = CR_Default)
       : Kind(K), ThisValue(nullptr), CXXThisFieldDecl(nullptr) {
