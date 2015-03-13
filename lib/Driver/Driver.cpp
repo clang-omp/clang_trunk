@@ -1699,7 +1699,13 @@ static const Tool *SelectToolForJob(Compilation &C, bool SaveTemps,
   if (isa<BackendJobAction>(JA)) {
     // Check if the compiler supports emitting LLVM IR.
     assert(Inputs->size() == 1);
-    JobAction *CompileJA = cast<CompileJobAction>(*Inputs->begin());
+    Action *PA = *Inputs->begin();
+    if (isa<BindTargetAction>(PA)) {
+      Inputs = &(*Inputs)[0]->getInputs();
+      PA = *Inputs->begin();
+      assert(Inputs->size() == 1); 
+    }
+    JobAction *CompileJA = cast<CompileJobAction>(PA);
     const Tool *Compiler = TC->SelectTool(*CompileJA);
     if (!Compiler)
       return nullptr;

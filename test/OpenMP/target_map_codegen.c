@@ -18,17 +18,17 @@ void foo(double A[32], double B[32], double C[32]){
   // CHK-CODEGEN-HOST: [[MP:%[a-zA-Z0-9_\.]+]] = alloca i8*, i32 3
   // CHK-CODEGEN-HOST: [[MS:%[a-zA-Z0-9_\.]+]] = alloca i32, i32 3
 
-  // CHK-CODEGEN-HOST: [[P0:%[0-9]+]] = getelementptr inbounds i8** [[MP]], i32 0
-  // CHK-CODEGEN-HOST: [[S0:%[0-9]+]] = getelementptr inbounds i32* [[MS]], i32 0
+  // CHK-CODEGEN-HOST: [[P0:%[0-9]+]] = getelementptr inbounds i8*, i8** [[MP]], i32 0
+  // CHK-CODEGEN-HOST: [[S0:%[0-9]+]] = getelementptr inbounds i32, i32* [[MS]], i32 0
   // CHK-CODEGEN-HOST: store i8* bitcast (double* getelementptr inbounds ([32 x double]* @a, i32 0, i64 2) to i8*), i8** [[P0]]
   // CHK-CODEGEN-HOST: store i32 trunc (i64 sub (i64 ptrtoint (double* getelementptr inbounds ([32 x double]* @a, i64 1, i64 0) to i64), i64 ptrtoint (double* getelementptr inbounds ([32 x double]* @a, i32 0, i64 2) to i64)) to i32), i32* [[S0]]
 
-  // CHK-CODEGEN-HOST: [[P1:%[0-9]+]] = getelementptr inbounds i8** [[MP]], i32 1
-  // CHK-CODEGEN-HOST: [[S1:%[0-9]+]] = getelementptr inbounds i32* [[MS]], i32 1
+  // CHK-CODEGEN-HOST: [[P1:%[0-9]+]] = getelementptr inbounds i8*, i8** [[MP]], i32 1
+  // CHK-CODEGEN-HOST: [[S1:%[0-9]+]] = getelementptr inbounds i32, i32* [[MS]], i32 1
   // CHK-CODEGEN-HOST: store i8* bitcast ([32 x double]* @b to i8*), i8** [[P1]]
   // CHK-CODEGEN-HOST: store i32 256, i32* [[S1]]
-  // CHK-CODEGEN-HOST: [[P2:%[0-9]+]] = getelementptr inbounds i8** [[MP]], i32 2
-  // CHK-CODEGEN-HOST: [[S2:%[0-9]+]] = getelementptr inbounds i32* [[MS]], i32 2
+  // CHK-CODEGEN-HOST: [[P2:%[0-9]+]] = getelementptr inbounds i8*, i8** [[MP]], i32 2
+  // CHK-CODEGEN-HOST: [[S2:%[0-9]+]] = getelementptr inbounds i32, i32* [[MS]], i32 2
   // CHK-CODEGEN-HOST: store i8* bitcast ([32 x double]* @c to i8*), i8** [[P2]]
   // CHK-CODEGEN-HOST: store i32 256, i32* [[S2]]
 
