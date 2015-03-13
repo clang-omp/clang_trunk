@@ -5240,6 +5240,7 @@ CodeGenFunction::CGPragmaOmpSimd::emitLinearFinal(CodeGenFunction &CGF) const {
 
 /// Generate an instructions for '#pragma omp teams' directive.
 void CodeGenFunction::EmitOMPTeamsDirective(const OMPTeamsDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   EmitOMPDirectiveWithTeams(OMPD_teams, OMPD_unknown, S);
 }
@@ -5254,6 +5255,7 @@ void CodeGenFunction::EmitOMPSimdDirective(const OMPSimdDirective &S) {
 
 // Generate the instructions for '#pragma omp for simd' directive.
 void CodeGenFunction::EmitOMPForSimdDirective(const OMPForSimdDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   EmitOMPDirectiveWithLoop(OMPD_for_simd, OMPD_for_simd, S);
 }
@@ -5261,6 +5263,7 @@ void CodeGenFunction::EmitOMPForSimdDirective(const OMPForSimdDirective &S) {
 // Generate the instructions for '#pragma omp distribute simd' directive.
 void CodeGenFunction::EmitOMPDistributeSimdDirective(
     const OMPDistributeSimdDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   EmitOMPDirectiveWithLoop(OMPD_distribute_simd, OMPD_distribute_simd, S);
 }
@@ -5269,6 +5272,7 @@ void CodeGenFunction::EmitOMPDistributeSimdDirective(
 // directive.
 void CodeGenFunction::EmitOMPDistributeParallelForDirective(
     const OMPDistributeParallelForDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   assert(S.getLowerBound() && "No lower bound");
   assert(S.getUpperBound() && "No upper bound");
@@ -5283,6 +5287,7 @@ void CodeGenFunction::EmitOMPDistributeParallelForDirective(
 // directive.
 void CodeGenFunction::EmitOMPDistributeParallelForSimdDirective(
     const OMPDistributeParallelForSimdDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   assert(S.getLowerBound() && "No lower bound");
   assert(S.getUpperBound() && "No upper bound");
@@ -5298,6 +5303,7 @@ void CodeGenFunction::EmitOMPDistributeParallelForSimdDirective(
 // directive.
 void CodeGenFunction::EmitOMPTeamsDistributeParallelForDirective(
     const OMPTeamsDistributeParallelForDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   EmitOMPDirectiveWithTeams(OMPD_teams_distribute_parallel_for,
                             OMPD_distribute_parallel_for, S);
@@ -5307,6 +5313,7 @@ void CodeGenFunction::EmitOMPTeamsDistributeParallelForDirective(
 // directive.
 void CodeGenFunction::EmitOMPTeamsDistributeParallelForSimdDirective(
     const OMPTeamsDistributeParallelForSimdDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   EmitOMPDirectiveWithTeams(OMPD_teams_distribute_parallel_for_simd,
                             OMPD_distribute_parallel_for_simd, S);
@@ -5316,6 +5323,7 @@ void CodeGenFunction::EmitOMPTeamsDistributeParallelForSimdDirective(
 // for' directive.
 void CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDirective(
     const OMPTargetTeamsDistributeParallelForDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   EmitOMPDirectiveWithTeams(OMPD_target_teams_distribute_parallel_for,
                             OMPD_distribute_parallel_for, S);
@@ -5325,6 +5333,7 @@ void CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDirective(
 // for simd' directive.
 void CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForSimdDirective(
     const OMPTargetTeamsDistributeParallelForSimdDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   EmitOMPDirectiveWithTeams(OMPD_target_teams_distribute_parallel_for_simd,
                             OMPD_distribute_parallel_for_simd, S);
@@ -5647,6 +5656,7 @@ void CodeGenFunction::EmitOMPTargetUpdateDirective(
 // Generate the instructions for '#pragma omp target teams' directive.
 void
 CodeGenFunction::EmitOMPTargetTeamsDirective(const OMPTargetTeamsDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   EmitOMPDirectiveWithTeams(OMPD_target_teams, OMPD_target, S);
 }
@@ -5654,6 +5664,7 @@ CodeGenFunction::EmitOMPTargetTeamsDirective(const OMPTargetTeamsDirective &S) {
 /// Generate an instructions for '#pragma omp teams distribute' directive.
 void CodeGenFunction::EmitOMPTeamsDistributeDirective(
     const OMPTeamsDistributeDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   EmitOMPDirectiveWithTeams(OMPD_teams_distribute, OMPD_distribute, S);
 }
@@ -5661,6 +5672,7 @@ void CodeGenFunction::EmitOMPTeamsDistributeDirective(
 /// Generate an instructions for '#pragma omp teams distribute simd' directive.
 void CodeGenFunction::EmitOMPTeamsDistributeSimdDirective(
     const OMPTeamsDistributeSimdDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   EmitOMPDirectiveWithTeams(OMPD_teams_distribute_simd, OMPD_distribute_simd,
                             S);
@@ -5670,6 +5682,7 @@ void CodeGenFunction::EmitOMPTeamsDistributeSimdDirective(
 /// directive.
 void CodeGenFunction::EmitOMPTargetTeamsDistributeDirective(
     const OMPTargetTeamsDistributeDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   OpenMPDirectiveKind Directives[] = { OMPD_target, OMPD_distribute };
   EmitOMPDirectiveWithTeams(OMPD_target_teams_distribute, Directives,
@@ -5680,6 +5693,7 @@ void CodeGenFunction::EmitOMPTargetTeamsDistributeDirective(
 /// directive.
 void CodeGenFunction::EmitOMPTargetTeamsDistributeSimdDirective(
     const OMPTargetTeamsDistributeSimdDirective &S) {
+  InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   OpenMPDirectiveKind Directives[] = { OMPD_target, OMPD_distribute_simd };
   EmitOMPDirectiveWithTeams(OMPD_target_teams_distribute_simd,
