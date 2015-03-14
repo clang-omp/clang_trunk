@@ -1360,6 +1360,13 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
       llvm_unreachable("wrong cast for pointers in different address spaces"
                        "(must be an address space cast)!");
     }
+
+    if (CGF.SanOpts.has(SanitizerKind::CFIUnrelatedCast)) {
+      if (auto PT = DestTy->getAs<PointerType>())
+        CGF.EmitVTablePtrCheckForCast(PT->getPointeeType(), Src,
+                                      /*MayBeNull=*/true);
+    }
+
     return Builder.CreateBitCast(Src, DstTy);
   }
   case CK_AddressSpaceConversion: {
@@ -1388,6 +1395,10 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     if (CGF.sanitizePerformTypeCheck())
       CGF.EmitTypeCheck(CodeGenFunction::TCK_DowncastPointer, CE->getExprLoc(),
                         Derived, DestTy->getPointeeType());
+
+    if (CGF.SanOpts.has(SanitizerKind::CFIDerivedCast))
+      CGF.EmitVTablePtrCheckForCast(DestTy->getPointeeType(), Derived,
+                                    /*MayBeNull=*/true);
 
     return Derived;
   }
