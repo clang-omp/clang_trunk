@@ -2268,10 +2268,10 @@ public:
     ArrayRef<const Expr *>::iterator VarIter2,
     llvm::Value *Dst,
     llvm::Value *Src);
-  void EmitOMPDirectiveWithLoop(
-    OpenMPDirectiveKind DKind,
-    OpenMPDirectiveKind SKind,
-    const OMPExecutableDirective &S);
+  void EmitOMPDirectiveWithLoop(OpenMPDirectiveKind DKind,
+                                OpenMPDirectiveKind SKind,
+                                const OMPExecutableDirective &S,
+                                bool IsDistribute = false);
   void EmitOMPSectionsDirective(
     OpenMPDirectiveKind DKind,
     OpenMPDirectiveKind SKind,
