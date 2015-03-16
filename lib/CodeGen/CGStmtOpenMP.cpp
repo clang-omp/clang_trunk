@@ -58,10 +58,12 @@ public:
       : CGF(CGF), PrevCapturedStmtInfo(CGF.CapturedStmtInfo),
         StoredCurCodeDecl(CGF.CurCodeDecl) {
     CGF.CurCodeDecl = cast<CapturedStmt>(S)->getCapturedDecl();
-    CGF.CapturedStmtInfo = new CGInlinedOpenMPRegionInfo();
+    if (!CGF.CapturedStmtInfo)
+      CGF.CapturedStmtInfo = new CGInlinedOpenMPRegionInfo();
   }
   ~InlinedOpenMPRegion() {
-    delete CGF.CapturedStmtInfo;
+    if (!PrevCapturedStmtInfo)
+      delete CGF.CapturedStmtInfo;
     CGF.CapturedStmtInfo = PrevCapturedStmtInfo;
     CGF.CurCodeDecl = StoredCurCodeDecl;
   }
@@ -931,10 +933,10 @@ void CodeGenFunction::EmitOMPParallelSectionsDirective(
 }
 
 /// Generate instruction for OpenMP loop-like directives.
-void
-CodeGenFunction::EmitOMPDirectiveWithLoop(OpenMPDirectiveKind DKind,
-                                          OpenMPDirectiveKind SKind,
-                                          const OMPExecutableDirective &S) {
+void CodeGenFunction::EmitOMPDirectiveWithLoop(OpenMPDirectiveKind DKind,
+                                               OpenMPDirectiveKind SKind,
+                                               const OMPExecutableDirective &S,
+                                               bool IsDistribute) {
 
   // Several Simd-specific vars are declared here.
   // OMPD_distribute_parallel_for_simd is not included because it separates to
@@ -954,6 +956,7 @@ CodeGenFunction::EmitOMPDirectiveWithLoop(OpenMPDirectiveKind DKind,
   CGM.OpenMPSupport.setNoWait(false);
   CGM.OpenMPSupport.setMergeable(true);
   CGM.OpenMPSupport.setOrdered(false);
+  CGM.OpenMPSupport.setDistribute(IsDistribute);
 
   // CodeGen for clauses (task init).
   for (ArrayRef<OMPClause *>::iterator I = S.clauses().begin(),
@@ -1424,8 +1427,8 @@ void CodeGenFunction::EmitOMPForDirective(const OMPForDirective &S) {
 /// Generate an instructions for '#pragma omp distribute' directive.
 void
 CodeGenFunction::EmitOMPDistributeDirective(const OMPDistributeDirective &S) {
-  CGM.OpenMPSupport.setDistribute(true);
-  EmitOMPDirectiveWithLoop(OMPD_distribute, OMPD_distribute, S);
+  EmitOMPDirectiveWithLoop(OMPD_distribute, OMPD_distribute, S,
+                           /*IsDistribute=*/true);
 }
 
 /// Generate an instructions for directive with 'teams' region.

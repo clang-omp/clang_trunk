@@ -1345,7 +1345,7 @@ void CXXNameMangler::manglePrefix(const DeclContext *DC, bool NoFunction) {
 
   DC = IgnoreLinkageSpecDecls(DC);
 
-  if (DC->isTranslationUnit())
+  if (DC->isTranslationUnitOrDeclareTarget())
     return;
 
   if (NoFunction && isLocalContainerContext(DC))
