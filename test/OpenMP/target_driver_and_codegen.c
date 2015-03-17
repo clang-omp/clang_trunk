@@ -93,7 +93,7 @@
 // CHK-CODEGEN-HOST:   @__omptgt__target_regions_descriptor =
 // CHK-CODEGEN-HOST:   internal constant { i32, { i8*, i8* }*, { i8*, i32 }*, { i8*, i32 }* } {
 // CHK-CODEGEN-HOST:   i32 2,
-// CHK-CODEGEN-HOST:   { i8*, i8* }* getelementptr inbounds ([2 x { i8*, i8* }]* @__omptgt__device_images, i32 0, i32 0),
+// CHK-CODEGEN-HOST:   { i8*, i8* }* getelementptr inbounds ([2 x { i8*, i8* }], [2 x { i8*, i8* }]* @__omptgt__device_images, i32 0, i32 0),
 // CHK-CODEGEN-HOST:   { i8*, i32 }* @__omptgt__host_entries_begin,
 // CHK-CODEGEN-HOST:   { i8*, i32 }* @__omptgt__host_entries_end }
 
@@ -103,7 +103,7 @@
 // CHK-CODEGEN-HOST:   [[M1:@.tgt_types[0-9]*]] = private constant [1 x i32] [i32 3]
 // CHK-CODEGEN-HOST:   @__omptgt__host_ptr_0 = internal constant [{{[1-9][0-9]*}} x i8] c"__omptgt__0_[[ID:[0-9a-f]+_[0-9a-f]+]]_\00"
 // CHK-CODEGEN-HOST:   @__omptgt__0_[[ID]]__hst_entry =
-// CHK-CODEGEN-HOST:   constant { i8*, i32 } { i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8]* @__omptgt__host_ptr_0, i32 0, i32 0), i32 0 },
+// CHK-CODEGEN-HOST:   constant { i8*, i32 } { i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8], [{{[1-9][0-9]*}} x i8]* @__omptgt__host_ptr_0, i32 0, i32 0), i32 0 },
 // CHK-CODEGEN-HOST:   section ".openmptgt_host_entries"
 
 
@@ -113,7 +113,7 @@
 // CHK-CODEGEN-HOST:   [[M2:@.tgt_types[0-9]*]] = private constant [1 x i32] [i32 3]
 // CHK-CODEGEN-HOST:   @__omptgt__host_ptr_1 = internal constant [{{[1-9][0-9]*}} x i8] c"__omptgt__1_[[ID:[0-9a-f]+_[0-9a-f]+]]_\00"
 // CHK-CODEGEN-HOST:   @__omptgt__1_[[ID]]__hst_entry =
-// CHK-CODEGEN-HOST:   constant { i8*, i32 } { i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8]* @__omptgt__host_ptr_1, i32 0, i32 0), i32 0 },
+// CHK-CODEGEN-HOST:   constant { i8*, i32 } { i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8], [{{[1-9][0-9]*}} x i8]* @__omptgt__host_ptr_1, i32 0, i32 0), i32 0 },
 // CHK-CODEGEN-HOST:   section ".openmptgt_host_entries"
 
 #pragma omp declare target
@@ -144,11 +144,11 @@ int foo(int a){
 
   // CHK-CODEGEN-HOST: [[RET1:%[a-zA-Z0-9_\.]+]] = call i32 @__kmpc_target(
   // CHK-CODEGEN-HOST: i32 [[DEVICEID1:0]],
-  // CHK-CODEGEN-HOST: i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8]* @__omptgt__host_ptr_0, i32 0, i32 0),
+  // CHK-CODEGEN-HOST: i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8], [{{[1-9][0-9]*}} x i8]* @__omptgt__host_ptr_0, i32 0, i32 0),
   // CHK-CODEGEN-HOST: i32 [[ARGNUM1:[0-9]+]],
   // CHK-CODEGEN-HOST: i8** [[DATA1:%[a-zA-Z0-9_\.]+]],
-  // CHK-CODEGEN-HOST: i32* getelementptr inbounds ([1 x i32]* [[S1]], i32 0, i32 0),
-  // CHK-CODEGEN-HOST: i32* getelementptr inbounds ([1 x i32]* [[M1]], i32 0, i32 0))
+  // CHK-CODEGEN-HOST: i32* getelementptr inbounds ([1 x i32], [1 x i32]* [[S1]], i32 0, i32 0),
+  // CHK-CODEGEN-HOST: i32* getelementptr inbounds ([1 x i32], [1 x i32]* [[M1]], i32 0, i32 0))
   // CHK-CODEGEN-HOST: [[CMP1:%[0-9]+]] = icmp eq i32 [[RET1]], 0
   // CHK-CODEGEN-HOST: br i1 [[CMP1]], label %[[OFFSUCCESS1:[a-zA-Z0-9_\.]+]], label %[[OFFFAIL1:[a-zA-Z0-9_\.]+]]
 
@@ -168,11 +168,11 @@ int foo(int a){
   for(i=0; i<5; ++i){
     // CHK-CODEGEN-HOST: [[RET2:%[a-zA-Z0-9_\.]+]] = call i32 @__kmpc_target(
     // CHK-CODEGEN-HOST: i32 [[DEVICEID2:0]],
-    // CHK-CODEGEN-HOST: i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8]* @__omptgt__host_ptr_1, i32 0, i32 0),
+    // CHK-CODEGEN-HOST: i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8], [{{[1-9][0-9]*}} x i8]* @__omptgt__host_ptr_1, i32 0, i32 0),
     // CHK-CODEGEN-HOST: i32 [[ARGNUM2:[0-9]+]],
     // CHK-CODEGEN-HOST: i8** [[DATA2:%[a-zA-Z0-9_\.]+]],
-    // CHK-CODEGEN-HOST: i32* getelementptr inbounds ([1 x i32]* [[S2]], i32 0, i32 0),
-    // CHK-CODEGEN-HOST: i32* getelementptr inbounds ([1 x i32]* [[M2]], i32 0, i32 0))
+    // CHK-CODEGEN-HOST: i32* getelementptr inbounds ([1 x i32], [1 x i32]* [[S2]], i32 0, i32 0),
+    // CHK-CODEGEN-HOST: i32* getelementptr inbounds ([1 x i32], [1 x i32]* [[M2]], i32 0, i32 0))
     // CHK-CODEGEN-HOST: [[CMP2:%[0-9]+]] = icmp eq i32 [[RET2]], 0
     // CHK-CODEGEN-HOST: br i1 [[CMP2]], label %[[OFFSUCCESS2:[a-zA-Z0-9_\.]+]], label %[[OFFFAIL2:[a-zA-Z0-9_\.]+]]
 
