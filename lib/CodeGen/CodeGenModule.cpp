@@ -4097,6 +4097,10 @@ llvm::Value **CodeGenModule::OpenMPSupportStackTy::getWaitDepsArgs() {
   return OpenMPStack.back().WaitDepsArgs;
 }
 
+llvm::Constant *CodeGenModule::getAddrOfCXXCatchDescriptor(QualType Ty) {
+  return getCXXABI().getAddrOfCXXCatchDescriptor(Ty);
+}
+
 llvm::Constant *CodeGenModule::GetAddrOfRTTIDescriptor(QualType Ty,
                                                        bool ForEH) {
   // Return a bogus pointer if RTTI is disabled, unless it's for EH.
@@ -4109,7 +4113,7 @@ llvm::Constant *CodeGenModule::GetAddrOfRTTIDescriptor(QualType Ty,
       LangOpts.ObjCRuntime.isGNUFamily())
     return ObjCRuntime->GetEHType(Ty);
 
-  return getCXXABI().getAddrOfRTTIDescriptor(Ty, ForEH);
+  return getCXXABI().getAddrOfRTTIDescriptor(Ty);
 }
 
 void CodeGenModule::OpenMPSupportStackTy::getMapData(ArrayRef<llvm::Value*> &MapPointers, ArrayRef<llvm::Value*> &MapSizes, ArrayRef<unsigned> &MapTypes){
