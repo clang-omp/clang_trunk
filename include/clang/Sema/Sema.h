@@ -3274,7 +3274,7 @@ public:
 
   void redelayDiagnostics(sema::DelayedDiagnosticPool &pool);
 
-  enum AvailabilityDiagnostic { AD_Deprecation, AD_Unavailable };
+  enum AvailabilityDiagnostic { AD_Deprecation, AD_Unavailable, AD_Partial };
 
   void EmitAvailabilityWarning(AvailabilityDiagnostic AD,
                                NamedDecl *D, StringRef Message,
@@ -8931,8 +8931,8 @@ public:
   /// template substitution or instantiation.
   Scope *getCurScope() const { return CurScope; }
 
-  void incrementMSLocalManglingNumber() const {
-    return CurScope->incrementMSLocalManglingNumber();
+  void incrementMSManglingNumber() const {
+    return CurScope->incrementMSManglingNumber();
   }
 
   IdentifierInfo *getSuperIdentifier() const;
