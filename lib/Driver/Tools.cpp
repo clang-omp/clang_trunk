@@ -4220,8 +4220,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   ToolChain::RTTIMode RTTIMode = getToolChain().getRTTIMode();
 
-  if (RTTIMode == ToolChain::RM_DisabledExplicitly ||
-      RTTIMode == ToolChain::RM_DisabledImplicitly)
+  if (KernelOrKext || (types::isCXX(InputType) &&
+                       (RTTIMode == ToolChain::RM_DisabledExplicitly ||
+                        RTTIMode == ToolChain::RM_DisabledImplicitly)))
     CmdArgs.push_back("-fno-rtti");
 
   // -fshort-enums=0 is default for all architectures except Hexagon.
