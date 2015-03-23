@@ -2584,11 +2584,16 @@ void CodeGenFunction::InitOpenMPFunction(llvm::Value *Context,
   for (CapturedStmt::capture_init_iterator I = S.capture_init_begin(),
                                            E = S.capture_init_end();
        I != E; ++I, ++C, ++CurField) {
-    QualType QTy = (*CurField)->getType();
-    if (QTy->isVariablyModifiedType()) {
-      EmitVariablyModifiedType(QTy);
-    }
-    if (C->capturesVariable()) {
+    if (CurField->hasCapturedVLAType()) {
+      auto *ExprArg = EmitLoadOfLValue(EmitLValueForField(Base, *CurField),
+                                       S.getLocStart()).getScalarVal();
+      auto VAT = CurField->getCapturedVLAType();
+      VLASizeMap[VAT->getSizeExpr()] = ExprArg;
+    } else if (C->capturesVariable()) {
+      QualType QTy = (*CurField)->getType();
+      if (QTy->isVariablyModifiedType()) {
+        EmitVariablyModifiedType(QTy);
+      }
       const VarDecl *VD = C->getCapturedVar();
       LValue LV = EmitLValueForField(Base, CapturedStmtInfo->lookup(VD));
       CapturedStmtInfo->addCachedVar(VD, LV.getAddress());
@@ -2611,6 +2616,8 @@ void CodeGenFunction::InitOpenMPTargetFunction(const CapturedStmt &S) {
 
   const RecordDecl *RD = S.getCapturedRecordDecl();
 
+  LValue Base = MakeNaturalAlignAddrLValue(CapturedStmtInfo->getContextValue(),
+                                           getContext().getTagDeclType(RD));
   llvm::Function::arg_iterator Arg = this->CurFn->arg_begin();
   RecordDecl::field_iterator CurField = RD->field_begin();
   CapturedStmt::const_capture_iterator C = S.capture_begin();
@@ -2618,11 +2625,16 @@ void CodeGenFunction::InitOpenMPTargetFunction(const CapturedStmt &S) {
                                            E = S.capture_init_end();
        I != E; ++I, ++C, ++CurField, ++Arg) {
 
-    QualType QTy = (*CurField)->getType();
-    if (QTy->isVariablyModifiedType()) {
-      EmitVariablyModifiedType(QTy);
-    }
-    if (C->capturesVariable()) {
+    if (CurField->hasCapturedVLAType()) {
+      auto *ExprArg = EmitLoadOfLValue(EmitLValueForField(Base, *CurField),
+                                       S.getLocStart()).getScalarVal();
+      auto VAT = CurField->getCapturedVLAType();
+      VLASizeMap[VAT->getSizeExpr()] = ExprArg;
+    } else if (C->capturesVariable()) {
+      QualType QTy = (*CurField)->getType();
+      if (QTy->isVariablyModifiedType()) {
+        EmitVariablyModifiedType(QTy);
+      }
       const VarDecl *VD = C->getCapturedVar();
       CapturedStmtInfo->addCachedVar(VD, Arg);
     }
@@ -2631,9 +2643,7 @@ void CodeGenFunction::InitOpenMPTargetFunction(const CapturedStmt &S) {
   // If 'this' is captured, load it into CXXThisValue.
   if (CapturedStmtInfo->isCXXThisExprCaptured()) {
     FieldDecl *FD = CapturedStmtInfo->getThisFieldDecl();
-    LValue LV = MakeNaturalAlignAddrLValue(CapturedStmtInfo->getContextValue(),
-                                           getContext().getTagDeclType(RD));
-    LValue ThisLValue = EmitLValueForField(LV, FD);
+    LValue ThisLValue = EmitLValueForField(Base, FD);
     CXXThisValue = EmitLoadOfLValue(ThisLValue, FD->getLocStart()).getScalarVal();
   }
 }
