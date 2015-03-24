@@ -1730,7 +1730,7 @@ public:
 
 private:
   void reconcileExternalVisibleStorage() const;
-  void LoadLexicalDeclsFromExternalStorage() const;
+  bool LoadLexicalDeclsFromExternalStorage() const;
 
   /// @brief Makes a declaration visible within this context, but
   /// suppresses searches for external declarations with the same

@@ -1029,7 +1029,8 @@ void DeclContext::reconcileExternalVisibleStorage() const {
 
 /// \brief Load the declarations within this lexical storage from an
 /// external source.
-void
+/// \return \c true if any declarations were added.
+bool
 DeclContext::LoadLexicalDeclsFromExternalStorage() const {
   ExternalASTSource *Source = getParentASTContext().getExternalSource();
   assert(hasExternalLexicalStorage() && Source && "No external storage?");
@@ -1037,26 +1038,20 @@ DeclContext::LoadLexicalDeclsFromExternalStorage() const {
   // Notify that we have a DeclContext that is initializing.
   ExternalASTSource::Deserializing ADeclContext(Source);
 
-  ExternalLexicalStorage = false;
-  bool HadLazyExternalLexicalLookups = HasLazyExternalLexicalLookups;
-  HasLazyExternalLexicalLookups = false;
-
   // Load the external declarations, if any.
   SmallVector<Decl*, 64> Decls;
+  ExternalLexicalStorage = false;
   switch (Source->FindExternalLexicalDecls(this, Decls)) {
   case ELR_Success:
     break;
     
   case ELR_Failure:
   case ELR_AlreadyLoaded:
-    return;
+    return false;
   }
 
   if (Decls.empty())
-    return;
-
-  if (HadLazyExternalLexicalLookups)
-    HasLazyLocalLexicalLookups = true;
+    return false;
 
   // We may have already loaded just the fields of this record, in which case
   // we need to ignore them.
@@ -1073,6 +1068,7 @@ DeclContext::LoadLexicalDeclsFromExternalStorage() const {
   FirstDecl = ExternalFirst;
   if (!LastDecl)
     LastDecl = ExternalLast;
+  return true;
 }
 
 DeclContext::lookup_result
@@ -1281,13 +1277,23 @@ StoredDeclsMap *DeclContext::buildLookup() {
   if (!HasLazyLocalLexicalLookups && !HasLazyExternalLexicalLookups)
     return LookupPtr;
 
-  if (HasLazyExternalLexicalLookups)
-    LoadLexicalDeclsFromExternalStorage();
-
   SmallVector<DeclContext *, 2> Contexts;
   collectAllContexts(Contexts);
-  for (unsigned I = 0, N = Contexts.size(); I != N; ++I)
-    buildLookupImpl(Contexts[I], hasExternalVisibleStorage());
+
+  if (HasLazyExternalLexicalLookups) {
+    HasLazyExternalLexicalLookups = false;
+    for (auto *DC : Contexts) {
+      if (DC->hasExternalLexicalStorage())
+        HasLazyLocalLexicalLookups |=
+            DC->LoadLexicalDeclsFromExternalStorage();
+    }
+
+    if (!HasLazyLocalLexicalLookups)
+      return LookupPtr;
+  }
+
+  for (auto *DC : Contexts)
+    buildLookupImpl(DC, hasExternalVisibleStorage());
 
   // We no longer have any lazy decls.
   HasLazyLocalLexicalLookups = false;
@@ -1392,8 +1398,6 @@ DeclContext::lookup_result
 DeclContext::noload_lookup(DeclarationName Name) {
   assert(DeclKind != Decl::LinkageSpec &&
          "Should not perform lookups into linkage specs!");
-  if (!hasExternalVisibleStorage())
-    return lookup(Name);
 
   DeclContext *PrimaryContext = getPrimaryContext();
   if (PrimaryContext != this)
