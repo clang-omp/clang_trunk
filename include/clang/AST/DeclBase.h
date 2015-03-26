@@ -1211,6 +1211,11 @@ public:
     }
   }
 
+  /// \brief Test whether the context supports looking up names.
+  bool isLookupContext() const {
+    return !isFunctionOrMethod() && DeclKind != Decl::LinkageSpec;
+  }
+
   bool isFileContext() const {
     return DeclKind == Decl::TranslationUnit || DeclKind == Decl::Namespace;
   }
