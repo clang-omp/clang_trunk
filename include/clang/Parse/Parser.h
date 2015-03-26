@@ -2302,6 +2302,10 @@ private:
                            AccessSpecifier AS, bool EnteringContext,
                            DeclSpecContext DSC, 
                            ParsedAttributesWithRange &Attributes);
+  void SkipCXXMemberSpecification(SourceLocation StartLoc,
+                                  SourceLocation AttrFixitLoc,
+                                  unsigned TagType,
+                                  Decl *TagDecl);
   void ParseCXXMemberSpecification(SourceLocation StartLoc,
                                    SourceLocation AttrFixitLoc,
                                    ParsedAttributesWithRange &Attrs,

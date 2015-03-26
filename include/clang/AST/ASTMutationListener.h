@@ -24,6 +24,7 @@ namespace clang {
   class DeclContext;
   class FunctionDecl;
   class FunctionTemplateDecl;
+  class NamedDecl;
   class ObjCCategoryDecl;
   class ObjCContainerDecl;
   class ObjCInterfaceDecl;
@@ -106,6 +107,12 @@ public:
   ///
   /// \param D the declaration marked used
   virtual void DeclarationMarkedUsed(const Decl *D) {}
+
+  /// \brief A definition has been made visible by being redefined locally.
+  ///
+  /// \param D The definition that was previously not visible.
+  virtual void RedefinedHiddenDefinition(const NamedDecl *D,
+                                         SourceLocation Loc) {}
 
   // NOTE: If new methods are added they should also be added to
   // MultiplexASTMutationListener.

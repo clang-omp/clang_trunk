@@ -109,6 +109,8 @@ public:
                                     const ObjCPropertyDecl *OrigProp,
                                     const ObjCCategoryDecl *ClassExt) override;
   void DeclarationMarkedUsed(const Decl *D) override;
+  void RedefinedHiddenDefinition(const NamedDecl *D,
+                                 SourceLocation Loc) override;
 
 private:
   std::vector<ASTMutationListener*> Listeners;
@@ -186,6 +188,11 @@ void MultiplexASTMutationListener::AddedObjCPropertyInClassExtension(
 void MultiplexASTMutationListener::DeclarationMarkedUsed(const Decl *D) {
   for (size_t i = 0, e = Listeners.size(); i != e; ++i)
     Listeners[i]->DeclarationMarkedUsed(D);
+}
+void MultiplexASTMutationListener::RedefinedHiddenDefinition(
+    const NamedDecl *D, SourceLocation Loc) {
+  for (auto *L : Listeners)
+    L->RedefinedHiddenDefinition(D, Loc);
 }
 
 }  // end namespace clang

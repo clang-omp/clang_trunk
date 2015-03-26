@@ -861,6 +861,8 @@ public:
                                     const ObjCPropertyDecl *OrigProp,
                                     const ObjCCategoryDecl *ClassExt) override;
   void DeclarationMarkedUsed(const Decl *D) override;
+  void RedefinedHiddenDefinition(const NamedDecl *D,
+                                 SourceLocation Loc) override;
 };
 
 /// \brief AST Writer for OpenMP clauses, used for both clauses-stmts
