@@ -5947,9 +5947,9 @@ void cloudabi::Link::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_r);
 
   if (D.IsUsingLTO(ToolChain, Args))
-    AddGoldPlugin(ToolChain, Args, CmdArgs);
+    AddGoldPlugin(ToolChain, Args, CmdArgs, JA.getOffloadingDevice());
 
-  AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs);
+  AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs, JA.getOffloadingDevice());
 
   if (!Args.hasArg(options::OPT_nostdlib) &&
       !Args.hasArg(options::OPT_nodefaultlibs)) {
