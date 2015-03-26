@@ -2293,7 +2293,7 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
   if (!*TC) {
     switch (Target.getOS()) {
     case llvm::Triple::CloudABI:
-      TC = new toolchains::CloudABI(*this, Target, Args);
+      *TC = new toolchains::CloudABI(*this, Target, Args);
       break;
     case llvm::Triple::Darwin:
     case llvm::Triple::MacOSX:
