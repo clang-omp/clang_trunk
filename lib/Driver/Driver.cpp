@@ -2325,6 +2325,9 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
         *TC = new toolchains::Linux(*this, Target, Args,
                                     IsOpenMPTargetToolchain);
       break;
+    case llvm::Triple::NaCl:
+      TC = new toolchains::NaCl_TC(*this, Target, Args);
+      break;
     case llvm::Triple::Solaris:
       *TC = new toolchains::Solaris(*this, Target, Args);
       break;
