@@ -4089,9 +4089,9 @@ llvm::Value **CodeGenModule::OpenMPSupportStackTy::getWaitDepsArgs() {
 }
 
 llvm::Constant *
-CodeGenModule::getAddrOfCXXHandlerMapEntry(QualType Ty,
-                                           QualType CatchHandlerType) {
-  return getCXXABI().getAddrOfCXXHandlerMapEntry(Ty, CatchHandlerType);
+CodeGenModule::getAddrOfCXXCatchHandlerType(QualType Ty,
+                                            QualType CatchHandlerType) {
+  return getCXXABI().getAddrOfCXXCatchHandlerType(Ty, CatchHandlerType);
 }
 
 llvm::Constant *CodeGenModule::GetAddrOfRTTIDescriptor(QualType Ty,
