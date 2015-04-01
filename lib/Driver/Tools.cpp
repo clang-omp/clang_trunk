@@ -8128,7 +8128,7 @@ void nacltools::AssembleARM::ConstructJob(Compilation &C, const JobAction &JA,
                                           const char *LinkingOutput) const {
   const toolchains::NaCl_TC& ToolChain =
     static_cast<const toolchains::NaCl_TC&>(getToolChain());
-  InputInfo NaClMacros(ToolChain.GetNaClArmMacrosPath(), types::TY_PP_Asm,
+  InputInfo NaClMacros(ToolChain.GetNaClArmMacrosPath(), &JA,
                        "nacl-arm-macros.s");
   InputInfoList NewInputs;
   NewInputs.push_back(NaClMacros);
@@ -8227,7 +8227,7 @@ void nacltools::Link::ConstructJob(Compilation &C, const JobAction &JA,
   if (Args.hasArg(options::OPT_Z_Xlinker__no_demangle))
     CmdArgs.push_back("--no-demangle");
 
-  AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs);
+  AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs, JA.getOffloadingDevice());
 
   if (D.CCCIsCXX() &&
       !Args.hasArg(options::OPT_nostdlib) &&
