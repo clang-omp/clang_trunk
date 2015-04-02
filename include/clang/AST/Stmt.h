@@ -341,13 +341,12 @@ private:
 
 protected:
   /// \brief Construct an empty statement.
-  explicit Stmt(StmtClass SC, EmptyShell) {
-    StmtBits.sClass = SC;
-    if (StatisticsEnabled) Stmt::addStmtClass(SC);
-  }
+  explicit Stmt(StmtClass SC, EmptyShell) : Stmt(SC) {}
 
 public:
   Stmt(StmtClass SC) {
+    static_assert(sizeof(*this) % llvm::AlignOf<void *>::Alignment == 0,
+                  "Insufficient alignment!");
     StmtBits.sClass = SC;
     if (StatisticsEnabled) Stmt::addStmtClass(SC);
   }
