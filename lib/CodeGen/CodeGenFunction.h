@@ -1853,7 +1853,8 @@ public:
                              llvm::Value *This);
 
   void EmitNewArrayInitializer(const CXXNewExpr *E, QualType elementType,
-                               llvm::Value *NewPtr, llvm::Value *NumElements,
+                               llvm::Type *ElementTy, llvm::Value *NewPtr,
+                               llvm::Value *NumElements,
                                llvm::Value *AllocSizeWithoutCookie);
 
   void EmitCXXTemporary(const CXXTemporary *Temporary, QualType TempType,

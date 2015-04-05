@@ -807,8 +807,9 @@ static void emitStoresForInitAfterMemset(llvm::Constant *Init, llvm::Value *Loc,
 
       // If necessary, get a pointer to the element and emit it.
       if (!Elt->isNullValue() && !isa<llvm::UndefValue>(Elt))
-        emitStoresForInitAfterMemset(Elt, Builder.CreateConstGEP2_32(Loc, 0, i),
-                                     isVolatile, Builder);
+        emitStoresForInitAfterMemset(
+            Elt, Builder.CreateConstGEP2_32(Init->getType(), Loc, 0, i),
+            isVolatile, Builder);
     }
     return;
   }
@@ -821,8 +822,9 @@ static void emitStoresForInitAfterMemset(llvm::Constant *Init, llvm::Value *Loc,
 
     // If necessary, get a pointer to the element and emit it.
     if (!Elt->isNullValue() && !isa<llvm::UndefValue>(Elt))
-      emitStoresForInitAfterMemset(Elt, Builder.CreateConstGEP2_32(Loc, 0, i),
-                                   isVolatile, Builder);
+      emitStoresForInitAfterMemset(
+          Elt, Builder.CreateConstGEP2_32(Init->getType(), Loc, 0, i),
+          isVolatile, Builder);
   }
 }
 
