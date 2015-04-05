@@ -1761,14 +1761,15 @@ ProcessDependAddresses(CodeGenFunction &CGF, const OMPTaskDirective &S) {
         llvm::Value *DepElPtr =
             CGF.Builder.CreateConstInBoundsGEP2_32(Addresses, 0, FieldCounter);
         // [CounterVal].base_addr = &expr;
-        llvm::Value *DepBaseAddr =
-            CGF.Builder.CreateConstGEP2_32(DepElPtr, 0, 0);
+        llvm::Value *DepBaseAddr = CGF.Builder.CreateConstGEP2_32(
+          DepElPtr->getType()->getPointerElementType(), DepElPtr, 0, 0);
         llvm::Value *BaseAddr =
             CGF.EmitAnyExpr((*I)->getBegins(i)).getScalarVal();
         BaseAddr = CGF.Builder.CreatePointerCast(BaseAddr, IntPtrTy);
         CGF.Builder.CreateStore(BaseAddr, DepBaseAddr);
         // [CounterVal].len = size;
-        llvm::Value *DepLen = CGF.Builder.CreateConstGEP2_32(DepElPtr, 0, 1);
+        llvm::Value *DepLen = CGF.Builder.CreateConstGEP2_32(
+          DepElPtr->getType()->getPointerElementType(), DepElPtr, 0, 1);
         const Expr *Size = (*I)->getSizeInBytes(i);
         if (Size->getType()->isAnyPointerType()) {
           // Size is not a size, but the ending pointer
@@ -1786,7 +1787,8 @@ ProcessDependAddresses(CodeGenFunction &CGF, const OMPTaskDirective &S) {
           CGF.Builder.CreateStore(CGF.EmitScalarExpr(Size), DepLen);
         }
         // [CounterVal].flags = size;
-        llvm::Value *DepFlags = CGF.Builder.CreateConstGEP2_32(DepElPtr, 0, 2);
+        llvm::Value *DepFlags = CGF.Builder.CreateConstGEP2_32(
+          DepElPtr->getType()->getPointerElementType(), DepElPtr, 0, 2);
         CGF.Builder.CreateStore(llvm::ConstantInt::get(BoolTy, DepType),
                                 DepFlags);
       }
@@ -3934,6 +3936,7 @@ CodeGenFunction::EmitPreOMPReductionClause(const OMPReductionClause &C,
       }
     }
     llvm::Value *Addr = Builder.CreateConstGEP2_32(
+        ReductionRecVar->getType()->getPointerElementType(),
         ReductionRecVar, 0, CGM.OpenMPSupport.getReductionVarIdx(VD),
         CGM.getMangledName(VD) + ".addr");
     Builder.CreateStore(Private, Addr);
@@ -4031,6 +4034,7 @@ CodeGenFunction::EmitPostOMPReductionClause(const OMPReductionClause &C,
     // EmitExprAsInit(&UOp, VD, LVal, false);
     EmitAnyExprToMem(&UOp, AI, UOp.getType().getQualifiers(), false);
     llvm::Value *Addr2 = Builder.CreateConstGEP2_32(
+        ReductionRecVar->getType()->getPointerElementType(),
         ReductionRecVar, 0, CGM.OpenMPSupport.getReductionVarIdx(VD),
         CGM.getMangledName(VD) + ".addr.rhs");
     CGM.OpenMPSupport.addOpenMPPrivateVar(Par1, AI);
@@ -4050,6 +4054,7 @@ CodeGenFunction::EmitPostOMPReductionClause(const OMPReductionClause &C,
       llvm::Value *GTid =
           OPENMPRTL_THREADNUM(C.getLocStart(), *this);
       Addr2 = Builder.CreateConstGEP2_32(
+          ReductionRecVar->getType()->getPointerElementType(),
           ReductionRecVar, 0, CGM.OpenMPSupport.getReductionVarIdx(VD),
           CGM.getMangledName(VD) + ".addr.rhs");
       llvm::Type *ArgTy = ConvertTypeForMem(OPENMPRTL_ATOMICTYPE(*this, QTy));
@@ -4068,6 +4073,7 @@ CodeGenFunction::EmitPostOMPReductionClause(const OMPReductionClause &C,
       EmitAnyExprToMem(&UOp, AI, UOp.getType().getQualifiers(), false);
       // EmitExprAsInit(&UOp, VD, LVal, false);
       Addr2 = Builder.CreateConstGEP2_32(
+          ReductionRecVar->getType()->getPointerElementType(),
           ReductionRecVar, 0, CGM.OpenMPSupport.getReductionVarIdx(VD),
           CGM.getMangledName(VD) + "addr.rhs");
       CGM.OpenMPSupport.addOpenMPPrivateVar(Par1, AI);
@@ -4648,7 +4654,9 @@ void CodeGenFunction::EmitOMPSingleDirective(const OMPSingleDirective &S) {
              I != E; ++I, ++FieldNum) {
           // Store the address into our record.
           Builder.CreateStore(EmitLValue(*I).getAddress(),
-                              Builder.CreateConstGEP2_32(CpyVar, 0, FieldNum));
+                              Builder.CreateConstGEP2_32(
+                                CpyVar->getType()->getPointerElementType(),
+                                CpyVar, 0, FieldNum));
         }
 
         // Generate field copying in the copy-function.
@@ -4675,10 +4683,12 @@ void CodeGenFunction::EmitOMPSingleDirective(const OMPSingleDirective &S) {
             // const VarDecl *VD =
             // cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl());
             QualType QTy = (*I)->getType();
-            llvm::Value *Dst =
-                CGF.Builder.CreateConstGEP2_32(DstBase, 0, FieldNum);
-            llvm::Value *Src =
-                CGF.Builder.CreateConstGEP2_32(SrcBase, 0, FieldNum);
+            llvm::Value *Dst = CGF.Builder.CreateConstGEP2_32(
+              DstBase->getType()->getPointerElementType(),
+              DstBase, 0, FieldNum);
+            llvm::Value *Src = CGF.Builder.CreateConstGEP2_32(
+              SrcBase->getType()->getPointerElementType(),
+              SrcBase, 0, FieldNum);
             llvm::Type *PtrType = ConvertType(getContext().getPointerType(QTy));
             llvm::Value *LoadDst = CGF.EmitLoadOfScalar(
                 Dst, false, CGM.getDataLayout().getPrefTypeAlignment(PtrType),
@@ -4852,9 +4862,11 @@ CodeGenFunction::EmitCloseOMPReductionClause(const OMPReductionClause &C,
     const VarDecl *Par1 = cast<VarDecl>(cast<DeclRefExpr>(*Par1I)->getDecl());
     const VarDecl *Par2 = cast<VarDecl>(cast<DeclRefExpr>(*Par2I)->getDecl());
     llvm::Value *Addr1 = CGF.Builder.CreateConstGEP2_32(
+        Arg1->getType()->getPointerElementType(),
         Arg1, 0, CGM.OpenMPSupport.getReductionVarIdx(VD),
         CGM.getMangledName(VD) + ".addr.lhs");
     llvm::Value *Addr2 = CGF.Builder.CreateConstGEP2_32(
+        Arg2->getType()->getPointerElementType(),
         Arg2, 0, CGM.OpenMPSupport.getReductionVarIdx(VD),
         CGM.getMangledName(VD) + ".addr.rhs");
     CGM.OpenMPSupport.addOpenMPPrivateVar(Par1, Addr1);
@@ -5511,8 +5523,10 @@ void CodeGenFunction::EmitOMPTargetDirective(const OMPTargetDirective &S) {
 
       for(unsigned i=0; i<MapClausePointerValues.size(); ++i){
 
-        llvm::Value *P = Builder.CreateConstInBoundsGEP1_32(MapClausePointers,i);
-        llvm::Value *S = Builder.CreateConstInBoundsGEP1_32(MapClauseSizes,i);
+        llvm::Value *P = Builder.CreateConstInBoundsGEP1_32(CGM.VoidPtrTy,
+                           MapClausePointers, i);
+        llvm::Value *S = Builder.CreateConstInBoundsGEP1_32(CGM.Int32Ty,
+                           MapClauseSizes, i);
 
         Builder.CreateStore(MapClausePointerValues[i],P);
         Builder.CreateStore(MapClauseSizeValues[i],S);
@@ -5564,7 +5578,8 @@ void CodeGenFunction::EmitOMPTargetDirective(const OMPTargetDirective &S) {
         unsigned VS =
             CGM.getDataLayout().getTypeSizeInBits(ArgTy->getElementType()) / 8;
 
-        llvm::Value *P = Builder.CreateConstInBoundsGEP1_32(RealArgPointers,idx);
+        llvm::Value *P = Builder.CreateConstInBoundsGEP1_32(CGM.VoidPtrTy,
+                           RealArgPointers, idx);
 
         Builder.CreateStore(VP,P);
         RealArgSizeValues.push_back(VS);
