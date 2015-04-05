@@ -1016,7 +1016,8 @@ llvm::Constant* CGOpenMPRuntime::GetTargetRegionsDescriptor(){
   llvm::Constant *TargetRegionsDescriptorInit = llvm::ConstantStruct::get(
       DescTy,
       llvm::ConstantInt::get(CGM.Int32Ty, Devices.size()),
-      llvm::ConstantExpr::getGetElementPtr(DeviceImages,Index),
+      llvm::ConstantExpr::getGetElementPtr(DeviceImages->getValueType(),
+                                           DeviceImages, Index),
       HostEntriesBegin, HostEntriesEnd, NULL);
 
   TargetRegionsDescriptor = new llvm::GlobalVariable(
