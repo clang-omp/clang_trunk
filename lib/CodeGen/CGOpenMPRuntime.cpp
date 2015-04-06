@@ -103,8 +103,8 @@ llvm::Value *CGOpenMPRuntime::EmitOpenMPUpdateLocation(
   }
 
   // char **psource = &.kmpc_loc_<flags>.addr.psource;
-  llvm::Value *PSource =
-      CGF.Builder.CreateConstInBoundsGEP2_32(LocValue, 0, IdentField_PSource);
+  auto *PSource = CGF.Builder.CreateConstInBoundsGEP2_32(IdentTy, LocValue, 0,
+                                                         IdentField_PSource);
 
   auto OMPDebugLoc = OpenMPDebugLocMap.lookup(Loc.getRawEncoding());
   if (OMPDebugLoc == nullptr) {

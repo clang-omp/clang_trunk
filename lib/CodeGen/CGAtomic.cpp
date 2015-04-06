@@ -155,7 +155,7 @@ namespace {
       assert(LVal.isSimple());
       llvm::Value *addr = LVal.getAddress();
       if (hasPadding())
-        addr = CGF.Builder.CreateStructGEP(addr, 0);
+        addr = CGF.Builder.CreateStructGEP(nullptr, addr, 0);
 
       return LValue::MakeAddr(addr, getValueType(), LVal.getAlignment(),
                               CGF.getContext(), LVal.getTBAAInfo());
@@ -948,7 +948,7 @@ RValue AtomicInfo::convertTempToRValue(llvm::Value *addr,
 
     // Drill into the padding structure if we have one.
     if (hasPadding())
-      addr = CGF.Builder.CreateStructGEP(addr, 0);
+      addr = CGF.Builder.CreateStructGEP(nullptr, addr, 0);
 
     // Otherwise, just convert the temporary to an r-value using the
     // normal conversion routine.
@@ -956,7 +956,7 @@ RValue AtomicInfo::convertTempToRValue(llvm::Value *addr,
   } else if (LVal.isBitField())
     return CGF.EmitLoadOfBitfieldLValue(LValue::MakeBitfield(
         addr, LVal.getBitFieldInfo(), LVal.getType(), LVal.getAlignment()));
-  else if (LVal.isVectorElt())
+  if (LVal.isVectorElt())
     return CGF.EmitLoadOfLValue(LValue::MakeVectorElt(addr, LVal.getVectorIdx(),
                                                       LVal.getType(),
                                                       LVal.getAlignment()),
