@@ -1733,7 +1733,7 @@ ProcessDependAddresses(CodeGenFunction &CGF, const OMPTaskDirective &S) {
     llvm::AllocaInst *Addresses = CGF.CreateTempAlloca(DepListTy, ".dep.list.");
     Addresses->setAlignment(CGM.OpenMPSupport.getKMPDependInfoTypeAlign());
     DependenceAddresses =
-        CGF.Builder.CreateConstInBoundsGEP2_32(Addresses, 0, 0);
+        CGF.Builder.CreateConstInBoundsGEP2_32(DepListTy, Addresses, 0, 0);
 
     unsigned FieldCounter = 0;
     for (SmallVectorImpl<const OMPDependClause *>::iterator
@@ -1759,17 +1759,18 @@ ProcessDependAddresses(CodeGenFunction &CGF, const OMPTaskDirective &S) {
       for (unsigned i = 0, e = (*I)->varlist_size(); i < e;
            ++i, ++FieldCounter) {
         llvm::Value *DepElPtr =
-            CGF.Builder.CreateConstInBoundsGEP2_32(Addresses, 0, FieldCounter);
+            CGF.Builder.CreateConstInBoundsGEP2_32(DepListTy, Addresses, 0,
+                                                   FieldCounter);
         // [CounterVal].base_addr = &expr;
         llvm::Value *DepBaseAddr = CGF.Builder.CreateConstGEP2_32(
-          DepElPtr->getType()->getPointerElementType(), DepElPtr, 0, 0);
+          DepTy, DepElPtr, 0, 0);
         llvm::Value *BaseAddr =
             CGF.EmitAnyExpr((*I)->getBegins(i)).getScalarVal();
         BaseAddr = CGF.Builder.CreatePointerCast(BaseAddr, IntPtrTy);
         CGF.Builder.CreateStore(BaseAddr, DepBaseAddr);
         // [CounterVal].len = size;
         llvm::Value *DepLen = CGF.Builder.CreateConstGEP2_32(
-          DepElPtr->getType()->getPointerElementType(), DepElPtr, 0, 1);
+          DepTy, DepElPtr, 0, 1);
         const Expr *Size = (*I)->getSizeInBytes(i);
         if (Size->getType()->isAnyPointerType()) {
           // Size is not a size, but the ending pointer
@@ -1788,7 +1789,7 @@ ProcessDependAddresses(CodeGenFunction &CGF, const OMPTaskDirective &S) {
         }
         // [CounterVal].flags = size;
         llvm::Value *DepFlags = CGF.Builder.CreateConstGEP2_32(
-          DepElPtr->getType()->getPointerElementType(), DepElPtr, 0, 2);
+          DepTy, DepElPtr, 0, 2);
         CGF.Builder.CreateStore(llvm::ConstantInt::get(BoolTy, DepType),
                                 DepFlags);
       }
@@ -2012,6 +2013,7 @@ void CodeGenFunction::EmitOMPTaskDirective(const OMPTaskDirective &S) {
 
   // Emit call to the helper function.
   llvm::Value *Addr = CGF.Builder.CreateConstInBoundsGEP2_32(
+      TaskTTy->getPointerTo(),
       CGF.Builder.CreateLoad(TaskTPtr, ".arg2.shareds"), 0,
       llvm::TaskTBuilder::shareds, ".arg2.shareds.addr");
   llvm::Value *Arg2Val = CGF.Builder.CreateLoad(Addr, ".arg2.shareds.");
@@ -2037,6 +2039,7 @@ void CodeGenFunction::EmitOMPTaskDirective(const OMPTaskDirective &S) {
     llvm::BasicBlock *UntiedEnd = 0;
     if (CGM.OpenMPSupport.getUntied()) {
       llvm::Value *Addr = CGF.Builder.CreateConstInBoundsGEP2_32(
+          TaskTTy->getPointerTo(),
           CGF.Builder.CreateLoad(TaskTPtr, ".arg2.part_id."), 0,
           llvm::TaskTBuilder::part_id, ".part_id.addr");
       llvm::Value *PartId = CGF.Builder.CreateLoad(Addr, ".part_id.");
@@ -2108,10 +2111,12 @@ void CodeGenFunction::EmitOMPTaskDirective(const OMPTaskDirective &S) {
         EmitRuntimeCall(OPENMPRTL_FUNC(omp_task_alloc), makeArrayRef(RealArgs),
                         ".task_t.val.addr");
     llvm::Value *SharedAddr = Builder.CreateConstInBoundsGEP2_32(
+        TaskTTy->getPointerTo(),
         TaskTVal, 0, llvm::TaskTBuilder::shareds, ".shared.addr");
     EmitAggregateAssign(Builder.CreateLoad(SharedAddr), Arg, QTy);
     if (Destructors) {
       llvm::Value *DestructorsAddr = Builder.CreateConstInBoundsGEP2_32(
+          TaskTTy->getPointerTo(),
           TaskTVal, 0, llvm::TaskTBuilder::destructors, ".destructors.addr");
       Builder.CreateStore(Destructors, DestructorsAddr);
     }
@@ -5519,7 +5524,7 @@ void CodeGenFunction::EmitOMPTargetDirective(const OMPTargetDirective &S) {
           MapClauseTypesInit, ".mapped_types");
 
       MapClauseTypes =
-          Builder.CreateConstInBoundsGEP2_32(MapClauseTypesTmp,0,0);
+          Builder.CreateConstInBoundsGEP2_32(CGM.Int32Ty,MapClauseTypesTmp,0,0);
 
       for(unsigned i=0; i<MapClausePointerValues.size(); ++i){
 
@@ -5604,9 +5609,9 @@ void CodeGenFunction::EmitOMPTargetDirective(const OMPTargetDirective &S) {
           RealArgTypesInit, ".tgt_types");
 
       RealArgSizes =
-          Builder.CreateConstInBoundsGEP2_32(RealArgSizesTmp,0,0);
+          Builder.CreateConstInBoundsGEP2_32(CGM.Int32Ty,RealArgSizesTmp,0,0);
       RealArgTypes =
-          Builder.CreateConstInBoundsGEP2_32(RealArgTypesTmp,0,0);
+          Builder.CreateConstInBoundsGEP2_32(CGM.Int32Ty,RealArgTypesTmp,0,0);
 
     } else {
       RealArgPointers = llvm::Constant::getNullValue(CGM.VoidPtrPtrTy);

@@ -625,7 +625,8 @@ void CGOpenMPRuntime::PostProcessTargetFunction(const Decl *D,
 }
 
 static llvm::Value *GEP(CGBuilderTy &B, llvm::Value *Base, int field) {
-  return B.CreateConstInBoundsGEP2_32(Base, 0, field);
+  return B.CreateConstInBoundsGEP2_32(Base->getType()->getPointerElementType(),
+                                      Base, 0, field);
 }
 
 static void StoreField(CGBuilderTy &B, llvm::Value *Val, llvm::Value *Dst,
