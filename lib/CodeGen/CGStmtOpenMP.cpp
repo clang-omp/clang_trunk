@@ -2013,7 +2013,7 @@ void CodeGenFunction::EmitOMPTaskDirective(const OMPTaskDirective &S) {
 
   // Emit call to the helper function.
   llvm::Value *Addr = CGF.Builder.CreateConstInBoundsGEP2_32(
-      TaskTTy->getPointerTo(),
+      TaskTTy,
       CGF.Builder.CreateLoad(TaskTPtr, ".arg2.shareds"), 0,
       llvm::TaskTBuilder::shareds, ".arg2.shareds.addr");
   llvm::Value *Arg2Val = CGF.Builder.CreateLoad(Addr, ".arg2.shareds.");
@@ -2039,7 +2039,7 @@ void CodeGenFunction::EmitOMPTaskDirective(const OMPTaskDirective &S) {
     llvm::BasicBlock *UntiedEnd = 0;
     if (CGM.OpenMPSupport.getUntied()) {
       llvm::Value *Addr = CGF.Builder.CreateConstInBoundsGEP2_32(
-          TaskTTy->getPointerTo(),
+          TaskTTy,
           CGF.Builder.CreateLoad(TaskTPtr, ".arg2.part_id."), 0,
           llvm::TaskTBuilder::part_id, ".part_id.addr");
       llvm::Value *PartId = CGF.Builder.CreateLoad(Addr, ".part_id.");
@@ -2111,12 +2111,12 @@ void CodeGenFunction::EmitOMPTaskDirective(const OMPTaskDirective &S) {
         EmitRuntimeCall(OPENMPRTL_FUNC(omp_task_alloc), makeArrayRef(RealArgs),
                         ".task_t.val.addr");
     llvm::Value *SharedAddr = Builder.CreateConstInBoundsGEP2_32(
-        TaskTTy->getPointerTo(),
+        TaskTTy,
         TaskTVal, 0, llvm::TaskTBuilder::shareds, ".shared.addr");
     EmitAggregateAssign(Builder.CreateLoad(SharedAddr), Arg, QTy);
     if (Destructors) {
       llvm::Value *DestructorsAddr = Builder.CreateConstInBoundsGEP2_32(
-          TaskTTy->getPointerTo(),
+          TaskTTy,
           TaskTVal, 0, llvm::TaskTBuilder::destructors, ".destructors.addr");
       Builder.CreateStore(Destructors, DestructorsAddr);
     }
@@ -5524,7 +5524,8 @@ void CodeGenFunction::EmitOMPTargetDirective(const OMPTargetDirective &S) {
           MapClauseTypesInit, ".mapped_types");
 
       MapClauseTypes =
-          Builder.CreateConstInBoundsGEP2_32(CGM.Int32Ty,MapClauseTypesTmp,0,0);
+          Builder.CreateConstInBoundsGEP2_32(MapClauseTypesInit->getType(),
+                                             MapClauseTypesTmp,0,0);
 
       for(unsigned i=0; i<MapClausePointerValues.size(); ++i){
 
@@ -5609,9 +5610,11 @@ void CodeGenFunction::EmitOMPTargetDirective(const OMPTargetDirective &S) {
           RealArgTypesInit, ".tgt_types");
 
       RealArgSizes =
-          Builder.CreateConstInBoundsGEP2_32(CGM.Int32Ty,RealArgSizesTmp,0,0);
+          Builder.CreateConstInBoundsGEP2_32(RealArgSizesInit->getType(),
+                                             RealArgSizesTmp,0,0);
       RealArgTypes =
-          Builder.CreateConstInBoundsGEP2_32(CGM.Int32Ty,RealArgTypesTmp,0,0);
+          Builder.CreateConstInBoundsGEP2_32(RealArgTypesInit->getType(),
+                                             RealArgTypesTmp,0,0);
 
     } else {
       RealArgPointers = llvm::Constant::getNullValue(CGM.VoidPtrPtrTy);
