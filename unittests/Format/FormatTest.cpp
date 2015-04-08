@@ -812,9 +812,11 @@ TEST_F(FormatTest, FormatsLabels) {
                "    some_more_code();\n"
                "  }\n"
                "}");
-  verifyFormat("some_code();\n"
+  verifyFormat("{\n"
+               "  some_code();\n"
                "test_label:\n"
-               "some_other_code();");
+               "  some_other_code();\n"
+               "}");
 }
 
 //===----------------------------------------------------------------------===//
@@ -1895,6 +1897,8 @@ TEST_F(FormatTest, UnderstandsAccessSpecifiers) {
                "  void f() {}\n"
                "public Q_SLOTS:\n"
                "  void f() {}\n"
+               "signals:\n"
+               "  void g();\n"
                "};");
 }
 
@@ -2142,6 +2146,12 @@ TEST_F(FormatTest, FormatsBitfields) {
   verifyFormat("struct A {\n"
                "  int aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : 1,\n"
                "      bbbbbbbbbbbbbbbbbbbbbbbbb;\n"
+               "};");
+  verifyFormat("struct MyStruct {\n"
+               "  uchar data;\n"
+               "  uchar : 8;\n"
+               "  uchar : 8;\n"
+               "  uchar other;\n"
                "};");
 }
 
