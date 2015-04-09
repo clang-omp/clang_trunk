@@ -891,7 +891,7 @@ public:
 ///   DeclRefExprBits.HasTemplateKWAndArgsInfo:
 ///       Specifies when this declaration reference expression has an explicit
 ///       C++ template keyword and/or template argument list.
-///   DeclRefExprBits.RefersToCapturedVariable
+///   DeclRefExprBits.RefersToEnclosingVariableOrCapture
 ///       Specifies when this declaration reference expression (validly)
 ///       refers to a captured variable.
 class DeclRefExpr : public Expr {
@@ -938,7 +938,7 @@ class DeclRefExpr : public Expr {
   DeclRefExpr(const ASTContext &Ctx,
               NestedNameSpecifierLoc QualifierLoc,
               SourceLocation TemplateKWLoc,
-              ValueDecl *D, bool RefersToCapturedVariable,
+              ValueDecl *D, bool RefersToEnclosingVariableOrCapture,
               const DeclarationNameInfo &NameInfo,
               NamedDecl *FoundD,
               const TemplateArgumentListInfo *TemplateArgs,
@@ -953,7 +953,7 @@ class DeclRefExpr : public Expr {
   void computeDependence(const ASTContext &C);
 
 public:
-  DeclRefExpr(ValueDecl *D, bool RefersToCapturedVariable, QualType T,
+  DeclRefExpr(ValueDecl *D, bool RefersToEnclosingVariableOrCapture, QualType T,
               ExprValueKind VK, SourceLocation L,
               const DeclarationNameLoc &LocInfo = DeclarationNameLoc())
     : Expr(DeclRefExprClass, T, VK, OK_Ordinary, false, false, false, false),
@@ -962,21 +962,21 @@ public:
     DeclRefExprBits.HasTemplateKWAndArgsInfo = 0;
     DeclRefExprBits.HasFoundDecl = 0;
     DeclRefExprBits.HadMultipleCandidates = 0;
-    DeclRefExprBits.RefersToCapturedVariable = RefersToCapturedVariable;
+    DeclRefExprBits.RefersToEnclosingVariableOrCapture = RefersToEnclosingVariableOrCapture;
     computeDependence(D->getASTContext());
   }
 
   static DeclRefExpr *
   Create(const ASTContext &Context, NestedNameSpecifierLoc QualifierLoc,
          SourceLocation TemplateKWLoc, ValueDecl *D,
-         bool RefersToCapturedVariable, SourceLocation NameLoc, QualType T,
+         bool RefersToEnclosingVariableOrCapture, SourceLocation NameLoc, QualType T,
          ExprValueKind VK, NamedDecl *FoundD = nullptr,
          const TemplateArgumentListInfo *TemplateArgs = nullptr);
 
   static DeclRefExpr *
   Create(const ASTContext &Context, NestedNameSpecifierLoc QualifierLoc,
          SourceLocation TemplateKWLoc, ValueDecl *D,
-         bool RefersToCapturedVariable, const DeclarationNameInfo &NameInfo,
+         bool RefersToEnclosingVariableOrCapture, const DeclarationNameInfo &NameInfo,
          QualType T, ExprValueKind VK, NamedDecl *FoundD = nullptr,
          const TemplateArgumentListInfo *TemplateArgs = nullptr);
 
@@ -1150,8 +1150,8 @@ public:
   }
 
   /// \brief Does this DeclRefExpr refer to a captured variable?
-  bool refersToCapturedVariable() const {
-    return DeclRefExprBits.RefersToCapturedVariable;
+  bool refersToEnclosingVariableOrCapture() const {
+    return DeclRefExprBits.RefersToEnclosingVariableOrCapture;
   }
 
   static bool classof(const Stmt *T) {

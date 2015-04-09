@@ -1949,7 +1949,7 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
     }
 
     // Check for captured variables.
-    if (E->refersToCapturedVariable()) {
+    if (E->refersToEnclosingVariableOrCapture()) {
       if (auto *FD = LambdaCaptureFields.lookup(VD))
         return EmitCapturedFieldLValue(*this, FD, CXXABIThisValue);
       else if (CapturedStmtInfo) {
@@ -1999,7 +1999,7 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
                                          CapturedStmtInfo->getContextValue());
       }
 
-      assert(isa<BlockDecl>(CurCodeDecl) && E->refersToCapturedVariable());
+      assert(isa<BlockDecl>(CurCodeDecl) && E->refersToEnclosingVariableOrCapture());
       return MakeAddrLValue(GetAddrOfBlockDecl(VD, isBlockVariable),
                             T, Alignment);
     }
