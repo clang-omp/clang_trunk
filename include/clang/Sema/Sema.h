@@ -7399,6 +7399,10 @@ public:
   void AddAlignValueAttr(SourceRange AttrRange, Decl *D, Expr *E,
                          unsigned SpellingListIndex);
 
+  /// \brief Checks if the specified variable is used in one of the private
+  /// clauses in OpenMP constructs.
+  bool IsOpenMPCapturedVar(VarDecl *VD, Scope *&StopScope);
+
   // OpenMP directives and clauses.
 private:
   void *VarDataSharingAttributesStack;
@@ -7457,6 +7461,10 @@ public:
   /// \brief Called on start of new data sharing attribute block.
   void StartOpenMPDSABlock(OpenMPDirectiveKind K,
                            const DeclarationNameInfo &DirName, Scope *CurScope);
+
+  /// \brief Called when entering a captured region for the current directive
+  void EnterOpenMPDSACapturedRegion();
+
   /// \brief Called on end of data sharing attribute block.
   void EndOpenMPDSABlock(Stmt *CurDirective);
 

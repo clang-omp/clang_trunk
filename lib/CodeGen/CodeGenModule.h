@@ -541,6 +541,9 @@ public:
     return *OpenMPRuntime;
   }
 
+  /// Return true iff an OpenMP runtime has been configured.
+  bool hasOpenMPRuntime() { return !!OpenMPRuntime; }
+
   /// Return a reference to the configured CUDA runtime.
   CGCUDARuntime &getCUDARuntime() {
     assert(CUDARuntime != nullptr);
@@ -1164,6 +1167,11 @@ public:
     DeferredVTables.push_back(RD);
   }
 
+  /// \brief Emit constructor that implements the OpenMP register lib call only
+  /// if required.
+  ///
+  void EmitOMPRegisterLib();
+
   /// \brief Emit a code for threadprivate variables.
   ///
   void EmitOMPThreadPrivate(const OMPThreadPrivateDecl *D);
@@ -1188,6 +1196,8 @@ public:
     struct OMPStackElemTy {
       OMPPrivateVarsTy PrivateVars;
       llvm::BasicBlock *IfEnd;
+      Expr *IfClauseCondition;
+      llvm::SmallVector<llvm::Value *, 16> offloadingMapArguments;
       llvm::Function *ReductionFunc;
       CodeGenModule &CGM;
       CodeGenFunction *RedCGF;
@@ -1229,13 +1239,19 @@ public:
       llvm::Type *TaskPrivateTy;
       QualType TaskPrivateQTy;
       llvm::Value *TaskPrivateBase;
-      llvm::Value *NumTeams;
-      llvm::Value *ThreadLimit;
+      Expr *NumTeams;
+      Expr *ThreadLimit;
       llvm::Value **WaitDepsArgs;
-      llvm::SmallVector<llvm::Value*,16> MapPointers;
-      llvm::SmallVector<llvm::Value*,16> MapSizes;
-      llvm::SmallVector<unsigned,16> MapTypes;
+      llvm::SmallVector<const Expr *, 8> OffloadingMapDecls;
+      llvm::SmallVector<llvm::Value *, 8> OffloadingMapBasePtrs;
+      llvm::SmallVector<llvm::Value *, 8> OffloadingMapPtrs;
+      llvm::SmallVector<llvm::Value *, 8> OffloadingMapSizes;
+      llvm::SmallVector<unsigned, 8> OffloadingMapTypes;
+      bool MapsBegin;
+      bool MapsEnd;
+      llvm::CallInst* OffloadingMapBeginFunctionCall;
       llvm::Value* OffloadingDevice;
+      llvm::CallInst* OffloadingHostFunctionCall;
       OMPStackElemTy(CodeGenModule &CGM);
       ~OMPStackElemTy();
     };
@@ -1247,6 +1263,7 @@ public:
   public:
     OpenMPSupportStackTy(CodeGenModule &CGM)
       : OpenMPThreadPrivate(), OpenMPStack(), CGM(CGM), KMPDependInfoType(0) { }
+    bool isEmpty() { return OpenMPStack.empty(); }
     const Expr *hasThreadPrivateVar(const VarDecl *VD) {
       const VarDecl *RVD = VD->getMostRecentDecl();
       while (RVD) {
@@ -1311,6 +1328,15 @@ public:
       OpenMPStack.back().IfEnd = 0;
       return BB;
     }
+    void setIfClauseCondition(Expr *IfClauseCondition) {
+      OpenMPStack.back().IfClauseCondition = IfClauseCondition;
+    }
+    void resetIfClauseCondition() {
+      OpenMPStack.back().IfClauseCondition = nullptr;
+    }
+    Expr *getIfClauseCondition() {
+      return OpenMPStack.back().IfClauseCondition;
+    }
     CodeGenFunction &getCGFForReductionFunction();
     void getReductionFunctionArgs(llvm::Value *&Arg1, llvm::Value *&Arg2);
     void registerReductionVar(const VarDecl *VD, llvm::Type *Type);
@@ -1359,16 +1385,32 @@ public:
     void setKMPDependInfoType(llvm::Type *Ty, unsigned Align) { KMPDependInfoType = Ty; KMPDependInfoTypeAlign = Align; }
     llvm::Type *getKMPDependInfoType() { return KMPDependInfoType; }
     unsigned getKMPDependInfoTypeAlign() { return KMPDependInfoTypeAlign; }
-    void setNumTeams(llvm::Value *Num);
-    void setThreadLimit(llvm::Value *Num);
-    llvm::Value *getNumTeams();
-    llvm::Value *getThreadLimit();
+    void setNumTeams(Expr *Num);
+    void setThreadLimit(Expr *Num);
+    Expr *getNumTeams();
+    Expr *getThreadLimit();
     void setWaitDepsArgs(llvm::Value **Args);
     llvm::Value **getWaitDepsArgs();
-    void getMapData(ArrayRef<llvm::Value*> &MapPointers, ArrayRef<llvm::Value*> &MapSizes, ArrayRef<unsigned> &MapTypes);
-    void addMapData(llvm::Value *MapPointer, llvm::Value *MapSize, unsigned MapType);
+    void addOffloadingMap(const Expr *DExpr, llvm::Value *BasePtr, llvm::Value *Ptr, llvm::Value *Size, unsigned Type);
+    void getOffloadingMapArrays(ArrayRef<const Expr*> &DExprs, ArrayRef<llvm::Value*> &BasePtrs, ArrayRef<llvm::Value*> &Ptrs, ArrayRef<llvm::Value*> &Sizes, ArrayRef<unsigned> &Types);
+    llvm::CallInst*  getOffloadingMapBeginFunctionCall();
+    void setOffloadingMapBeginFunctionCall(llvm::CallInst *OffloadingMapBeginFunctionCall);
+    void setOffloadingMapArguments(llvm::ArrayRef<llvm::Value *> Args) {
+      for (auto Arg : Args) {
+        OpenMPStack.back().offloadingMapArguments.push_back(Arg);
+      }
+    }
+    llvm::SmallVector<llvm::Value *, 16> &getOffloadingMapArguments() {
+      return OpenMPStack.back().offloadingMapArguments;
+    }
+    void setMapsBegin(bool Flag);
+    bool getMapsBegin();
+    void setMapsEnd(bool Flag);
+    bool getMapsEnd();
     void setOffloadingDevice(llvm::Value *device);
     llvm::Value* getOffloadingDevice();
+    void setOffloadingHostFunctionCall(llvm::CallInst *OffloadingHostFunctionCall);
+    llvm::CallInst* getOffloadingHostFunctionCall();
   };
 
   OpenMPSupportStackTy OpenMPSupport;

@@ -13,6 +13,7 @@
 
 #include "CodeGenFunction.h"
 #include "CGDebugInfo.h"
+#include "CGOpenMPRuntime.h"
 #include "CodeGenModule.h"
 #include "TargetInfo.h"
 #include "clang/AST/StmtVisitor.h"
@@ -2584,20 +2585,23 @@ void CodeGenFunction::InitOpenMPFunction(llvm::Value *Context,
   for (CapturedStmt::capture_init_iterator I = S.capture_init_begin(),
                                            E = S.capture_init_end();
        I != E; ++I, ++C, ++CurField) {
-    if (CurField->hasCapturedVLAType()) {
+
+    if (C->capturesVariableArrayType()){
       auto *ExprArg = EmitLoadOfLValue(EmitLValueForField(Base, *CurField),
                                        S.getLocStart()).getScalarVal();
       auto VAT = CurField->getCapturedVLAType();
       VLASizeMap[VAT->getSizeExpr()] = ExprArg;
-    } else if (C->capturesVariable()) {
-      QualType QTy = (*CurField)->getType();
-      if (QTy->isVariablyModifiedType()) {
-        EmitVariablyModifiedType(QTy);
-      }
-      const VarDecl *VD = C->getCapturedVar();
-      LValue LV = EmitLValueForField(Base, CapturedStmtInfo->lookup(VD));
-      CapturedStmtInfo->addCachedVar(VD, LV.getAddress());
+      continue;
     }
+
+    if (C->capturesVariable()) {
+      const VarDecl *VD = C->getCapturedVar();
+      LValue LV = EmitLValueForField(Base, *CurField);
+      CapturedStmtInfo->addCachedVar(VD, LV.getAddress());
+      continue;
+    }
+
+    llvm_unreachable("Don't know what to do with this capture!");
   }
 
   // If 'this' is captured, load it into CXXThisValue.
@@ -2610,40 +2614,174 @@ void CodeGenFunction::InitOpenMPFunction(llvm::Value *Context,
   }
 }
 
-void CodeGenFunction::InitOpenMPTargetFunction(const CapturedStmt &S) {
-  CapturedStmtInfo =
-      new CGOpenMPCapturedStmtInfo(0, S, CGM, S.getCapturedRegionKind());
+void CodeGenFunction::InitOpenMPTargetFunction(const OMPExecutableDirective &D,
+                                     const CapturedStmt &S,
+                                     SmallVector<llvm::Value**, 8> &VLAToLoad) {
 
   const RecordDecl *RD = S.getCapturedRecordDecl();
+  //QualType RecordTy = getContext().getRecordType(RD);
 
-  LValue Base = MakeNaturalAlignAddrLValue(CapturedStmtInfo->getContextValue(),
-                                           getContext().getTagDeclType(RD));
+  // Initialize the captured statement
+  assert(!CapturedStmtInfo &&
+      "Captured statement shouldn't have been created before!");
+
+  //llvm::Value *Context = CreateMemTemp(RecordTy, "agg.captured");
+  CapturedStmtInfo =
+        new CGOpenMPCapturedStmtInfo(nullptr, S, CGM, S.getCapturedRegionKind());
+
+
   llvm::Function::arg_iterator Arg = this->CurFn->arg_begin();
   RecordDecl::field_iterator CurField = RD->field_begin();
   CapturedStmt::const_capture_iterator C = S.capture_begin();
   for (CapturedStmt::capture_init_iterator I = S.capture_init_begin(),
                                            E = S.capture_init_end();
-       I != E; ++I, ++C, ++CurField, ++Arg) {
+       I != E; ++I, ++C, ++CurField) {
 
-    if (CurField->hasCapturedVLAType()) {
-      auto *ExprArg = EmitLoadOfLValue(EmitLValueForField(Base, *CurField),
-                                       S.getLocStart()).getScalarVal();
-      auto VAT = CurField->getCapturedVLAType();
-      VLASizeMap[VAT->getSizeExpr()] = ExprArg;
-    } else if (C->capturesVariable()) {
-      QualType QTy = (*CurField)->getType();
-      if (QTy->isVariablyModifiedType()) {
-        EmitVariablyModifiedType(QTy);
-      }
+    if (C->capturesVariableArrayType()){
+      const VariableArrayType *VAT = CurField->getCapturedVLAType();
+      assert( VAT && "No type in field??");
+
+      const Expr *E = VAT->getSizeExpr();
+      llvm::Value *&Vref = VLASizeMap[E]; //Builder.CreateLoad(Arg);
+      Vref = Arg;
+      VLAToLoad.push_back(&Vref);
+
+      ++Arg;
+      continue;
+    }
+
+    if (C->capturesVariable()) {
+
+      if (ShouldIgnoreOpenMPCapture(D,OMPD_target,cast<DeclRefExpr>(*I)))
+        continue;
+
       const VarDecl *VD = C->getCapturedVar();
       CapturedStmtInfo->addCachedVar(VD, Arg);
+
+      ++Arg;
+      continue;
     }
+
+    llvm_unreachable("Don't know what to do with this capture!");
   }
 
-  // If 'this' is captured, load it into CXXThisValue.
+  // If 'this' is captured, load it into CXXThisValue. We only do this if we
+  // have a context, otherwise we cannot emit anything.
   if (CapturedStmtInfo->isCXXThisExprCaptured()) {
     FieldDecl *FD = CapturedStmtInfo->getThisFieldDecl();
-    LValue ThisLValue = EmitLValueForField(Base, FD);
+    LValue LV = MakeNaturalAlignAddrLValue(CapturedStmtInfo->getContextValue(),
+                                           getContext().getTagDeclType(RD));
+    LValue ThisLValue = EmitLValueForField(LV, FD);
     CXXThisValue = EmitLoadOfLValue(ThisLValue, FD->getLocStart()).getScalarVal();
   }
+}
+
+void CodeGenFunction::InitOpenMPSharedizeParameters(
+		const CapturedStmt &S,
+		SmallVector<const VarDecl *, 8> &MappingDecls,
+		SmallVector<llvm::Value *, 8>   &MappingDeclVals,
+		SmallVector<llvm::Value**, 8> &VLAExprLocs,
+		SmallVector<llvm::Value *, 8>   &VLAExprVals) {
+
+  assert( MappingDecls.size() == MappingDeclVals.size()
+       && "Inconsistent sizes for map information");
+  assert( VLAExprLocs.size() == VLAExprVals.size()
+       && "Inconsistent VLA information");
+
+  const RecordDecl *RD = S.getCapturedRecordDecl();
+
+	if (!CapturedStmtInfo) {
+		CapturedStmtInfo =
+	      new CGOpenMPCapturedStmtInfo(nullptr, S, CGM, S.getCapturedRegionKind());
+	}
+
+	// for each captured arg
+	RecordDecl::field_iterator CurField = RD->field_begin();
+	CapturedStmt::const_capture_iterator C = S.capture_begin();
+	for (CapturedStmt::capture_init_iterator I = S.capture_init_begin(),
+	    E = S.capture_init_end();
+	    I != E; ++I, ++C, ++CurField) {
+
+    if (C->capturesVariableArrayType()){
+      const VariableArrayType *VAT = CurField->getCapturedVLAType();
+      assert( VAT && "No type in field??");
+
+      Expr *Size = VAT->getSizeExpr();
+
+      llvm::Value *&Vref = VLASizeMap[Size];
+      assert(Vref && "No VLA infor for this expression??");
+
+      // We need to have the VLA size stored so that can be moved to shared
+      // memory during the postprocessing of the generated code.
+      llvm::AllocaInst *Tmp = CreateTempAlloca(Vref->getType(),
+                                               "VLA_size_tmp");
+      CGM.getOpenMPRuntime().setRequiresSharedVersion(Tmp);
+      Builder.CreateStore(Vref,Tmp);
+
+      // We need to save the original information so that it gets restored after
+      // the region
+      llvm::Value *OldV = Vref;
+      Vref = Builder.CreateLoad(Tmp);
+      VLAExprLocs.push_back(&Vref);
+      VLAExprVals.push_back(OldV);
+      continue;
+    }
+
+	  if (C->capturesVariable()) {
+
+	    // Get the variable declaration that is being captured
+	    const VarDecl *VD = C->getCapturedVar();
+
+	    // Fixme: We probably need to make this possible to be overloaded for
+	    // certain targets
+
+	    // At this point, we may need to share local variables with other threads
+	    // which for some targets may not be possible. NVPTX is one of these targets therefore
+	    // we record these declarations in the runtime emission class so they can
+	    // be replaced by shared variables when the program is post-processed.
+
+	    // We need to check if this is a privatized declaration so it wouldn't be
+	    // defined in LocalDeclMap
+
+	    llvm::Value *GblCandidate = nullptr;
+	    bool IsPrivateCandidate = false;
+	    if (llvm::Value *V = CGM.OpenMPSupport.getOpenMPPrivateVar(VD))
+	    {
+	      IsPrivateCandidate = true;
+	      GblCandidate = V;
+	    }
+	    else if(llvm::Value *V = LocalDeclMap[VD])
+        GblCandidate = V;
+	    else
+	      continue;
+
+	    // NVPTX: We only need to force it to be shared if it is a local var
+	    // (alloc in in the stack) and we are not in a nested #parallel
+	    // if we are in a nested #parallel, the global candidate cannot be
+	    // passed through shared memory, as we are not extending parallelism,
+	    // the same thread executes in a serialized way the innermost #parallel
+	    // and we can directly use the original private alloca variable
+	    if (isa<llvm::AllocaInst>(GblCandidate) && !CGM.getOpenMPRuntime().IsNestedParallel()) {
+	      CGM.getOpenMPRuntime().setRequiresSharedVersion(GblCandidate);
+	    }
+	    else if (!IsPrivateCandidate) {
+	      continue;
+	    }
+
+	    // both global candidate and non global candidate that refer to
+	    // a private variable are handled here
+
+	    // Get info about the old reference so that it can be restored when
+	    // exiting the OpenMP region
+	    llvm::Value * oldref = CapturedStmtInfo->getCachedVar(VD);
+	    CapturedStmtInfo->addCachedVar(VD, GblCandidate);
+
+	    // Save the old references info to be restored later
+	    MappingDecls.push_back(VD);
+	    MappingDeclVals.push_back(oldref);
+	    continue;
+	  }
+
+	  llvm_unreachable("Don't know what to do with this capture!");
+	}
 }

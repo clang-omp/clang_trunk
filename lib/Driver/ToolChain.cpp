@@ -188,7 +188,7 @@ ToolChain::TranslateArgs(const llvm::opt::DerivedArgList &Args,
 
    isSuccess = true;
    return nullptr;
- }
+}
 
 Tool *ToolChain::SelectTool(const JobAction &JA) const {
   if (getDriver().ShouldUseClangCompiler(JA))

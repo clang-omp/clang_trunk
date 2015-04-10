@@ -1918,6 +1918,11 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
   if (const auto *VD = dyn_cast<VarDecl>(ND)) {
     // CodeGen for threadprivate variables.
     if (getLangOpts().OpenMP) {
+      if (CGM.getOpenMPRuntime().isTargetCapturedGlobal(VD)){
+        llvm::Value *Val = CapturedStmtInfo->getCachedVar(VD);
+        assert( Val && "Captured global not in the captured cache??");
+        return MakeAddrLValue(Val, T, Alignment);
+      }
       if (llvm::Value *Val =
               CGM.getOpenMPRuntime().CreateOpenMPThreadPrivateCached(
                   VD, E->getExprLoc(), *this))
@@ -2122,7 +2127,12 @@ LValue CodeGenFunction::EmitPredefinedLValue(const PredefinedExpr *E) {
   StringRef NameItems[] = {
       PredefinedExpr::getIdentTypeName(E->getIdentType()), FnName};
   std::string GVName = llvm::join(NameItems, NameItems + 2, ".");
-  if (CurCodeDecl && isa<BlockDecl>(CurCodeDecl)) {
+
+  // If this is outside of a function use the top level decl.
+  const Decl *CurDecl =
+    OpenMPRoot ? OpenMPRoot->CurCodeDecl : CurCodeDecl;
+
+  if (CurDecl && isa<BlockDecl>(CurDecl)) {
     auto C = CGM.GetAddrOfConstantCString(FnName, GVName.c_str(), 1);
     return MakeAddrLValue(C, E->getType());
   }

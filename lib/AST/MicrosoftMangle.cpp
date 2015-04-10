@@ -354,10 +354,10 @@ bool MicrosoftMangleContextImpl::shouldMangleCXXName(const NamedDecl *D) {
     const DeclContext *DC = getEffectiveDeclContext(D);
     // Check for extern variable declared locally.
     if (DC->isFunctionOrMethod() && D->hasLinkage())
-      while (!DC->isNamespace() && !DC->isTranslationUnit())
+      while (!DC->isNamespace() && !DC->isTranslationUnitOrDeclareTarget())
         DC = getEffectiveParentContext(DC);
 
-    if (DC->isTranslationUnit() && D->getFormalLinkage() == InternalLinkage &&
+    if (DC->isTranslationUnitOrDeclareTarget() && D->getFormalLinkage() == InternalLinkage &&
         !isa<VarTemplateSpecializationDecl>(D))
       return false;
   }
@@ -836,7 +836,7 @@ void MicrosoftCXXNameMangler::mangleNestedName(const NamedDecl *ND) {
   //           ::= <substitution> [<postfix>]
   const DeclContext *DC = getEffectiveDeclContext(ND);
 
-  while (!DC->isTranslationUnit()) {
+  while (!DC->isTranslationUnitOrDeclareTarget()) {
     if (isa<TagDecl>(ND) || isa<VarDecl>(ND)) {
       unsigned Disc;
       if (Context.getNextDiscriminator(ND, Disc)) {
