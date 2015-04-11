@@ -445,6 +445,7 @@ protected:
 public:
   NetBSDTargetInfo(const llvm::Triple &Triple) : OSTargetInfo<Target>(Triple) {
     this->UserLabelPrefix = "";
+    this->MCountName = "_mcount";
   }
 };
 
@@ -6845,6 +6846,8 @@ static TargetInfo *AllocateTarget(const llvm::Triple &Triple) {
     switch (os) {
     case llvm::Triple::Linux:
       return new LinuxTargetInfo<PPC64TargetInfo>(Triple);
+    case llvm::Triple::NetBSD:
+      return new NetBSDTargetInfo<PPC64TargetInfo>(Triple);
     default:
       return new PPC64TargetInfo(Triple);
     }
