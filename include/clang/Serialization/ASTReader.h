@@ -1324,7 +1324,7 @@ public:
             bool ValidateSystemInputs = false,
             bool UseGlobalIndex = true);
 
-  ~ASTReader();
+  ~ASTReader() override;
 
   SourceManager &getSourceManager() const { return SourceMgr; }
   FileManager &getFileManager() const { return FileMgr; }
