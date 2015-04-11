@@ -59,10 +59,10 @@
 // CHK-CODEGEN-HOST: @__omptgt__host_entries_end = external constant { i8*, i8*, i64 }
 
 // Targets image start and end - set by the linker
-// CHK-CODEGEN-HOST: @__omptgt__img_start_[[T1:powerpc64_ibm_linux_gnu]] = external constant i8
-// CHK-CODEGEN-HOST: @__omptgt__img_end_[[T1]] = external constant i8
-// CHK-CODEGEN-HOST: @__omptgt__img_start_[[T2:nvptx64_nvidia_cuda]] = external constant i8
-// CHK-CODEGEN-HOST: @__omptgt__img_end_[[T2]] = external constant i8
+// CHK-CODEGEN-HOST-DAG: @__omptgt__img_start_[[T1:powerpc64_ibm_linux_gnu]] = external constant i8
+// CHK-CODEGEN-HOST-DAG: @__omptgt__img_end_[[T1:powerpc64_ibm_linux_gnu]] = external constant i8
+// CHK-CODEGEN-HOST-DAG: @__omptgt__img_start_[[T2:nvptx64_nvidia_cuda]] = external constant i8
+// CHK-CODEGEN-HOST-DAG: @__omptgt__img_end_[[T2:nvptx64_nvidia_cuda]] = external constant i8
 
 // CHK-CODEGEN-HOST: @__omptgt__device_images = internal constant [2 x { i8*, i8*, { i8*, i8*, i64 }*, { i8*, i8*, i64 }* }] [
 // CHK-CODEGEN-HOST: { i8*, i8*, { i8*, i8*, i64 }*, { i8*, i8*, i64 }* } { i8* @__omptgt__img_start_[[T1]], i8* @__omptgt__img_end_[[T1]],
