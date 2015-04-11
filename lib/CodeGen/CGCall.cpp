@@ -3349,10 +3349,14 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
   llvm::AttributeSet Attrs = llvm::AttributeSet::get(getLLVMContext(),
                                                      AttributeList);
 
+  // If we are in OpenMP target mode we do not support exceptions thrown by the
+  // constructors
+
   llvm::BasicBlock *InvokeDest = nullptr;
-  if (!Attrs.hasAttribute(llvm::AttributeSet::FunctionIndex,
+  if (!CGM.getLangOpts().OpenMPTargetMode
+      && (!Attrs.hasAttribute(llvm::AttributeSet::FunctionIndex,
                           llvm::Attribute::NoUnwind) ||
-      currentFunctionUsesSEHTry())
+      currentFunctionUsesSEHTry()))
     InvokeDest = getInvokeDest();
 
   llvm::CallSite CS;

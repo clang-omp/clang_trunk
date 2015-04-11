@@ -169,7 +169,7 @@ public:
   TranslateArgs(const llvm::opt::DerivedArgList &Args,
                 const char *BoundArch,
                 bool isOpenMPTarget,
-                bool &isSuccess) const;
+                bool &isSuccess) const override;
 
 protected:
   Tool *getTool(Action::ActionClass AC) const override;
@@ -884,6 +884,7 @@ public:
   virtual bool isPICDefaultForced() const;
   virtual bool SupportsProfiling() const;
   virtual bool hasBlocksRuntime() const;
+  virtual bool UseHostToolChainInstead(const JobAction *JA) const;
 //  virtual void AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
 //                            llvm::opt::ArgStringList &CC1Args) const;
 //  virtual void addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,

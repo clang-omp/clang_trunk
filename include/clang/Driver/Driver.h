@@ -182,18 +182,11 @@ private:
   /// created targeting that triple. The driver owns all the ToolChain objects
   /// stored in it, and will clean them up when torn down.
   mutable llvm::StringMap<ToolChain *> ToolChains;
-  mutable llvm::StringMap<ToolChain *> OpenMPTargetToolChains;
+  mutable llvm::StringMap<ToolChain *> ToolChainsOpenMP;
 
-  /// Type of the map used to trace the result information for a given action.
-  /// This is useful to avoid recomputing the action results and allow the same
-  /// result to be used by different actions, as required by OpenMP offloading.
-  /// This has to take into account that the same action may produce different
-  /// results for different toolchains.
-  typedef llvm::SmallDenseMap<const ToolChain*, InputInfo*>
-                                                       ResultInfoMapPerActionTy;
-  typedef llvm::SmallDenseMap<const Action*, ResultInfoMapPerActionTy>
-                                                                ResultInfoMapTy;
-  mutable ResultInfoMapTy ResultInfoMap;
+  // ToolChains used by the host and OpenMP targets
+  const ToolChain *HostToolChain;
+  SmallVector<const char*, 4> OpenMPTargetToolChains;
 
 private:
   /// TranslateInputArgs - Create a new derived argument list from the input
@@ -414,7 +407,8 @@ public:
                                  const char *BaseInput,
                                  const char *BoundArch,
                                  bool AtTopLevel,
-                                 bool MultipleArchs) const;
+                                 bool MultipleArchs,
+                                 bool HasTargetSuffixApended) const;
 
   /// GetTemporaryPath - Return the pathname of a temporary file to use 
   /// as part of compilation; the file will have the given prefix and suffix.
@@ -432,10 +426,11 @@ private:
   /// \brief Retrieves a ToolChain for a particular target triple.
   ///
   /// Will cache ToolChains for the life of the driver object, and create them
-  /// on-demand. If TripleString is provided, the triple is obtained exclusively from it
+  /// on-demand. If TripleString is provided, the triple is obtained exclusively
+  /// from it
   const ToolChain &getToolChain(const llvm::opt::ArgList &Args,
                                 StringRef DarwinArchName = "",
-                                const char *OpenMPTripleString = nullptr) const;
+                                const char *TripleString = nullptr) const;
 
   /// @}
 

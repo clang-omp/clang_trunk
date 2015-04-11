@@ -2694,7 +2694,7 @@ ASTDeclReader::FindExistingResult::~FindExistingResult() {
   if (needsAnonymousDeclarationNumber(New)) {
     setAnonymousDeclForMerging(Reader, New->getLexicalDeclContext(),
                                AnonymousDeclNumber, New);
-  } else if (DC->isTranslationUnit() && Reader.SemaObj &&
+  } else if (DC->isTranslationUnitOrDeclareTarget() && Reader.SemaObj &&
              !Reader.getContext().getLangOpts().CPlusPlus) {
     if (Reader.SemaObj->IdResolver.tryAddTopLevelDecl(New, Name))
       Reader.PendingFakeLookupResults[Name.getAsIdentifierInfo()]
@@ -2802,7 +2802,7 @@ ASTDeclReader::FindExistingResult ASTDeclReader::findExisting(NamedDecl *D) {
       if (isSameEntity(Existing, D))
         return FindExistingResult(Reader, D, Existing, AnonymousDeclNumber,
                                   TypedefNameForLinkage);
-  } else if (DC->isTranslationUnit() && Reader.SemaObj &&
+  } else if (DC->isTranslationUnitOrDeclareTarget() && Reader.SemaObj &&
              !Reader.getContext().getLangOpts().CPlusPlus) {
     IdentifierResolver &IdResolver = Reader.SemaObj->IdResolver;
 

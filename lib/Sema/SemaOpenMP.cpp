@@ -65,16 +65,19 @@ private:
     DeclarationNameInfo DirectiveName;
     bool IsOrdered;
     bool IsNowait;
+    bool InCapturedRegion;
     Scope *CurScope;
     SharingMapTy(OpenMPDirectiveKind DKind, const DeclarationNameInfo &Name,
                  Scope *CurScope)
         : SharingMap(), AlignedMap(), MappedDecls(),
           DefaultAttr(DSA_unspecified), Directive(DKind), DirectiveName(Name),
-          IsOrdered(false), IsNowait(false), CurScope(CurScope) {}
+          IsOrdered(false), IsNowait(false), InCapturedRegion(false),
+          CurScope(CurScope) {}
     SharingMapTy()
         : SharingMap(), AlignedMap(), MappedDecls(),
           DefaultAttr(DSA_unspecified), Directive(OMPD_unknown),
-          DirectiveName(), IsOrdered(false), IsNowait(false), CurScope(0) {}
+          DirectiveName(), IsOrdered(false), IsNowait(false),
+          InCapturedRegion(false),  CurScope(0) {}
   };
 
   typedef SmallVector<SharingMapTy, 4> StackTy;
@@ -186,6 +189,8 @@ public:
   /// \brief Checks if the specified kind of directive exists.
   bool hasDirective(OpenMPDirectiveKind Kind);
 
+  Scope* GetScopeForDirectiveWithCapturedRegion(OpenMPDirectiveKind Kind);
+
   /// \brief Set default data sharing attribute to none.
   void setDefaultDSANone() { Stack.back().DefaultAttr = DSA_none; }
   /// \brief Set default data sharing attribute to shared.
@@ -193,6 +198,10 @@ public:
   DefaultDataSharingAttributes getDefaultDSA() {
     return Stack.back().DefaultAttr;
   }
+
+  /// \brief Set we are in the capture region of the current directive
+  void setInCaptureRegion() { Stack.back().InCapturedRegion = true; }
+  bool getInCaptureRegion() { return Stack.back().InCapturedRegion; }
 
   Scope *getCurScope() { return Stack.back().CurScope; }
 
@@ -557,6 +566,15 @@ bool DSAStackTy::hasDirective(OpenMPDirectiveKind Kind) {
   return false;
 }
 
+Scope* DSAStackTy::GetScopeForDirectiveWithCapturedRegion(
+                                                     OpenMPDirectiveKind Kind) {
+  for (reverse_iterator I = Stack.rbegin(), E = Stack.rend() - 1; I != E; ++I) {
+    if (I->Directive == Kind && I->InCapturedRegion)
+      return I->CurScope;
+  }
+  return nullptr;
+}
+
 DeclContext *DSAStackTy::GetOpenMPFunctionRegion() {
   for (reverse_iterator I = Stack.rbegin(), E = Stack.rend() - 1; I != E; ++I) {
     if (I->Directive == OMPD_parallel || I->Directive == OMPD_parallel_for ||
@@ -585,8 +603,58 @@ void Sema::InitDataSharingAttributesStack() {
 
 #define DSAStack static_cast<DSAStackTy *>(VarDataSharingAttributesStack)
 
-bool Sema::IsOpenMPCapturedVar(VarDecl *VD) {
+static bool MayRequireOpenMPTargetCapture(VarDecl *VD, ASTContext &Ctx){
+  // If this declaration is used in a target region and it is an host-only
+  // global, we need to captured that too as we do with a local variable
+
+  // If it is not global we don't care about it
+  if (VD->hasLocalStorage())
+    return false;
+
+  // If it is a constant, don't bother capturing it
+  if (VD->getType().isConstant(Ctx))
+    return false;
+
+  // Try to understand if this is a declare target region, and return
+  // false in that case
+  DeclContext *DC = VD->getDeclContext();
+  while (DC){
+    if (DC->isOMPDeclareTarget())
+      return false;
+
+    DC = DC->getParent();
+  }
+  return true;
+}
+
+bool Sema::IsOpenMPCapturedVar(VarDecl *VD, Scope *&StopScope) {
+  if (!VD->getDeclName())
+    return false;
+
+  assert( !VD->hasLocalStorage() && "Local are not handled here!");
   assert(LangOpts.OpenMP && "OpenMP is not allowed");
+
+  StopScope = nullptr;
+
+  // If we are in the captured region of a directive with target, we need to
+  // capture the global under tests until the target directive scope.
+  if (MayRequireOpenMPTargetCapture(VD,getASTContext())){
+    OpenMPDirectiveKind DirWithTarget[] = {
+      OMPD_target,
+      OMPD_target_teams,
+      OMPD_target_teams_distribute,
+      OMPD_target_teams_distribute_simd,
+      OMPD_target_teams_distribute_parallel_for,
+      OMPD_target_teams_distribute_parallel_for_simd
+    };
+
+    for ( OpenMPDirectiveKind D : DirWithTarget){
+      StopScope = DSAStack->GetScopeForDirectiveWithCapturedRegion(D);
+      if (StopScope)
+        return true;
+    }
+  }
+
   if (DSAStack->getCurrentDirective() != OMPD_unknown) {
     DeclRefExpr *PrevRef;
     OpenMPClauseKind Kind = DSAStack->getTopDSA(VD, PrevRef);
@@ -639,6 +707,10 @@ void Sema::StartOpenMPDSABlock(OpenMPDirectiveKind DKind,
   DSAStack->push(DKind, DirName, CurScope);
 
   PushExpressionEvaluationContext(PotentiallyEvaluated);
+}
+
+void Sema::EnterOpenMPDSACapturedRegion() {
+  DSAStack->setInCaptureRegion();
 }
 
 void Sema::EndOpenMPDSABlock(Stmt *CurDirective) {
@@ -929,6 +1001,11 @@ Sema::DeclGroupPtrTy Sema::ActOnOpenMPDeclareSimdDirective(
     ArrayRef<unsigned> BeginIdx, ArrayRef<unsigned> EndIdx,
     ArrayRef<OMPClause *> CL) {
   DeclContext *CurDC = getCurLexicalContext();
+
+  // FIXME: Ignore if inside declare target. This is not supported yet.
+  if (CurDC->isOMPDeclareTarget())
+    return DeclGroupPtrTy();
+
   if (OMPDeclareSimdDecl *D = CheckOMPDeclareSimdDecl(
           Loc, FuncDecl, SrcRanges, BeginIdx, EndIdx, CL, CurDC)) {
     D->setAccess(AS_public);
@@ -1539,10 +1616,26 @@ static void CheckDeclInTargetContext(SourceLocation SL, SourceRange SR,
     LD = cast<TagDecl>(D)->getDefinition();
   } else if (isa<VarDecl>(D)) {
     LD = cast<VarDecl>(D)->getDefinition();
+
+    // If this is an implicit variable that is legal and we do not need to do
+    // anything
+    if (cast<VarDecl>(D)->isImplicit()){
+      Stack->addDeclareTargetDecl(D);
+      return;
+    }
+
   } else if (isa<FunctionDecl>(D)) {
     const FunctionDecl *FD = 0;
     if (cast<FunctionDecl>(D)->hasBody(FD))
       LD = const_cast<FunctionDecl *>(FD);
+
+    // If the definition is associated with the current declaration in the
+    // target region (it can be e.g. a lambda) that is legal and we do not need
+    // to do anything else
+    if (LD == D){
+      Stack->addDeclareTargetDecl(D);
+      return;
+    }
   }
   if (!LD)
     LD = D;
@@ -5855,15 +5948,19 @@ OMPClause *Sema::ActOnOpenMPLastPrivateClause(ArrayRef<Expr *> VarList,
       }
     }
 
+    // We create a OMP target declarative context so that the pseudo variable
+    // is not unecessarilly captured if inside a target region
+    DeclContext *DCtx = OMPDeclareTargetDecl::Create(Context,
+        Context.getTranslationUnitDecl(), SourceLocation());
+
     Type = Type.getUnqualifiedType();
     IdentifierInfo *Id = &Context.Idents.get(".lastprivate.");
     TypeSourceInfo *TI = Context.getTrivialTypeSourceInfo(Type, ELoc);
-    VarDecl *PseudoVar1 = VarDecl::Create(
-        Context, Context.getTranslationUnitDecl(), SourceLocation(),
+    VarDecl *PseudoVar1 = VarDecl::Create(Context, DCtx, SourceLocation(),
         SourceLocation(), Id, Type, TI, SC_Static);
     PseudoVar1->setImplicit();
     PseudoVar1->addAttr(new (Context) UnusedAttr(SourceLocation(), Context, 0));
-    Context.getTranslationUnitDecl()->addHiddenDecl(PseudoVar1);
+    DCtx->addHiddenDecl(PseudoVar1);
     DeclRefExpr *PseudoDE1 = cast<DeclRefExpr>(
         BuildDeclRefExpr(PseudoVar1, Type, VK_LValue, ELoc).get());
     if ((RD && !RD->isTriviallyCopyable()) || IsArray) {
@@ -6615,25 +6712,30 @@ OMPClause *Sema::ActOnOpenMPReductionClause(ArrayRef<Expr *> VarList,
     }
     if (DRRD) {
       Op = OMPC_REDUCTION_custom;
+
+      // We create the following pointer in a declare target so that they are
+      // not unnecessarily captured in the event we are in target region
+      //DeclContext *DCtx = Context.getTranslationUnitDecl();
+      DeclContext *DCtx = OMPDeclareTargetDecl::Create(Context,
+          Context.getTranslationUnitDecl(),SourceLocation());
+
       QualType PtrQTy = Context.getPointerType(DE->getType());
       TypeSourceInfo *TI =
           Context.getTrivialTypeSourceInfo(PtrQTy, SourceLocation());
       IdentifierInfo *Id1 = &Context.Idents.get(".ptr1.");
-      VarDecl *Parameter1 = VarDecl::Create(
-          Context, Context.getTranslationUnitDecl(), SourceLocation(),
+      VarDecl *Parameter1 = VarDecl::Create(Context, DCtx, SourceLocation(),
           SourceLocation(), Id1, PtrQTy, TI, SC_Static);
       Parameter1->setImplicit();
       Parameter1->addAttr(new (Context)
                               UnusedAttr(SourceLocation(), Context, 0));
       IdentifierInfo *Id2 = &Context.Idents.get(".ptr2.");
-      VarDecl *Parameter2 = VarDecl::Create(
-          Context, Context.getTranslationUnitDecl(), SourceLocation(),
+      VarDecl *Parameter2 = VarDecl::Create(Context, DCtx, SourceLocation(),
           SourceLocation(), Id2, PtrQTy, TI, SC_Static);
       Parameter2->setImplicit();
       Parameter2->addAttr(new (Context)
                               UnusedAttr(SourceLocation(), Context, 0));
-      Context.getTranslationUnitDecl()->addHiddenDecl(Parameter1);
-      Context.getTranslationUnitDecl()->addHiddenDecl(Parameter2);
+      DCtx->addHiddenDecl(Parameter1);
+      DCtx->addHiddenDecl(Parameter2);
       ExprResult PtrDE1 =
           BuildDeclRefExpr(Parameter1, PtrQTy, VK_LValue, SourceLocation());
       ExprResult PtrDE2 =
@@ -6666,25 +6768,28 @@ OMPClause *Sema::ActOnOpenMPReductionClause(ArrayRef<Expr *> VarList,
             << VD;
         continue;
       }
+
+      //DeclContext *DCtx = Context.getTranslationUnitDecl();
+      DeclContext *DCtx = OMPDeclareTargetDecl::Create(Context,
+          Context.getTranslationUnitDecl(),SourceLocation());
+
       QualType PtrQTy = Context.getPointerType(DE->getType());
       TypeSourceInfo *TI =
           Context.getTrivialTypeSourceInfo(PtrQTy, SourceLocation());
       IdentifierInfo *Id1 = &Context.Idents.get(".ptr1.");
-      VarDecl *Parameter1 = VarDecl::Create(
-          Context, Context.getTranslationUnitDecl(), SourceLocation(),
+      VarDecl *Parameter1 = VarDecl::Create(Context, DCtx, SourceLocation(),
           SourceLocation(), Id1, PtrQTy, TI, SC_Static);
       Parameter1->setImplicit();
       Parameter1->addAttr(new (Context)
                               UnusedAttr(SourceLocation(), Context, 0));
       IdentifierInfo *Id2 = &Context.Idents.get(".ptr2.");
-      VarDecl *Parameter2 = VarDecl::Create(
-          Context, Context.getTranslationUnitDecl(), SourceLocation(),
+      VarDecl *Parameter2 = VarDecl::Create(Context, DCtx, SourceLocation(),
           SourceLocation(), Id2, PtrQTy, TI, SC_Static);
       Parameter2->setImplicit();
       Parameter2->addAttr(new (Context)
                               UnusedAttr(SourceLocation(), Context, 0));
-      Context.getTranslationUnitDecl()->addHiddenDecl(Parameter1);
-      Context.getTranslationUnitDecl()->addHiddenDecl(Parameter2);
+      DCtx->addHiddenDecl(Parameter1);
+      DCtx->addHiddenDecl(Parameter2);
       ExprResult PtrDE1 =
           BuildDeclRefExpr(Parameter1, PtrQTy, VK_LValue, SourceLocation());
       ExprResult PtrDE2 =

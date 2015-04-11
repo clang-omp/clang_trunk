@@ -241,7 +241,8 @@ public:
   };
   /// \brief API for captured statement code generation for OpenMP regions.
   class CGOpenMPCapturedStmtInfo : public CGCapturedStmtInfo {
-    //CodeGenModule &CGM;
+    typedef llvm::SmallDenseMap<const VarDecl *, llvm::Value*> CachedVarsTy;
+
   public:
     explicit CGOpenMPCapturedStmtInfo(llvm::Value* Context,
                                       const CapturedStmt &S,
@@ -251,13 +252,16 @@ public:
 
     virtual ~CGOpenMPCapturedStmtInfo() { };
 
-    virtual void addCachedVar(const VarDecl *VD, llvm::Value *Addr) { CachedVars[VD] = Addr; }
-    virtual llvm::Value *getCachedVar(const VarDecl *VD) { return CachedVars[VD]; }
+    virtual void addCachedVar(const VarDecl *VD, llvm::Value *Addr) override {
+      CachedVars[VD] = Addr;
+    }
+    virtual llvm::Value *getCachedVar(const VarDecl *VD) override {
+      return CachedVars.lookup(VD);
+    }
   private:
 
-    /// \brief Keep the map between VarDecl and FieldDecl.
-    llvm::SmallDenseMap<const VarDecl *, llvm::Value *> CachedVars;
-
+    /// \brief Keep the map between VarDecl and corresponding Value.
+    CachedVarsTy CachedVars;
   };
 
   CGCapturedStmtInfo *CapturedStmtInfo;
@@ -2146,7 +2150,18 @@ public:
 
   LValue InitCapturedStruct(const CapturedStmt &S);
   void InitOpenMPFunction(llvm::Value *Context, const CapturedStmt &S);
-  void InitOpenMPTargetFunction(const CapturedStmt &S);
+  void InitOpenMPTargetFunction(const OMPExecutableDirective &D,
+                                const CapturedStmt &S,
+                                SmallVector<llvm::Value**, 8> &VLAToLoad);
+  void InitOpenMPSharedizeParameters(const CapturedStmt &S,
+                                     SmallVector<const VarDecl *, 8> &MappingDecls,
+                                     SmallVector<llvm::Value *, 8>   &MappingDeclVals,
+                                     SmallVector<llvm::Value**, 8>   &VLAExprLocs,
+                                     SmallVector<llvm::Value *, 8>   &VLAExprVals);
+  bool ShouldIgnoreOpenMPCapture(const OMPExecutableDirective &S,
+                                 OpenMPDirectiveKind CurrentD,
+                                 const DeclRefExpr *DE);
+
   llvm::Function *EmitCapturedStmt(const CapturedStmt &S, CapturedRegionKind K);
   llvm::Function *GenerateCapturedStmtFunction(const CapturedStmt &S);
   llvm::Value *GenerateCapturedStmtArgument(const CapturedStmt &S);
@@ -2219,8 +2234,19 @@ public:
   void EmitInitOMPProcBindClause(const OMPProcBindClause &C,
                                  const OMPExecutableDirective &S);
   void EmitInitOMPDeviceClause(const OMPDeviceClause &C,
-                               const OMPExecutableDirective &S);
+                            const OMPExecutableDirective &S);
+  void AppendOpenMPStackWithMapInfo(const OMPClause &C);
   void EmitInitOMPMapClause(const OMPMapClause &C,
+                            const OMPExecutableDirective &S);
+  void EmitAfterOMPMapClause(const OMPMapClause &C,
+                             const OMPExecutableDirective &S);
+  void EmitPreOMPMapClause(const OMPMapClause &C,
+                            const OMPExecutableDirective &S);
+  void EmitPostOMPMapClause(const OMPMapClause &C,
+                            const OMPExecutableDirective &S);
+  void EmitInitOMPToClause(const OMPToClause &C,
+                            const OMPExecutableDirective &S);
+  void EmitInitOMPFromClause(const OMPFromClause &C,
                             const OMPExecutableDirective &S);
   void EmitAfterInitOMPIfClause(const OMPIfClause &C,
                                 const OMPExecutableDirective &S);
@@ -2302,9 +2328,26 @@ public:
     OpenMPDirectiveKind DKind,
     ArrayRef<OpenMPDirectiveKind> SKinds,
     const OMPExecutableDirective &S);
+  void EmitOMPDirectiveWithParallelNoMicrotask(
+    OpenMPDirectiveKind DKind,
+    ArrayRef<OpenMPDirectiveKind> SKinds,
+    const OMPExecutableDirective &S);
+  void EmitOMPDirectiveWithParallelMicrotask(
+    OpenMPDirectiveKind DKind,
+    ArrayRef<OpenMPDirectiveKind> SKinds,
+    const OMPExecutableDirective &S);
   void EmitOMPDirectiveWithTeams(OpenMPDirectiveKind DKind,
-                                 ArrayRef<OpenMPDirectiveKind> SKinds,
+                                 OpenMPDirectiveKind SKind,
                                  const OMPExecutableDirective &S);
+  void EmitOMPDirectiveWithTeamsNoMicrotask(OpenMPDirectiveKind DKind,
+                                          OpenMPDirectiveKind SKind,
+                                          const OMPExecutableDirective &S);
+  void EmitOMPDirectiveWithTeamsMicrotask(OpenMPDirectiveKind DKind,
+                                           OpenMPDirectiveKind SKind,
+                                           const OMPExecutableDirective &S);
+  void EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
+                                  OpenMPDirectiveKind SKind,
+                                  const OMPExecutableDirective &S);
   void EmitOMPBarrier(SourceLocation L, unsigned Flags);
   void EmitOMPCancelBarrier(SourceLocation L, unsigned Flags,
                             bool IgnoreResult = false);

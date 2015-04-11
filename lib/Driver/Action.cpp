@@ -58,6 +58,7 @@ void BindTargetAction::anchor() {}
 
 BindTargetAction::BindTargetAction(std::unique_ptr<Action> Input, const char *_TargetName)
   : Action(BindTargetClass, std::move(Input)), TargetName(_TargetName) {
+  setOffloadingDevice(_TargetName);
 }
 
 void JobAction::anchor() {}

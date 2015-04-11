@@ -4716,8 +4716,10 @@ NamedDecl *Sema::HandleDeclarator(Scope *S, Declarator &D,
               R->isFunctionType())) {
       IsLinkageLookup = true;
       CreateBuiltins =
-          CurContext->getEnclosingNamespaceContext()->isTranslationUnit();
-    } else if (CurContext->getRedeclContext()->isTranslationUnit() &&
+          CurContext->getEnclosingNamespaceContext()
+          ->isTranslationUnitOrDeclareTarget();
+    } else if (CurContext->getRedeclContext()
+               ->isTranslationUnitOrDeclareTarget() &&
                D.getDeclSpec().getStorageClassSpec() != DeclSpec::SCS_static)
       CreateBuiltins = true;
 
@@ -4946,7 +4948,8 @@ TryToFixInvalidVariablyModifiedTypeSourceInfo(TypeSourceInfo *TInfo,
 void
 Sema::RegisterLocallyScopedExternCDecl(NamedDecl *ND, Scope *S) {
   if (!getLangOpts().CPlusPlus &&
-      ND->getLexicalDeclContext()->getRedeclContext()->isTranslationUnit())
+      ND->getLexicalDeclContext()->getRedeclContext()
+      ->isTranslationUnitOrDeclareTarget())
     // Don't need to track declarations in the TU in C.
     return;
 
@@ -5078,7 +5081,8 @@ Sema::ActOnTypedefNameDecl(Scope *S, DeclContext *DC, TypedefNameDecl *NewTD,
   // If this is the C FILE type, notify the AST context.
   if (IdentifierInfo *II = NewTD->getIdentifier())
     if (!NewTD->isInvalidDecl() &&
-        NewTD->getDeclContext()->getRedeclContext()->isTranslationUnit()) {
+        NewTD->getDeclContext()->getRedeclContext()
+        ->isTranslationUnitOrDeclareTarget()) {
       if (II->isStr("FILE"))
         Context.setFILEDecl(NewTD);
       else if (II->isStr("jmp_buf"))
@@ -6182,7 +6186,8 @@ static bool checkForConflictWithNonVisibleExternC(Sema &S, const T *ND,
     // In C, when declaring a global variable, look for a corresponding 'extern'
     // variable declared in function scope. We don't need this in C++, because
     // we find local extern decls in the surrounding file-scope DeclContext.
-    if (ND->getDeclContext()->getRedeclContext()->isTranslationUnit()) {
+    if (ND->getDeclContext()->getRedeclContext()
+        ->isTranslationUnitOrDeclareTarget()) {
       if (NamedDecl *Prev = S.findLocallyScopedExternCDecl(ND->getDeclName())) {
         Previous.clear();
         Previous.addDecl(Prev);
@@ -6194,7 +6199,8 @@ static bool checkForConflictWithNonVisibleExternC(Sema &S, const T *ND,
 
   // A declaration in the translation unit can conflict with an extern "C"
   // declaration.
-  if (ND->getDeclContext()->getRedeclContext()->isTranslationUnit())
+  if (ND->getDeclContext()->getRedeclContext()
+      ->isTranslationUnitOrDeclareTarget())
     return checkGlobalOrExternCConflict(S, ND, /*IsGlobal*/true, Previous);
 
   // An extern "C" declaration can conflict with a declaration in the
@@ -7865,7 +7871,8 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
   if (getLangOpts().CUDA)
     if (IdentifierInfo *II = NewFD->getIdentifier())
       if (!NewFD->isInvalidDecl() &&
-          NewFD->getDeclContext()->getRedeclContext()->isTranslationUnit()) {
+          NewFD->getDeclContext()->getRedeclContext()
+          ->isTranslationUnitOrDeclareTarget()) {
         if (II->isStr("cudaConfigureCall")) {
           if (!R->getAs<FunctionType>()->getReturnType()->isScalarType())
             Diag(NewFD->getLocation(), diag::err_config_scalar_return);
@@ -10968,7 +10975,7 @@ void Sema::AddKnownFunctionAttributes(FunctionDecl *FD) {
   if (!Name)
     return;
   if ((!getLangOpts().CPlusPlus &&
-       FD->getDeclContext()->isTranslationUnit()) ||
+       FD->getDeclContext()->isTranslationUnitOrDeclareTarget()) ||
       (isa<LinkageSpecDecl>(FD->getDeclContext()) &&
        cast<LinkageSpecDecl>(FD->getDeclContext())->getLanguage() ==
        LinkageSpecDecl::lang_c)) {
@@ -11239,7 +11246,7 @@ static FixItHint createFriendTagNNSFixIt(Sema &SemaRef, NamedDecl *ND, Scope *S,
   // translation unit scope, at which point we have a fully qualified NNS.
   SmallVector<IdentifierInfo *, 4> Namespaces;
   DeclContext *DC = ND->getDeclContext()->getRedeclContext();
-  for (; !DC->isTranslationUnit(); DC = DC->getParent()) {
+  for (; !DC->isTranslationUnitOrDeclareTarget(); DC = DC->getParent()) {
     // This tag should be declared in a namespace, which can only be enclosed by
     // other namespaces.  Bail if there's an anonymous namespace in the chain.
     NamespaceDecl *Namespace = dyn_cast<NamespaceDecl>(DC);
@@ -11257,7 +11264,7 @@ static FixItHint createFriendTagNNSFixIt(Sema &SemaRef, NamedDecl *ND, Scope *S,
   // build an NNS.
   SmallString<64> Insertion;
   llvm::raw_svector_ostream OS(Insertion);
-  if (DC->isTranslationUnit())
+  if (DC->isTranslationUnitOrDeclareTarget())
     OS << "::";
   std::reverse(Namespaces.begin(), Namespaces.end());
   for (auto *II : Namespaces)
@@ -12066,7 +12073,8 @@ CreateNewDecl:
   // If this is the C FILE type, notify the AST context.
   if (IdentifierInfo *II = New->getIdentifier())
     if (!New->isInvalidDecl() &&
-        New->getDeclContext()->getRedeclContext()->isTranslationUnit() &&
+        New->getDeclContext()->getRedeclContext()
+        ->isTranslationUnitOrDeclareTarget() &&
         II->isStr("FILE"))
       Context.setFILEDecl(New);
 

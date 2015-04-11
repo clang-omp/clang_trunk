@@ -1635,6 +1635,10 @@ public:
       PtrDiffType = TargetInfo::SignedLong;
       IntPtrType = TargetInfo::SignedLong;
       DescriptionString = "e-i64:64-v16:16-v32:32-n16:32:64";
+
+      // If the OS is Linux we need to make the use a consistent size for size_t
+      if (Triple.getOS() == llvm::Triple::Linux)
+        SizeType = TargetInfo::UnsignedLong;
     }
   };
 

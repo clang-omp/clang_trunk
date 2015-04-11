@@ -343,7 +343,7 @@ void clang::FormatASTNodeDiagnosticArgument(
       NeedQuotes = false;
 
       // FIXME: Get the strings for DeclContext from some localized place
-      if (DC->isTranslationUnit()) {
+      if (DC->isTranslationUnitOrDeclareTarget()) {
         if (Context.getLangOpts().CPlusPlus)
           OS << "the global namespace";
         else

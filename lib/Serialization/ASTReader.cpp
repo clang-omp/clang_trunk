@@ -4749,6 +4749,12 @@ bool ASTReader::ParseLanguageOptions(const RecordData &Record,
   }
   LangOpts.CommentOpts.ParseAllComments = Record[Idx++];
 
+  // OpenMP options
+  LangOpts.OMPModuleUniqueID = ReadString(Record, Idx);
+  for (unsigned N = Record[Idx++]; N; --N) {
+    LangOpts.OMPTargetTriples.push_back(
+        llvm::Triple(ReadString(Record, Idx)));
+  }
   return Listener.ReadLanguageOptions(LangOpts, Complain,
                                       AllowCompatibleDifferences);
 }

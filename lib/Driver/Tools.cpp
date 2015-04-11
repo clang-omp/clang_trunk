@@ -190,17 +190,80 @@ static void addDirectoryList(const ArgList &Args,
   }
 }
 
+static void AddLTOInputs(Compilation &C, const JobAction &JA, const Tool &T,
+                         const ToolChain &TC, const InputInfo &Output,
+                         const InputInfoList &Inputs, const ArgList &Args,
+                         ArgStringList &CmdArgs) {
+  // When link-time optimization (LTO) is expected and we are generating a fat
+  // binary because of an OpenMP target, we need to use ld because gold has
+  // limited support for linker scripts. Unlike gold, ld does not support
+  // linking bitcode files, so what we do is we manually gather bitcode files
+  // and optimize the result using the toolchain.
+  ArgStringList LLVMLinkCmdArgs;
+  for (const auto &II : Inputs) {
+    if (II.getType() == types::TY_LTO_BC) {
+      LLVMLinkCmdArgs.push_back(II.getFilename());
+    }
+  }
+  if (!LLVMLinkCmdArgs.empty()) {
+   // Gather bitcode files using llvm-link.
+   std::string TmpName =
+     C.getDriver().GetTemporaryPath(Output.getFilename(), "bc");
+   const char *ResultingBitcodeF = C.getArgs().MakeArgString(TmpName.c_str());
+   LLVMLinkCmdArgs.push_back("-o");
+   LLVMLinkCmdArgs.push_back(ResultingBitcodeF);
+   const char *LLVMLinkExec =
+     Args.MakeArgString(TC.getDriver().Dir + "/llvm-link");
+   C.addCommand(
+     llvm::make_unique<Command>(JA, T, LLVMLinkExec, LLVMLinkCmdArgs));
+
+   // Optimize resulting bitcode file using opt.
+   ArgStringList OptCmdArgs;
+   OptCmdArgs.push_back(ResultingBitcodeF);
+   OptCmdArgs.push_back("-O3"); // LTO
+   OptCmdArgs.push_back("-o");
+   OptCmdArgs.push_back(ResultingBitcodeF);
+   const char *OptExec =
+     Args.MakeArgString(TC.getDriver().Dir + "/opt");
+   C.addCommand(
+     llvm::make_unique<Command>(JA, T, OptExec, OptCmdArgs));
+
+   // Generate object file.
+   TmpName = C.getDriver().GetTemporaryPath(Output.getFilename(), "o");
+    const char *ObjectF = C.getArgs().MakeArgString(TmpName.c_str());
+   ArgStringList LlcCmdArgs;
+   LlcCmdArgs.push_back(ResultingBitcodeF);
+   LlcCmdArgs.push_back("-o");
+   LlcCmdArgs.push_back(ObjectF);
+   LlcCmdArgs.push_back("-filetype=obj");
+   const char *LlcExec =
+     Args.MakeArgString(TC.getDriver().Dir + "/llc");
+    C.addCommand(
+     llvm::make_unique<Command>(JA, T, LlcExec, LlcCmdArgs));
+
+    // Add object file to linker inputs
+    CmdArgs.push_back(ObjectF);
+  }
+}
+
 static void AddLinkerInputs(const ToolChain &TC,
                             const InputInfoList &Inputs, const ArgList &Args,
                             ArgStringList &CmdArgs, bool isTargetLinkage) {
   const Driver &D = TC.getDriver();
+
+  bool OpenMP = Args.hasArg(options::OPT_fopenmp);
+  bool OpenMPTarget = OpenMP && Args.hasArg(options::OPT_omptargets_EQ);
 
   // Add extra linker input arguments which are not treated as inputs
   // (constructed via -Xarch_).
   Args.AddAllArgValues(CmdArgs, options::OPT_Zlinker_input);
 
   for (const auto &II : Inputs) {
-    if (!TC.HasNativeLLVMSupport()) {
+    // Already processed in LTO phase above.
+    if (OpenMPTarget && II.getType() == types::TY_LTO_BC)
+      continue;
+
+    if (!TC.HasNativeLLVMSupport() || OpenMPTarget) {
       // Don't try to pass LLVM inputs unless we have native support.
       if (II.getType() == types::TY_LLVM_IR ||
           II.getType() == types::TY_LTO_IR ||
@@ -307,7 +370,9 @@ static void AddOpenMPLinkerScript(const ToolChain &TC, Compilation &C,
 
   lksf << "SECTIONS\n";
   lksf << "{\n";
-  lksf << "  .openmptgt ALIGN(0x10) : {\n";
+  lksf << "  .openmptgt :\n";
+  lksf << "  ALIGN(0x10)\n";
+  lksf << "  {\n";
 
   for (unsigned i=0; i<Targets.size(); ++i){
     std::string tgt_name(Targets[i].first);
@@ -316,22 +381,14 @@ static void AddOpenMPLinkerScript(const ToolChain &TC, Compilation &C,
     lksf << "    __omptgt__img_start_" << tgt_name << " = .;\n";
     lksf << "    " << Targets[i].second << "\n";
     lksf << "    __omptgt__img_end_" << tgt_name << " = .;\n";
-
-    // We append the host entries and target name associated with the target
-    // image
-
-    lksf << "    QUAD(__omptgt__host_entries_begin);\n";
-    lksf << "    QUAD(__omptgt__host_entries_end);\n";
-
-    for(const char *c = tgt_name.c_str(); *c != '\0'; ++c )
-      lksf << "    BYTE(" << (unsigned)*c  << ");\n";
-    lksf << "    BYTE(0);\n";
-
   }
 
   lksf << "  }\n";
   // Add commands to define host entries begin and end
-  lksf << "  .openmptgt_host_entries ALIGN(0x10) : {\n";
+  lksf << "  .openmptgt_host_entries :\n";
+  lksf << "  ALIGN(0x10)\n";
+  lksf << "  SUBALIGN(0x01)\n";
+  lksf << "  {\n";
   lksf << "    __omptgt__host_entries_begin = .;\n";
   lksf << "    *(.openmptgt_host_entries)\n";
   lksf << "    __omptgt__host_entries_end = .;\n";
@@ -2728,7 +2785,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       ArrayRef<const char *> Vals = Tgts->getValues();
 
       if (!Vals.empty()){
-
         std::string S("-omptargets=");
         S += Vals[0];
         for (unsigned i=1; i <Vals.size(); ++i ){
@@ -5335,6 +5391,8 @@ void gcc::Common::ConstructJob(Compilation &C, const JobAction &JA,
   const Driver &D = getToolChain().getDriver();
   ArgStringList CmdArgs;
 
+  bool isLinkJob = JA.getKind() == Action::LinkJobClass;
+
   for (const auto &A : Args) {
     if (forwardToGCC(A->getOption())) {
       // Don't forward any -g arguments to assembly steps.
@@ -5356,7 +5414,7 @@ void gcc::Common::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
-  RenderExtraToolArgs(JA, CmdArgs);
+  RenderExtraToolArgs(JA, CmdArgs, Args);
 
   // If using a driver driver, force the arch.
   if (getToolChain().getTriple().isOSDarwin()) {
@@ -5414,8 +5472,14 @@ void gcc::Common::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back(types::getTypeName(II.getType()));
     }
 
-    if (II.isFilename())
+
+    if (II.isFilename()){
+      bool isTargetLinkage = isLinkJob && JA.getOffloadingDevice();
+      if ( !isTargetLinkage && II.getOriginalAction()->getOffloadingDevice() )
+        continue;
+
       CmdArgs.push_back(II.getFilename());
+    }
     else {
       const Arg &A = II.getInputArg();
 
@@ -5439,18 +5503,23 @@ void gcc::Common::ConstructJob(Compilation &C, const JobAction &JA,
   } else
     GCCName = "gcc";
 
+  if (isLinkJob)
+    AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
+
   const char *Exec =
     Args.MakeArgString(getToolChain().GetProgramPath(GCCName));
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
 void gcc::Preprocess::RenderExtraToolArgs(const JobAction &JA,
-                                          ArgStringList &CmdArgs) const {
+                                          ArgStringList &CmdArgs,
+                                          const ArgList &Args) const {
   CmdArgs.push_back("-E");
 }
 
 void gcc::Compile::RenderExtraToolArgs(const JobAction &JA,
-                                       ArgStringList &CmdArgs) const {
+                                       ArgStringList &CmdArgs,
+                                       const ArgList &Args) const {
   const Driver &D = getToolChain().getDriver();
 
   switch (JA.getType()) {
@@ -5473,8 +5542,17 @@ void gcc::Compile::RenderExtraToolArgs(const JobAction &JA,
 }
 
 void gcc::Link::RenderExtraToolArgs(const JobAction &JA,
-                                    ArgStringList &CmdArgs) const {
+                                    ArgStringList &CmdArgs,
+                                    const ArgList &Args) const {
   // The types are (hopefully) good enough.
+
+  if (!Args.hasArg(options::OPT_nostdlib))
+    if (!Args.hasArg(options::OPT_nodefaultlibs))
+      if (Args.hasArg(options::OPT_fopenmp)) {
+        CmdArgs.push_back("-liomp5");
+        if (Args.hasArg(options::OPT_omptargets_EQ))
+          CmdArgs.push_back("-lomptarget");
+      }
 }
 
 // Hexagon tools start.
@@ -7937,6 +8015,7 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
                                   const InputInfoList &Inputs,
                                   const ArgList &Args,
                                   const char *LinkingOutput) const {
+
   const toolchains::Linux& ToolChain =
     static_cast<const toolchains::Linux&>(getToolChain());
   const Driver &D = ToolChain.getDriver();
@@ -8051,8 +8130,16 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
   for (const auto &Path : Paths)
     CmdArgs.push_back(Args.MakeArgString(StringRef("-L") + Path));
 
-  if (D.IsUsingLTO(getToolChain(), Args))
-    AddGoldPlugin(ToolChain, Args, CmdArgs, JA.getOffloadingDevice());
+  // Do not use gold plugin when compiling with an OpenMP target, as usually
+  // a linker script is required, and such scripts are poorly supported by
+  // gold.
+  if (D.IsUsingLTO(getToolChain(), Args)) {
+    bool OpenMP = Args.hasArg(options::OPT_fopenmp);
+    if (!OpenMP || !Args.hasArg(options::OPT_omptargets_EQ))
+      AddGoldPlugin(ToolChain, Args, CmdArgs, JA.getOffloadingDevice());
+    else
+      AddLTOInputs(C, JA, *this, ToolChain, Output, Inputs, Args, CmdArgs);
+  }
 
   if (Args.hasArg(options::OPT_Z_Xlinker__no_demangle))
     CmdArgs.push_back("--no-demangle");
@@ -8141,7 +8228,7 @@ void nacltools::AssembleARM::ConstructJob(Compilation &C, const JobAction &JA,
   const toolchains::NaCl_TC& ToolChain =
     static_cast<const toolchains::NaCl_TC&>(getToolChain());
   InputInfo NaClMacros(ToolChain.GetNaClArmMacrosPath(), &JA,
-                       "nacl-arm-macros.s");
+                       "nacl-arm-macros.s", false);
   InputInfoList NewInputs;
   NewInputs.push_back(NaClMacros);
   NewInputs.append(Inputs.begin(), Inputs.end());
@@ -8895,6 +8982,9 @@ void NVPTX::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
   if (Args.hasArg(options::OPT_v))
     CmdArgs.push_back("-v");
 
+  if (Args.hasArg(options::OPT_g_Flag))
+    CmdArgs.push_back("-g");
+
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());
 
@@ -8933,6 +9023,9 @@ void NVPTX::Link::ConstructJob(Compilation &C, const JobAction &JA,
     assert(Output.isNothing() && "Invalid output.");
   }
 
+  if (Args.hasArg(options::OPT_g_Flag))
+    CmdArgs.push_back("-g");
+
   if (Args.hasArg(options::OPT_v))
     CmdArgs.push_back("-v");
 
@@ -8942,6 +9035,77 @@ void NVPTX::Link::ConstructJob(Compilation &C, const JobAction &JA,
   if (!CPU.empty()) {
     CmdArgs.push_back("-arch");
     CmdArgs.push_back(Args.MakeArgString(CPU));
+  }
+
+  // add linking against library implementing OpenMP calls on NVPTX target
+  CmdArgs.push_back("-lomptarget-nvptx");
+
+  // Check if link-time optimization (LTO) is expected. At this point, this
+  // would be the case if some linker inputs were still in LLVM bitcode format.
+  // Unlike gold, nvlink does not support LTO, so what we do is we manually
+  // gather bitcode files and optimize the result using the toolchain.
+  ArgStringList LLVMLinkCmdArgs;
+  for (const auto &II : Inputs) {
+    if (II.getType() == types::TY_LTO_BC) {
+      LLVMLinkCmdArgs.push_back(II.getFilename());
+    }
+  }
+  if (!LLVMLinkCmdArgs.empty()) {
+    // Gather bitcode files using llvm-link.
+    std::string TmpName =
+      C.getDriver().GetTemporaryPath(Output.getFilename(), "bc");
+    const char *ResultingBitcodeF = C.getArgs().MakeArgString(TmpName.c_str());
+    LLVMLinkCmdArgs.push_back("-o");
+    LLVMLinkCmdArgs.push_back(ResultingBitcodeF);
+    const char *LLVMLinkExec =
+      Args.MakeArgString(getToolChain().getDriver().Dir + "/llvm-link");
+    C.addCommand(
+      llvm::make_unique<Command>(JA, *this, LLVMLinkExec, LLVMLinkCmdArgs));
+
+    // Optimize resulting bitcode file using opt.
+    ArgStringList OptCmdArgs;
+    OptCmdArgs.push_back(ResultingBitcodeF);
+    OptCmdArgs.push_back("-O3"); // LTO
+    OptCmdArgs.push_back("-o");
+    OptCmdArgs.push_back(ResultingBitcodeF);
+    const char *OptExec =
+      Args.MakeArgString(getToolChain().getDriver().Dir + "/opt");
+    C.addCommand(
+      llvm::make_unique<Command>(JA, *this, OptExec, OptCmdArgs));
+
+    // Generate PTX.
+    TmpName = C.getDriver().GetTemporaryPath(Output.getFilename(), "ptx");
+    const char *AsmF = C.getArgs().MakeArgString(TmpName.c_str());
+    ArgStringList LlcCmdArgs;
+    LlcCmdArgs.push_back(ResultingBitcodeF);
+    LlcCmdArgs.push_back("-o");
+    LlcCmdArgs.push_back(AsmF);
+    const char *LlcExec =
+      Args.MakeArgString(getToolChain().getDriver().Dir + "/llc");
+    C.addCommand(
+      llvm::make_unique<Command>(JA, *this, LlcExec, LlcCmdArgs));
+
+    // Assemble PTX.
+    TmpName = C.getDriver().GetTemporaryPath(Output.getFilename(), "cubin");
+    const char *CubinF = C.getArgs().MakeArgString(TmpName.c_str());
+    ArgStringList AsCmdArgs;
+    AsCmdArgs.push_back(AsmF);
+    AsCmdArgs.push_back("-c");
+    AsCmdArgs.push_back("-o");
+    AsCmdArgs.push_back(CubinF);
+    std::string CPU = getCPUName(Args, getToolChain().getTriple(),
+      JA.getOffloadingDevice());
+     if (!CPU.empty()) {
+      AsCmdArgs.push_back("-arch");
+      AsCmdArgs.push_back(Args.MakeArgString(CPU));
+    }
+    const char *AsExec =
+      Args.MakeArgString(getToolChain().GetProgramPath("ptxas"));
+    C.addCommand(
+      llvm::make_unique<Command>(JA, *this, AsExec, AsCmdArgs));
+
+    // Pass .cubin to nvlink
+    CmdArgs.push_back(CubinF);
   }
 
   // nvlink relies on the extension used by the input files
@@ -8956,10 +9120,14 @@ void NVPTX::Link::ConstructJob(Compilation &C, const JobAction &JA,
 
     if (II.getType() == types::TY_LLVM_IR ||
         II.getType() == types::TY_LTO_IR ||
-        II.getType() == types::TY_LLVM_BC ||
-        II.getType() == types::TY_LTO_BC){
+        II.getType() == types::TY_LLVM_BC) {
       C.getDriver().Diag(diag::err_drv_no_linker_llvm_support)
         << getToolChain().getTripleString();
+      continue;
+    }
+
+    // Already processed in LTO phase above.
+    if (II.getType() == types::TY_LTO_BC) {
       continue;
     }
 
@@ -8988,10 +9156,12 @@ void NVPTX::Link::ConstructJob(Compilation &C, const JobAction &JA,
 
   AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
+  // add paths specified in LIBRARY_PATH environment variable as -L options
+  addDirectoryList(Args, CmdArgs, "-L", "LIBRARY_PATH");
+
   const char *Exec =
     Args.MakeArgString(getToolChain().GetProgramPath("nvlink"));
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
-
 }
 
 void CrossWindows::Assemble::ConstructJob(Compilation &C, const JobAction &JA,

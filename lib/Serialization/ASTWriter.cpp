@@ -1279,6 +1279,13 @@ void ASTWriter::WriteControlBlock(Preprocessor &PP, ASTContext &Context,
   }
   Record.push_back(LangOpts.CommentOpts.ParseAllComments);
 
+  // OpenMP offloading options
+  AddString(Context.getLangOpts().OMPModuleUniqueID, Record);
+
+  Record.push_back(Context.getLangOpts().OMPTargetTriples.size());
+  for( auto &T : Context.getLangOpts().OMPTargetTriples)
+    AddString(T.getTriple(), Record);
+
   Stream.EmitRecord(LANGUAGE_OPTIONS, Record);
 
   // Target options.
@@ -3877,7 +3884,7 @@ uint64_t ASTWriter::WriteDeclContextVisibleBlock(ASTContext &Context,
 
   // If not in C++, we perform name lookup for the translation unit via the
   // IdentifierInfo chains, don't bother to build a visible-declarations table.
-  if (DC->isTranslationUnit() && !Context.getLangOpts().CPlusPlus)
+  if (DC->isTranslationUnitOrDeclareTarget() && !Context.getLangOpts().CPlusPlus)
     return 0;
 
   // Serialize the contents of the mapping used for lookup. Note that,

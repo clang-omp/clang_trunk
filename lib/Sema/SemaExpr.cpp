@@ -12689,8 +12689,9 @@ bool Sema::tryCaptureVariable(VarDecl *Var, SourceLocation ExprLoc,
 
   // Capture global variables if it is required to use private copy of this
   // variable.
+  Scope *OpenMPStopScope = nullptr;
   bool IsGlobal = !Var->hasLocalStorage();
-  if (IsGlobal && !(LangOpts.OpenMP && IsOpenMPCapturedVar(Var)))
+  if (IsGlobal && !(LangOpts.OpenMP && IsOpenMPCapturedVar(Var,OpenMPStopScope)))
     return true;
 
   // Walk up the stack to determine whether we can capture the variable,
@@ -12706,6 +12707,27 @@ bool Sema::tryCaptureVariable(VarDecl *Var, SourceLocation ExprLoc,
   bool Explicit = (Kind != TryCapture_Implicit);
   unsigned FunctionScopesIndex = MaxFunctionScopesIndex;
   do {
+
+    if (OpenMPStopScope){
+      Explicit = false;
+
+      CapturedRegionScopeInfo *CSI = nullptr;
+
+      for(;FunctionScopesIndex > 0; --FunctionScopesIndex, DC=DC->getParent() ){
+        if (CapturedRegionScopeInfo *C =
+            dyn_cast<CapturedRegionScopeInfo>(FunctionScopes[FunctionScopesIndex]))
+          if (C->TheScope == OpenMPStopScope){
+            CSI = C;
+            --FunctionScopesIndex;
+            break;
+          }
+      }
+
+      // Found a captured region scope that matches the OpenMP scope
+      if (CSI)
+        break;
+    }
+
     // Only block literals, captured statements, and lambda expressions can
     // capture; other scopes don't work.
     DeclContext *ParentDC = getParentOfCapturingContextOrNull(DC, Var, 
