@@ -2606,6 +2606,9 @@ void CodeGenFunction::InitOpenMPFunction(llvm::Value *Context,
       CapturedStmtInfo->addCachedVar(VD, LV.getAddress());
       continue;
     }
+    if (C->capturesThis()) {
+      continue;
+    }
 
     llvm_unreachable("Don't know what to do with this capture!");
   }
@@ -2665,6 +2668,10 @@ void CodeGenFunction::InitOpenMPTargetFunction(const OMPExecutableDirective &D,
       CapturedStmtInfo->addCachedVar(VD, Arg);
 
       ++Arg;
+      continue;
+    }
+
+    if (C->capturesThis()) {
       continue;
     }
 
@@ -2787,6 +2794,9 @@ void CodeGenFunction::InitOpenMPSharedizeParameters(
 	    MappingDeclVals.push_back(oldref);
 	    continue;
 	  }
+    if (C->capturesThis()) {
+      continue;
+    }
 
 	  llvm_unreachable("Don't know what to do with this capture!");
 	}
