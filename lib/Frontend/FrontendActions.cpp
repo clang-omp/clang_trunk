@@ -599,8 +599,7 @@ void DumpTokensAction::ExecuteAction() {
 
 void GeneratePTHAction::ExecuteAction() {
   CompilerInstance &CI = getCompilerInstance();
-  llvm::raw_fd_ostream *OS =
-    CI.createDefaultOutputFile(true, getCurrentFile());
+  llvm::raw_fd_ostream *OS = CI.createDefaultOutputFile(true, getCurrentFile());
   if (!OS)
     return;
 
