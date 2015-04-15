@@ -1481,11 +1481,27 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
 
     if (llvm::GlobalValue *GV = GetGlobalValue(getMangledName(GD)))
       if (!GV->isDeclaration()) {
-        getDiags().Report(FD->getLocation(), diag::err_duplicate_mangled_name);
-        GlobalDecl OldGD = Manglings.lookup(GV->getName());
-        if (auto *Prev = OldGD.getDecl())
-          getDiags().Report(Prev->getLocation(), diag::note_previous_definition);
-        return;
+        // This can happen for OpenMP simd functions; ignore it in that case...
+        bool IgnoreDup = false;
+        if (const CXXMethodDecl *MD = dyn_cast_or_null<CXXMethodDecl>(GD.getDecl())) {
+          const CXXRecordDecl *Parent = MD->getParent();
+          for (DeclContext::decl_iterator DI = Parent->decls_begin(),
+                                          DE = Parent->decls_end();
+                                          DI != DE; ++DI) {
+            if (dyn_cast_or_null<OMPDeclareSimdDecl>(*DI)) {
+              IgnoreDup = true;
+              break;
+            }
+          }
+        }
+
+        if (!IgnoreDup) {
+          getDiags().Report(FD->getLocation(), diag::err_duplicate_mangled_name);
+          GlobalDecl OldGD = Manglings.lookup(GV->getName());
+          if (auto *Prev = OldGD.getDecl())
+            getDiags().Report(Prev->getLocation(), diag::note_previous_definition);
+          return;
+        }
       }
   } else {
     const auto *VD = cast<VarDecl>(Global);
