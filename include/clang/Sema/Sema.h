@@ -6961,7 +6961,7 @@ public:
                                         unsigned NumElts,
                                         AttributeList *attrList);
 
-  void FindProtocolDeclaration(bool WarnOnDeclarations,
+  void FindProtocolDeclaration(bool WarnOnDeclarations, bool ForObjCContainer,
                                const IdentifierLocPair *ProtocolId,
                                unsigned NumProtocols,
                                SmallVectorImpl<Decl *> &Protocols);
