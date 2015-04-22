@@ -7402,6 +7402,11 @@ public:
   void AddAlignValueAttr(SourceRange AttrRange, Decl *D, Expr *E,
                          unsigned SpellingListIndex);
 
+  /// AddLaunchBoundsAttr - Adds a launch_bounds attribute to a particular
+  /// declaration.
+  void AddLaunchBoundsAttr(SourceRange AttrRange, Decl *D, Expr *MaxThreads,
+                           Expr *MinBlocks, unsigned SpellingListIndex);
+
   /// \brief Checks if the specified variable is used in one of the private
   /// clauses in OpenMP constructs.
   bool IsOpenMPCapturedVar(VarDecl *VD, Scope *&StopScope);
