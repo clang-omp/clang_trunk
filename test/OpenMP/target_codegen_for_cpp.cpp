@@ -172,10 +172,10 @@ void test(){
 
 // We need to have the functions that register the target  info and to the global initialization 
 // registered with the llvm constructors
-// CK1: define internal void @_GLOBAL__A_000000_OPENMP_TGT() section ".text.startup" {
+// CK1: define internal void @_GLOBAL__A_000000_OPENMP_TGT() {{(#[0-9]+)?}} section ".text.startup" {
 // CK1: call void @__omptgt__register_lib()
 
-// CK1: define internal void @_GLOBAL__sub_I_target_codegen_for_cpp{{.*}}() section ".text.startup" {
+// CK1: define internal void @_GLOBAL__sub_I_target_codegen_for_cpp{{.*}}() {{(#[0-9]+)?}} section ".text.startup" {
 // CK1: call void @__cxx_global_var_init
 // CK1: call void @__cxx_global_var_init1
 // CK1: call void @__cxx_global_var_init2
