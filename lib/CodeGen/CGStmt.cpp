@@ -2341,8 +2341,6 @@ void CodeGenFunction::EmitPragmaSimd(CodeGenFunction::CGPragmaSimdWrapper &W) {
     CGM.OpenMPSupport.setOrdered(false);
   }
   RunCleanupsScope SIMDForScope(*this);
-  RegionCounter Cnt =
-      getPGORegionCounter(W.getAssociatedStmt()->getCapturedStmt());
 
   // Emit 'safelen' clause and decide if we want to separate last iteration.
   bool SeparateLastIter = W.emitSafelen(this);
@@ -2371,7 +2369,8 @@ void CodeGenFunction::EmitPragmaSimd(CodeGenFunction::CGPragmaSimdWrapper &W) {
   // In the 'omp simd' we may have more than one loop counter due to
   // 'collapse', so we check loopcount instead of loop counter.
   if (!W.isOmp()) {
-    EmitBranchOnBoolExpr(W.getCond(), ThenBlock, ContBlock, Cnt.getCount());
+    EmitBranchOnBoolExpr(W.getCond(), ThenBlock, ContBlock,
+      getProfileCount(W.getAssociatedStmt()->getCapturedStmt()));
     EmitBlock(ThenBlock);
   }
   else {
