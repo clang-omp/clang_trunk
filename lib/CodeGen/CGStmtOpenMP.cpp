@@ -7016,4 +7016,3 @@ void CodeGenFunction::EmitOMPTargetTeamsDistributeSimdDirective(
   EmitOMPDirectiveWithTarget(OMPD_target_teams_distribute_simd,
       OMPD_teams_distribute_simd, S);
 }
-
