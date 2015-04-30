@@ -55,7 +55,7 @@ void Preprocessor::appendMacroDirective(IdentifierInfo *II, MacroDirective *MD){
   II->setHasMacroDefinition(true);
   if (!MD->isDefined() && LeafModuleMacros.find(II) == LeafModuleMacros.end())
     II->setHasMacroDefinition(false);
-  if (II->isFromAST() && !MD->isImported())
+  if (II->isFromAST())
     II->setChangedSinceDeserialization();
 }
 
@@ -279,7 +279,7 @@ static bool isTrivialSingleTokenExpansion(const MacroInfo *MI,
   // If the identifier is a macro, and if that macro is enabled, it may be
   // expanded so it's not a trivial expansion.
   if (auto *ExpansionMI = PP.getMacroInfo(II))
-    if (PP.getMacroInfo(II)->isEnabled() &&
+    if (ExpansionMI->isEnabled() &&
         // Fast expanding "#define X X" is ok, because X would be disabled.
         II != MacroIdent)
       return false;
