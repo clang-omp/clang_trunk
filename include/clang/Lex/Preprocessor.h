@@ -408,11 +408,20 @@ class Preprocessor : public RefCountedBase<Preprocessor> {
   public:
     MacroState() : MacroState(nullptr) {}
     MacroState(MacroDirective *MD) : State(MD) {}
-    void destroy() {
+    MacroState(MacroState &&O) LLVM_NOEXCEPT : State(O.State) {
+      O.State = (MacroDirective *)nullptr;
+    }
+    MacroState &operator=(MacroState &&O) LLVM_NOEXCEPT {
+      auto S = O.State;
+      O.State = (MacroDirective *)nullptr;
+      State = S;
+      return *this;
+    }
+    ~MacroState() {
       if (auto *Info = State.dyn_cast<ModuleMacroInfo*>())
         Info->~ModuleMacroInfo();
-      State = (MacroDirective*)nullptr;
     }
+
     MacroDirective *getLatest() const {
       if (auto *Info = State.dyn_cast<ModuleMacroInfo*>())
         return Info->MD;
@@ -489,6 +498,7 @@ class Preprocessor : public RefCountedBase<Preprocessor> {
     SourceLocation ImportLoc;
 
     struct SavedMacroInfo {
+      SavedMacroInfo() : Latest(nullptr) {}
       MacroDirective *Latest;
       llvm::TinyPtrVector<ModuleMacro*> Overridden;
     };
