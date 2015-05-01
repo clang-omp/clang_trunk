@@ -374,7 +374,7 @@ class Preprocessor : public RefCountedBase<Preprocessor> {
     /// The active module macros for this identifier.
     llvm::TinyPtrVector<ModuleMacro*> ActiveModuleMacros;
     /// The generation number at which we last updated ActiveModuleMacros.
-    /// \see Preprocessor::MacroVisibilityGeneration.
+    /// \see Preprocessor::VisibleModules.
     unsigned ActiveModuleMacrosGeneration;
     /// Whether this macro name is ambiguous.
     bool IsAmbiguous;
@@ -391,7 +391,7 @@ class Preprocessor : public RefCountedBase<Preprocessor> {
       // FIXME: Find a spare bit on IdentifierInfo and store a
       //        HasModuleMacros flag.
       if (!II->hasMacroDefinition() || !PP.getLangOpts().Modules ||
-          !PP.MacroVisibilityGeneration)
+          !PP.VisibleModules.getGeneration())
         return nullptr;
 
       auto *Info = State.dyn_cast<ModuleMacroInfo*>();
@@ -401,7 +401,8 @@ class Preprocessor : public RefCountedBase<Preprocessor> {
         State = Info;
       }
 
-      if (PP.MacroVisibilityGeneration != Info->ActiveModuleMacrosGeneration)
+      if (PP.VisibleModules.getGeneration() !=
+          Info->ActiveModuleMacrosGeneration)
         PP.updateModuleMacroInfo(II, *Info);
       return Info;
     }
@@ -520,9 +521,8 @@ class Preprocessor : public RefCountedBase<Preprocessor> {
   llvm::DenseMap<const IdentifierInfo *, llvm::TinyPtrVector<ModuleMacro*>>
       LeafModuleMacros;
 
-  /// The generation number for module macros. Incremented each time the set
-  /// of modules with visible macros changes.
-  unsigned MacroVisibilityGeneration;
+  /// The current set of visible modules.
+  VisibleModuleSet VisibleModules;
 
   /// \brief Macros that we want to warn because they are not used at the end
   /// of the translation unit.
@@ -1062,6 +1062,8 @@ public:
 
   void LexAfterModuleImport(Token &Result);
 
+  void makeModuleVisible(Module *M, SourceLocation Loc);
+
   /// \brief Lex a string literal, which may be the concatenation of multiple
   /// string literals and may even come from macro expansion.
   /// \returns true on success, false if a error diagnostic has been generated.
@@ -1179,7 +1181,7 @@ public:
   /// location of an annotation token.
   SourceLocation getLastCachedTokenLocation() const {
     assert(CachedLexPos != 0);
-    return CachedTokens[CachedLexPos-1].getLocation();
+    return CachedTokens[CachedLexPos-1].getLastLoc();
   }
 
   /// \brief Replace the last token with an annotation token.
@@ -1444,6 +1446,7 @@ public:
   void DumpToken(const Token &Tok, bool DumpFlags = false) const;
   void DumpLocation(SourceLocation Loc) const;
   void DumpMacro(const MacroInfo &MI) const;
+  void dumpMacroInfo(const IdentifierInfo *II);
 
   /// \brief Given a location that specifies the start of a
   /// token, return a new location that specifies a character within the token.

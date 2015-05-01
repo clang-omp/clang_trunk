@@ -714,8 +714,10 @@ struct CounterCoverageMappingBuilder
     Counter BackedgeCount = propagateCounts(BodyCount, S->getBody());
     BreakContinue BC = BreakContinueStack.pop_back_val();
 
-    Counter OutCount = addCounters(ParentCount, BC.BreakCount, BC.ContinueCount,
-                                   subtractCounters(BodyCount, BackedgeCount));
+    Counter LoopCount =
+        addCounters(ParentCount, BackedgeCount, BC.ContinueCount);
+    Counter OutCount =
+        addCounters(BC.BreakCount, subtractCounters(LoopCount, BodyCount));
     if (OutCount != ParentCount)
       pushRegion(OutCount);
   }
@@ -732,8 +734,10 @@ struct CounterCoverageMappingBuilder
     Counter BackedgeCount = propagateCounts(BodyCount, S->getBody());
     BreakContinue BC = BreakContinueStack.pop_back_val();
 
-    Counter OutCount = addCounters(ParentCount, BC.BreakCount, BC.ContinueCount,
-                                   subtractCounters(BodyCount, BackedgeCount));
+    Counter LoopCount =
+        addCounters(ParentCount, BackedgeCount, BC.ContinueCount);
+    Counter OutCount =
+        addCounters(BC.BreakCount, subtractCounters(LoopCount, BodyCount));
     if (OutCount != ParentCount)
       pushRegion(OutCount);
   }
@@ -965,7 +969,7 @@ void CoverageMappingModuleGen::emit() {
     llvm::sys::fs::make_absolute(Path);
 
     auto I = Entry.second;
-    FilenameStrs[I] = std::move(std::string(Path.begin(), Path.end()));
+    FilenameStrs[I] = std::string(Path.begin(), Path.end());
     FilenameRefs[I] = FilenameStrs[I];
   }
 
