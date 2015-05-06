@@ -166,6 +166,9 @@ bool ContinuationIndenter::mustBreak(const LineState &State) {
       ((Style.AllowShortFunctionsOnASingleLine != FormatStyle::SFS_All) ||
        Style.BreakConstructorInitializersBeforeComma || Style.ColumnLimit != 0))
     return true;
+  if (Current.is(TT_SelectorName) && State.Stack.back().ObjCSelectorNameFound &&
+      State.Stack.back().BreakBeforeParameter)
+    return true;
 
   if (State.Column < getNewLineColumn(State))
     return false;
@@ -203,9 +206,6 @@ bool ContinuationIndenter::mustBreak(const LineState &State) {
       State.Stack.back().FirstLessLess == 0)
     return true;
 
-  if (Current.is(TT_SelectorName) && State.Stack.back().ObjCSelectorNameFound &&
-      State.Stack.back().BreakBeforeParameter)
-    return true;
   if (Current.NestingLevel == 0 && !Current.isTrailingComment()) {
     if (Previous.ClosesTemplateDeclaration)
       return true;
@@ -584,10 +584,12 @@ unsigned ContinuationIndenter::getNewLineColumn(const LineState &State) {
       return State.Stack.back().StartOfArraySubscripts;
     return ContinuationIndent;
   }
+  if (NextNonComment->is(TT_StartOfName) && NextNonComment->Next &&
+      NextNonComment->Next->is(TT_ObjCMethodExpr))
+    return State.Stack.back().Indent;
   if (NextNonComment->isOneOf(TT_StartOfName, TT_PointerOrReference) ||
-      Previous.isOneOf(tok::coloncolon, tok::equal)) {
+      Previous.isOneOf(tok::coloncolon, tok::equal))
     return ContinuationIndent;
-  }
   if (PreviousNonComment && PreviousNonComment->is(tok::colon) &&
       PreviousNonComment->isOneOf(TT_ObjCMethodExpr, TT_DictLiteral))
     return ContinuationIndent;
