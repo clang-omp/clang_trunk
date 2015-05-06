@@ -752,7 +752,7 @@ void Preprocessor::LexAfterModuleImport(Token &Result) {
     if (getLangOpts().Modules) {
       Imported = TheModuleLoader.loadModule(ModuleImportLoc,
                                             ModuleImportPath,
-                                            Module::MacrosVisible,
+                                            Module::Hidden,
                                             /*IsIncludeDirective=*/false);
       if (Imported)
         makeModuleVisible(Imported, ModuleImportLoc);
@@ -763,9 +763,6 @@ void Preprocessor::LexAfterModuleImport(Token &Result) {
 }
 
 void Preprocessor::makeModuleVisible(Module *M, SourceLocation Loc) {
-  if (VisibleModules.isVisible(M))
-    return;
-
   VisibleModules.setVisible(
       M, Loc, [](Module *) {},
       [&](ArrayRef<Module *> Path, Module *Conflict, StringRef Message) {
@@ -779,7 +776,7 @@ void Preprocessor::makeModuleVisible(Module *M, SourceLocation Loc) {
 
   // Add this module to the imports list of the currently-built submodule.
   if (!BuildingSubmoduleStack.empty())
-    BuildingSubmoduleStack.back().M->Imports.push_back(M);
+    BuildingSubmoduleStack.back().M->Imports.insert(M);
 }
 
 bool Preprocessor::FinishLexStringLiteral(Token &Result, std::string &String,

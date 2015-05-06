@@ -620,8 +620,7 @@ void Preprocessor::EnterSubmodule(Module *M, SourceLocation ImportLoc) {
 
   // Determine the set of starting macros for this submodule.
   // FIXME: If we re-enter a submodule, should we restore its MacroDirectives?
-  auto &StartingMacros = (getLangOpts().ModulesLocalVisibility &&
-                          BuildingSubmoduleStack.size() > 1)
+  auto &StartingMacros = getLangOpts().ModulesLocalVisibility
                              ? BuildingSubmoduleStack[0].Macros
                              : Info.Macros;
 
@@ -661,13 +660,13 @@ void Preprocessor::LeaveSubmodule() {
          MD = MD->getPrevious()) {
       assert(MD && "broken macro directive chain");
 
-      // Skip macros defined in other submodules we #included along the way.
+      // Stop on macros defined in other submodules we #included along the way.
       // There's no point doing this if we're tracking local submodule
-      // visibiltiy, since there can be no such directives in our list.
+      // visibility, since there can be no such directives in our list.
       if (!getLangOpts().ModulesLocalVisibility) {
         Module *Mod = getModuleContainingLocation(MD->getLocation());
         if (Mod != Info.M)
-          continue;
+          break;
       }
 
       if (auto *VisMD = dyn_cast<VisibilityMacroDirective>(MD)) {
@@ -686,8 +685,11 @@ void Preprocessor::LeaveSubmodule() {
         // FIXME: Issue a warning if multiple headers for the same submodule
         // define a macro, rather than silently ignoring all but the first.
         bool IsNew;
-        addModuleMacro(Info.M, II, Def, Macro.second.getOverriddenMacros(),
-                       IsNew);
+        // Don't bother creating a module macro if it would represent a #undef
+        // that doesn't override anything.
+        if (Def || !Macro.second.getOverriddenMacros().empty())
+          addModuleMacro(Info.M, II, Def, Macro.second.getOverriddenMacros(),
+                         IsNew);
         break;
       }
     }
