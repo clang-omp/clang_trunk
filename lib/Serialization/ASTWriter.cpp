@@ -2224,13 +2224,13 @@ void ASTWriter::WritePreprocessorDetail(PreprocessingRecord &PPRec) {
        (void)++E, ++NumPreprocessingRecords, ++NextPreprocessorEntityID) {
     Record.clear();
 
-    PreprocessedEntityOffsets.push_back(PPEntityOffset((*E)->getSourceRange(),
-                                                     Stream.GetCurrentBitNo()));
+    PreprocessedEntityOffsets.push_back(
+        PPEntityOffset((*E)->getSourceRange(), Stream.GetCurrentBitNo()));
 
-    if (MacroDefinition *MD = dyn_cast<MacroDefinition>(*E)) {
+    if (MacroDefinitionRecord *MD = dyn_cast<MacroDefinitionRecord>(*E)) {
       // Record this macro definition's ID.
       MacroDefinitions[MD] = NextPreprocessorEntityID;
-      
+
       AddIdentifierRef(MD->getName(), Record);
       Stream.EmitRecord(PPD_MACRO_DEFINITION, Record);
       continue;
@@ -5547,7 +5547,7 @@ void ASTWriter::SelectorRead(SelectorID ID, Selector S) {
 }
 
 void ASTWriter::MacroDefinitionRead(serialization::PreprocessedEntityID ID,
-                                    MacroDefinition *MD) {
+                                    MacroDefinitionRecord *MD) {
   assert(MacroDefinitions.find(MD) == MacroDefinitions.end());
   MacroDefinitions[MD] = ID;
 }
