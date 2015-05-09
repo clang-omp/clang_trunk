@@ -692,6 +692,11 @@ TEST_F(FormatTest, FormatsSwitchStatement) {
                "  case OP_name:                        \\\n"
                "    return operations::Operation##name\n",
                getLLVMStyleWithColumns(40));
+  verifyFormat("switch (x) {\n"
+               "case 1:;\n"
+               "default:;\n"
+               "  int i;\n"
+               "}");
 
   verifyGoogleFormat("switch (x) {\n"
                      "  case 1:\n"
@@ -826,6 +831,11 @@ TEST_F(FormatTest, FormatsLabels) {
                "  some_code();\n"
                "test_label:\n"
                "  some_other_code();\n"
+               "}");
+  verifyFormat("{\n"
+               "  some_code();\n"
+               "test_label:;\n"
+               "  int i = 0;\n"
                "}");
 }
 
@@ -1929,6 +1939,9 @@ TEST_F(FormatTest, UnderstandsAccessSpecifiers) {
   // Don't interpret 'signals' the wrong way.
   verifyFormat("signals.set();");
   verifyFormat("for (Signals signals : f()) {\n}");
+  verifyFormat("{\n"
+               "  signals.set(); // This needs indentation.\n"
+               "}");
 }
 
 TEST_F(FormatTest, SeparatesLogicalBlocks) {
@@ -3499,6 +3512,10 @@ TEST_F(FormatTest, ExpressionIndentationBreakingBeforeOperators) {
       "                 * bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
       "             + cc;",
       Style);
+
+  verifyFormat("aaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "    = aaaaaaaaaaaaaaaaaaaa + aaaaaaaaaaaaaaaaaaaaaaaaaaaa;",
+               Style);
 
   // Forced by comments.
   verifyFormat(
@@ -5140,6 +5157,8 @@ TEST_F(FormatTest, UnderstandsTemplateParameters) {
   verifyFormat("f<int>();");
   verifyFormat("template <typename T> void f() {}");
   verifyFormat("struct A<std::enable_if<sizeof(T2) < sizeof(int32)>::type>;");
+  verifyFormat("struct A<std::enable_if<sizeof(T2) ? sizeof(int32) : "
+               "sizeof(char)>::type>;");
 
   // Not template parameters.
   verifyFormat("return a < b && c > d;");
