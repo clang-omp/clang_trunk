@@ -350,6 +350,13 @@ void CodeGenModule::Release() {
   if (ObjCRuntime)
     if (llvm::Function *ObjCInitFunction = ObjCRuntime->ModuleInitFunction())
       AddGlobalCtor(ObjCInitFunction);
+  if (Context.getLangOpts().CUDA && !Context.getLangOpts().CUDAIsDevice &&
+      CUDARuntime) {
+    if (llvm::Function *CudaCtorFunction = CUDARuntime->makeModuleCtorFunction())
+      AddGlobalCtor(CudaCtorFunction);
+    if (llvm::Function *CudaDtorFunction = CUDARuntime->makeModuleDtorFunction())
+      AddGlobalDtor(CudaDtorFunction);
+  }
   if (PGOReader && PGOStats.hasDiagnostics())
     PGOStats.reportDiagnostics(getDiags(), getCodeGenOpts().MainFileName);
   EmitCtorList(GlobalCtors, "llvm.global_ctors");

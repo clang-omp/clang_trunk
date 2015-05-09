@@ -276,6 +276,12 @@ TEST_F(FormatTestJS, FunctionLiterals) {
                "    return x.zIsTooLongForOneLineWithTheDeclarationLine();\n"
                "  };\n"
                "}");
+  verifyFormat("someLooooooooongFunction(\n"
+               "    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n"
+               "    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n"
+               "    function(aaaaaaaaaaaaaaaaaaaaaaaaaaaaa) {\n"
+               "      // code\n"
+               "    });");
 
   verifyFormat("f({a: function() { return 1; }});",
                getGoogleJSStyleWithColumns(33));
@@ -463,6 +469,7 @@ TEST_F(FormatTestJS, RegexLiteralClassification) {
 }
 
 TEST_F(FormatTestJS, RegexLiteralSpecialCharacters) {
+  verifyFormat("var regex = /=/;");
   verifyFormat("var regex = /a*/;");
   verifyFormat("var regex = /a+/;");
   verifyFormat("var regex = /a?/;");
