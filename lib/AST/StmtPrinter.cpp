@@ -2026,7 +2026,7 @@ void StmtPrinter::VisitLambdaExpr(LambdaExpr *Node) {
       break;
 
     case LCK_ByRef:
-      if (Node->getCaptureDefault() != LCD_ByRef || C->isInitCapture())
+      if (Node->getCaptureDefault() != LCD_ByRef || Node->isInitCapture(C))
         OS << '&';
       OS << C->getCapturedVar()->getName();
       break;
@@ -2038,7 +2038,7 @@ void StmtPrinter::VisitLambdaExpr(LambdaExpr *Node) {
       llvm_unreachable("VLA type in explicit captures.");
     }
 
-    if (C->isInitCapture())
+    if (Node->isInitCapture(C))
       PrintExpr(C->getCapturedVar()->getInit());
   }
   OS << ']';
