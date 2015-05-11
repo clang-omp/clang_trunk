@@ -2573,10 +2573,6 @@ FunctionDecl::setPreviousDeclaration(FunctionDecl *PrevDecl) {
     IsInline = true;
 }
 
-const FunctionDecl *FunctionDecl::getCanonicalDecl() const {
-  return getFirstDecl();
-}
-
 FunctionDecl *FunctionDecl::getCanonicalDecl() { return getFirstDecl(); }
 
 /// \brief Returns a value indicating whether this function
