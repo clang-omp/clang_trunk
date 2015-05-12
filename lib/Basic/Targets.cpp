@@ -4275,12 +4275,10 @@ public:
       Features.push_back("-neonfp");
 
     // Remove front-end specific options which the backend handles differently.
-    const StringRef FrontEndFeatures[] = { "+soft-float", "+soft-float-abi" };
-    for (const auto &FEFeature : FrontEndFeatures) {
-      auto Feature = std::find(Features.begin(), Features.end(), FEFeature);
-      if (Feature != Features.end())
-        Features.erase(Feature);
-    }
+    auto Feature =
+        std::find(Features.begin(), Features.end(), "+soft-float-abi");
+    if (Feature != Features.end())
+      Features.erase(Feature);
 
     return true;
   }
@@ -5353,11 +5351,13 @@ class SparcTargetInfo : public TargetInfo {
   static const char * const GCCRegNames[];
   bool SoftFloat;
 public:
-  SparcTargetInfo(const llvm::Triple &Triple) : TargetInfo(Triple) {}
+  SparcTargetInfo(const llvm::Triple &Triple)
+      : TargetInfo(Triple), SoftFloat(false) {}
 
   bool handleTargetFeatures(std::vector<std::string> &Features,
                             DiagnosticsEngine &Diags) override {
-    SoftFloat = false;
+    // The backend doesn't actually handle soft float yet, but in case someone
+    // is using the support for the front end continue to support it.
     auto Feature = std::find(Features.begin(), Features.end(), "+soft-float");
     if (Feature != Features.end()) {
       SoftFloat = true;
@@ -6150,12 +6150,6 @@ public:
       else if (*it == "-nan2008")
         IsNan2008 = false;
     }
-
-    // Remove front-end specific options.
-    std::vector<std::string>::iterator it =
-      std::find(Features.begin(), Features.end(), "+soft-float");
-    if (it != Features.end())
-      Features.erase(it);
 
     setDescriptionString();
 
