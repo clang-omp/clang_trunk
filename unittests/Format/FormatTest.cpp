@@ -2775,9 +2775,10 @@ TEST_F(FormatTest, MacroDefinitionsWithIncompleteCode) {
   verifyFormat("#d, = };");
   verifyFormat("#if \"a");
   verifyIncompleteFormat("({\n"
-                         "#define b }\\\n"
+                         "#define b     \\\n"
+                         "  }           \\\n"
                          "  a\n"
-                         "a");
+                         "a", getLLVMStyleWithColumns(15));
   verifyFormat("#define A     \\\n"
                "  {           \\\n"
                "    {\n"
@@ -3179,6 +3180,30 @@ TEST_F(FormatTest, LayoutBlockInsideParens) {
                "  if (a)\n"
                "    f();\n"
                "});");
+  EXPECT_EQ("int longlongname; // comment\n"
+            "int x = f({\n"
+            "  int x; // comment\n"
+            "  int y; // comment\n"
+            "});",
+            format("int longlongname; // comment\n"
+                   "int x = f({\n"
+                   "  int x; // comment\n"
+                   "  int y; // comment\n"
+                   "});",
+                   65, 0, getLLVMStyle()));
+  EXPECT_EQ("int s = f({\n"
+            "  class X {\n"
+            "  public:\n"
+            "    void f();\n"
+            "  };\n"
+            "});",
+            format("int s = f({\n"
+                   "  class X {\n"
+                   "    public:\n"
+                   "    void f();\n"
+                   "  };\n"
+                   "});",
+                   0, 0, getLLVMStyle()));
 }
 
 TEST_F(FormatTest, LayoutBlockInsideStatement) {
@@ -3257,6 +3282,18 @@ TEST_F(FormatTest, LayoutNestedBlocks) {
                Style);
 
   verifyNoCrash("^{v^{a}}");
+}
+
+TEST_F(FormatTest, FormatNestedBlocksInMacros) {
+  EXPECT_EQ("#define MACRO()                     \\\n"
+            "  Debug(aaa, /* force line break */ \\\n"
+            "        {                           \\\n"
+            "          int i;                    \\\n"
+            "          int j;                    \\\n"
+            "        })",
+            format("#define   MACRO()   Debug(aaa,  /* force line break */ \\\n"
+                   "          {  int   i;  int  j;   })",
+                   getGoogleStyle()));
 }
 
 TEST_F(FormatTest, IndividualStatementsOfNestedBlocks) {
@@ -5436,6 +5473,7 @@ TEST_F(FormatTest, UnderstandsUsesOfStarAndAmp) {
   verifyFormat("auto PointerBinding = [](const char *S) {};");
   verifyFormat("typedef typeof(int(int, int)) *MyFunc;");
   verifyFormat("[](const decltype(*a) &value) {}");
+  verifyFormat("#define MACRO() [](A *a) { return 1; }");
   verifyIndependentOfContext("typedef void (*f)(int *a);");
   verifyIndependentOfContext("int i{a * b};");
   verifyIndependentOfContext("aaa && aaa->f();");
