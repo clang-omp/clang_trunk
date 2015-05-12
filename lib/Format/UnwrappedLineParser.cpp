@@ -672,6 +672,7 @@ void UnwrappedLineParser::parseStructuralElement() {
         if (FormatTok->is(tok::r_brace)) {
           FormatTok->Type = TT_InlineASMBrace;
           nextToken();
+          addUnwrappedLine();
           break;
         }
         FormatTok->Finalized = true;
@@ -1666,14 +1667,19 @@ void UnwrappedLineParser::parseJavaScriptEs6ImportExport() {
   assert(FormatTok->isOneOf(Keywords.kw_import, tok::kw_export));
   nextToken();
 
-  if (FormatTok->isOneOf(tok::kw_const, tok::kw_class, Keywords.kw_function,
-                         Keywords.kw_var))
-    return; // Fall through to parsing the corresponding structure.
+  // Consume the "default" in "export default class/function".
+  if (FormatTok->is(tok::kw_default))
+    nextToken();
 
-  if (FormatTok->is(tok::kw_default)) {
-    nextToken(); // export default ..., fall through after eating 'default'.
+  // Consume "function" and "default function", so that these get parsed as
+  // free-standing JS functions, i.e. do not require a trailing semicolon.
+  if (FormatTok->is(Keywords.kw_function)) {
+    nextToken();
     return;
   }
+
+  if (FormatTok->isOneOf(tok::kw_const, tok::kw_class, Keywords.kw_var))
+    return; // Fall through to parsing the corresponding structure.
 
   if (FormatTok->is(tok::l_brace)) {
     FormatTok->BlockKind = BK_Block;

@@ -2328,6 +2328,12 @@ TEST_F(FormatTest, FormatsInlineASM) {
                "  // comment\n"
                "  asm(\"\");\n"
                "}");
+  EXPECT_EQ("__asm {\n"
+            "}\n"
+            "int i;",
+            format("__asm   {\n"
+                   "}\n"
+                   "int   i;"));
 }
 
 TEST_F(FormatTest, FormatTryCatch) {
@@ -4709,11 +4715,16 @@ TEST_F(FormatTest, AlignsStringLiterals) {
                "  \"jkl\");");
 
   verifyFormat("f(L\"a\"\n"
-               "  L\"b\")");
+               "  L\"b\");");
   verifyFormat("#define A(X)            \\\n"
                "  L\"aaaaa\" #X L\"bbbbbb\" \\\n"
                "  L\"ccccc\"",
                getLLVMStyleWithColumns(25));
+
+  verifyFormat("f(@\"a\"\n"
+               "  @\"b\");");
+  verifyFormat("NSString s = @\"a\"\n"
+               "             @\"b\";");
 }
 
 TEST_F(FormatTest, AlwaysBreakAfterDefinitionReturnType) {
@@ -4811,9 +4822,9 @@ TEST_F(FormatTest, AlwaysBreakBeforeMultilineStrings) {
 
   // Exempt ObjC strings for now.
   EXPECT_EQ("NSString *const kString = @\"aaaa\"\n"
-            "                           \"bbbb\";",
+            "                          @\"bbbb\";",
             format("NSString *const kString = @\"aaaa\"\n"
-                   "\"bbbb\";",
+                   "@\"bbbb\";",
                    Break));
 
   Break.ColumnLimit = 0;
@@ -6299,6 +6310,11 @@ TEST_F(FormatTest, FormatsBracedListsInColumnLayout) {
                "    \"aaaaaaaaaaaa\",\n"
                "    \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n"
                "};");
+  verifyFormat("vector<int> x = {1, 2, 3, 4, aaaaaaaaaaaaaaaaa, 6};");
+  verifyFormat("vector<int> x = {1, aaaaaaaaaaaaaaaaaaaaaa,\n"
+               "                 2, bbbbbbbbbbbbbbbbbbbbbb,\n"
+               "                 3, cccccccccccccccccccccc};",
+               getLLVMStyleWithColumns(60));
 
   // Trailing commas.
   verifyFormat("vector<int> x = {\n"
