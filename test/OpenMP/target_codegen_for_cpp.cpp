@@ -177,17 +177,17 @@ void test(){
 
 // CK1: define internal void @_GLOBAL__sub_I_target_codegen_for_cpp{{.*}}() {{(#[0-9]+)?}} section ".text.startup" {
 // CK1: call void @__cxx_global_var_init
-// CK1: call void @__cxx_global_var_init1
-// CK1: call void @__cxx_global_var_init2
-// CK1: call void @__cxx_global_var_init3
+// CK1: call void @__cxx_global_var_init.1
+// CK1: call void @__cxx_global_var_init.2
+// CK1: call void @__cxx_global_var_init.3
 // CK1: call i32 @__tgt_target_teams(i32 -2, {{.*}}, i32 0, i8** null, i8** null, i64* null, i32* null, i32 1, i32 1)
 
 // Target also needs to call all the initializers
 // CK1-TGT: define internal void @__omptgt__[[E0:[0-9]+]]_[[ID:[0-9a-f]+_[0-9a-f]+]]_() {
 // CK1-TGT: call void @__cxx_global_var_init()
-// CK1-TGT: call void @__cxx_global_var_init1()
-// CK1-TGT: call void @__cxx_global_var_init2()
-// CK1-TGT: call void @__cxx_global_var_init3()
+// CK1-TGT: call void @__cxx_global_var_init.1()
+// CK1-TGT: call void @__cxx_global_var_init.2()
+// CK1-TGT: call void @__cxx_global_var_init.3()
 
 #endif
 

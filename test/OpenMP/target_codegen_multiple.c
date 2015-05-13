@@ -45,7 +45,7 @@
 // CHK-CODEGEN-HOST: i8* bitcast (void (i32*)* @__omptgt__1_[[ID]]_ to i8*), 
 // CHK-CODEGEN-HOST: i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8], [{{[1-9][0-9]*}} x i8]* @__omptgt__1_[[ID]]__entry_name, i32 0, i32 0), i64 0
 // CHK-CODEGEN-HOST: }, section ".openmptgt_host_entries", align 1
-// CHK-CODEGEN-HOST: [[M2:@.tgt_types[0-9]*]] = private constant [1 x i32] [i32 3]
+// CHK-CODEGEN-HOST: [[M2:@.tgt_types.[0-9]*]] = private constant [1 x i32] [i32 3]
 
 // CHK-CODEGEN-TARGET1: @__omptgt__1_[[ID]]__entry_name = 
 // CHK-CODEGEN-TARGET1: internal constant [{{[1-9][0-9]*}} x i8] c"__omptgt__1_[[ID]]_\00"
