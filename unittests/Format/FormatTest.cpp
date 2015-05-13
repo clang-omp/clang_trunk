@@ -6368,6 +6368,12 @@ TEST_F(FormatTest, FormatsBracedListsInColumnLayout) {
                "                 /**/ /**/};",
                getLLVMStyleWithColumns(39));
 
+  // Trailing comment in the first line.
+  verifyFormat("vector<int> iiiiiiiiiiiiiii = {                      //\n"
+               "    1111111111, 2222222222, 33333333333, 4444444444, //\n"
+               "    111111111,  222222222,  3333333333,  444444444,  //\n"
+               "    11111111,   22222222,   333333333,   44444444};");
+
   // With nested lists, we should either format one item per line or all nested
   // lists one on line.
   // FIXME: For some nested lists, we can do better.
@@ -9961,6 +9967,9 @@ TEST_F(FormatTest, FormatsLambdas) {
                "    : Field([] { // comment\n"
                "        int i;\n"
                "      }) {}");
+  verifyFormat("auto my_lambda = [](const string &some_parameter) {\n"
+               "  return some_parameter.size();\n"
+               "};");
 
   // Lambdas with return types.
   verifyFormat("int c = []() -> int { return 2; }();\n");
