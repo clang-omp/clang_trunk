@@ -2503,8 +2503,7 @@ void ASTWriter::WriteSubmodules(Module *WritingModule) {
       Record.clear();
       for (unsigned I = 0, N = Mod->Exports.size(); I != N; ++I) {
         if (Module *Exported = Mod->Exports[I].getPointer()) {
-          unsigned ExportedID = SubmoduleIDs[Exported];
-          assert(ExportedID > 0 && "Unknown submodule ID?");
+          unsigned ExportedID = getSubmoduleID(Exported);
           Record.push_back(ExportedID);
         } else {
           Record.push_back(0);
@@ -2555,9 +2554,14 @@ void ASTWriter::WriteSubmodules(Module *WritingModule) {
   }
   
   Stream.ExitBlock();
-  
-  assert((NextSubmoduleID - FirstSubmoduleID
-            == getNumberOfModules(WritingModule)) && "Wrong # of submodules");
+
+  // FIXME: This can easily happen, if we have a reference to a submodule that
+  // did not result in us loading a module file for that submodule. For
+  // instance, a cross-top-level-module 'conflict' declaration will hit this.
+  assert((NextSubmoduleID - FirstSubmoduleID ==
+          getNumberOfModules(WritingModule)) &&
+         "Wrong # of submodules; found a reference to a non-local, "
+         "non-imported submodule?");
 }
 
 serialization::SubmoduleID 

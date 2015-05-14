@@ -2315,6 +2315,7 @@ void CXXNameMangler::mangleAArch64NeonVectorType(const VectorType *T) {
       EltName = "Poly16";
       break;
     case BuiltinType::ULong:
+    case BuiltinType::ULongLong:
       EltName = "Poly64";
       break;
     default:
