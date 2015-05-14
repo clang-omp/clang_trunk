@@ -64,7 +64,7 @@ void CGOpenMPRuntime::setRequiresSharedVersion(llvm::Value *V){
 }
 
 // Return the registered constant for a given declaration
-llvm::Constant* CGOpenMPRuntime::getEntryForDeclaration(const Decl *D){
+llvm::Constant *CGOpenMPRuntime::getEntryForDeclaration(const Decl *D) {
   auto I = DeclsToEntriesMap.find(D);
   if (I != DeclsToEntriesMap.end())
     return I->getSecond();
@@ -72,17 +72,17 @@ llvm::Constant* CGOpenMPRuntime::getEntryForDeclaration(const Decl *D){
 }
 
 // Register a function and host entry for a given directive with target
-void
-CGOpenMPRuntime::registerEntryForDeclaration(const Decl *D, llvm::Constant *C){
+void CGOpenMPRuntime::registerEntryForDeclaration(const Decl *D,
+                                                  llvm::Constant *C) {
   if (!D)
     return;
   DeclsToEntriesMap[D] = C;
 }
 
-
 CGOpenMPRuntime::CGOpenMPRuntime(CodeGenModule &CGM)
     : CGM(CGM), DefaultOpenMPPSource(nullptr), NumTargetRegions(0),
-      NumTargetGlobals(0), TargetRegionsDescriptor(nullptr) {
+      NumTargetGlobals(0), HasTargetInfoLoaded(false),
+      TargetRegionsDescriptor(nullptr) {
   IdentTy = llvm::StructType::create(
       "ident_t", CGM.Int32Ty /* reserved_1 */, CGM.Int32Ty /* flags */,
       CGM.Int32Ty /* reserved_2 */, CGM.Int32Ty /* reserved_3 */,
@@ -106,7 +106,7 @@ CGOpenMPRuntime::CGOpenMPRuntime(CodeGenModule &CGM)
     return;
 
   llvm::LLVMContext C;
-  auto ME = llvm::parseBitcodeFile(Buf.get()->getMemBufferRef(),C);
+  auto ME = llvm::parseBitcodeFile(Buf.get()->getMemBufferRef(), C);
 
   if (ME.getError())
     return;
@@ -119,21 +119,21 @@ CGOpenMPRuntime::CGOpenMPRuntime(CodeGenModule &CGM)
 
   unsigned TotalEntriesNum = 0;
 
-  for (auto I : MD->operands()){
+  for (auto I : MD->operands()) {
     llvm::MDNode *MN = cast<llvm::MDNode>(I);
     unsigned Idx = 0;
 
-    auto getVal = [&] () {
+    auto getVal = [&]() {
       llvm::ConstantAsMetadata *V =
-              cast<llvm::ConstantAsMetadata>(MN->getOperand(Idx++));
+          cast<llvm::ConstantAsMetadata>(MN->getOperand(Idx++));
       return cast<llvm::ConstantInt>(V->getValue())->getZExtValue();
     };
-    auto getName = [&] () {
+    auto getName = [&]() {
       llvm::MDString *V = cast<llvm::MDString>(MN->getOperand(Idx++));
       return V->getString();
     };
 
-    switch(getVal()){
+    switch (getVal()) {
     default:
       llvm_unreachable("Unexpected metadata!");
       break;
@@ -144,13 +144,13 @@ CGOpenMPRuntime::CGOpenMPRuntime(CodeGenModule &CGM)
     } break;
     case OMPTGT_METADATA_TY_TARGET_REGION: {
       auto &TRO = TargetRegionsOrder[getName()];
-      while (Idx < MN->getNumOperands()){
+      while (Idx < MN->getNumOperands()) {
         TRO.push_back(getVal());
         ++TotalEntriesNum;
       }
     } break;
     case OMPTGT_METADATA_TY_CTOR:
-      while (Idx < MN->getNumOperands()){
+      while (Idx < MN->getNumOperands()) {
         CtorRegionsOrder.push_back(getVal());
         ++TotalEntriesNum;
       }
@@ -174,16 +174,18 @@ CGOpenMPRuntime::CGOpenMPRuntime(CodeGenModule &CGM)
 
 CGOpenMPRuntime::~CGOpenMPRuntime() {
 #ifndef NDEBUG
-  if (CGM.getLangOpts().OpenMPTargetMode){
+  if (CGM.getLangOpts().OpenMPTargetMode) {
     // Verify that all the target entries specified by the host were generated
     // by checking if the order was invalidated
     for (auto &O : GlobalsOrder)
       if (O.getValue() != -1u)
-        llvm_unreachable("Target global var entry was not invalidated/generated!");
+        llvm_unreachable(
+            "Target global var entry was not invalidated/generated!");
     for (auto &OO : TargetRegionsOrder)
       for (auto O : OO.getValue())
         if (O != -1u)
-          llvm_unreachable("Target region entry was not invalidated/generated!");
+          llvm_unreachable(
+              "Target region entry was not invalidated/generated!");
     for (auto O : CtorRegionsOrder)
       if (O != -1u)
         llvm_unreachable("Target ctor was not invalidated/generated!");
@@ -773,32 +775,31 @@ void CGOpenMPRuntime::PostProcessModule(CodeGenModule &CGM) {
 
   // Create the metadata with the OpenMP offloading information only for the
   // host
-  if (!CGM.getLangOpts().OpenMPTargetMode ){
-    llvm::SmallVector<llvm::MDNode*,64> Nodes;
+  if (!CGM.getLangOpts().OpenMPTargetMode) {
+    llvm::SmallVector<llvm::MDNode *, 64> Nodes;
     llvm::Module &M = CGM.getModule();
     llvm::LLVMContext &C = M.getContext();
 
-    llvm::NamedMDNode *MD = M.getOrInsertNamedMetadata("openmp.offloading.info");
+    llvm::NamedMDNode *MD =
+        M.getOrInsertNamedMetadata("openmp.offloading.info");
 
-    auto getVal = [&] (unsigned v){
+    auto getVal = [&](unsigned v) {
       return llvm::ConstantAsMetadata::get(
-                llvm::ConstantInt::get(llvm::Type::getInt32Ty(C),v));
+          llvm::ConstantInt::get(llvm::Type::getInt32Ty(C), v));
     };
-    auto getName = [&] (StringRef v){
-      return llvm::MDString::get(C, v);
-    };
+    auto getName = [&](StringRef v) { return llvm::MDString::get(C, v); };
 
     // Generate Metadata for global variables
-    for (auto &I : GlobalsOrder){
-      llvm::SmallVector<llvm::Metadata*,32> Ops;
+    for (auto &I : GlobalsOrder) {
+      llvm::SmallVector<llvm::Metadata *, 32> Ops;
       Ops.push_back(getVal(OMPTGT_METADATA_TY_GLOBAL_VAR));
       Ops.push_back(getName(I.first()));
       Ops.push_back(getVal(I.second));
       MD->addOperand(llvm::MDNode::get(C, Ops));
     }
     // Generate Metadata for target regions
-    for (auto &I : TargetRegionsOrder){
-      llvm::SmallVector<llvm::Metadata*,32> Ops;
+    for (auto &I : TargetRegionsOrder) {
+      llvm::SmallVector<llvm::Metadata *, 32> Ops;
       Ops.push_back(getVal(OMPTGT_METADATA_TY_TARGET_REGION));
       Ops.push_back(getName(I.first()));
       for (auto O : I.second)
@@ -806,31 +807,31 @@ void CGOpenMPRuntime::PostProcessModule(CodeGenModule &CGM) {
       MD->addOperand(llvm::MDNode::get(C, Ops));
     }
     // Generate Metadata for Ctor regions
-    if (!CtorRegionsOrder.empty()){
-      llvm::SmallVector<llvm::Metadata*,32> Ops;
+    if (!CtorRegionsOrder.empty()) {
+      llvm::SmallVector<llvm::Metadata *, 32> Ops;
       Ops.push_back(getVal(OMPTGT_METADATA_TY_CTOR));
       for (auto O : CtorRegionsOrder)
         Ops.push_back(getVal(O));
       MD->addOperand(llvm::MDNode::get(C, Ops));
     }
     // Generate Metadata for Dtor regions
-    for (auto &I : DtorRegionsOrder){
-      llvm::SmallVector<llvm::Metadata*,32> Ops;
+    for (auto &I : DtorRegionsOrder) {
+      llvm::SmallVector<llvm::Metadata *, 32> Ops;
       Ops.push_back(getVal(OMPTGT_METADATA_TY_DTOR));
       Ops.push_back(getName(I.first()));
       Ops.push_back(getVal(I.second));
       MD->addOperand(llvm::MDNode::get(C, Ops));
     }
     // Generate Metadata for other global vars, if any
-    for (auto &I : OtherGlobalVariables){
-      llvm::SmallVector<llvm::Metadata*,32> Ops;
+    for (auto &I : OtherGlobalVariables) {
+      llvm::SmallVector<llvm::Metadata *, 32> Ops;
       Ops.push_back(getVal(OMPTGT_METADATA_TY_OTHER_GLOBAL_VAR));
       Ops.push_back(getName(I));
       MD->addOperand(llvm::MDNode::get(C, Ops));
     }
     // Generate Metadata for other functions, if any
-    for (auto &I : OtherFunctions){
-      llvm::SmallVector<llvm::Metadata*,32> Ops;
+    for (auto &I : OtherFunctions) {
+      llvm::SmallVector<llvm::Metadata *, 32> Ops;
       Ops.push_back(getVal(OMPTGT_METADATA_TY_OTHER_FUNCTION));
       Ops.push_back(getName(I));
       MD->addOperand(llvm::MDNode::get(C, Ops));
@@ -839,12 +840,12 @@ void CGOpenMPRuntime::PostProcessModule(CodeGenModule &CGM) {
     // In target mode we want to ensure the ordering is consistent with what the
     // host specified with the metadata.
     llvm::Module::GlobalListType &Globals = CGM.getModule().getGlobalList();
-    assert( !Globals.empty() && "We must have globals to be ordered!");
+    assert(!Globals.empty() && "We must have globals to be ordered!");
 
-    llvm::SmallVector<llvm::Module::GlobalListType::iterator,32>
-        Entries(OrderForEntry.size(), Globals.end());
+    llvm::SmallVector<llvm::Module::GlobalListType::iterator, 32> Entries(
+        OrderForEntry.size(), Globals.end());
 
-    for (auto I = Globals.begin(), E = Globals.end(); I != E; ++I){
+    for (auto I = Globals.begin(), E = Globals.end(); I != E; ++I) {
       // Check if we have order specified for this global, if so save it in the
       // Entries array
       auto Order = OrderForEntry.find(*&I);
@@ -857,10 +858,10 @@ void CGOpenMPRuntime::PostProcessModule(CodeGenModule &CGM) {
 
     // Move the entries one by one to the back of the globals list, observing
     // the order that was specified for them
-    for (unsigned i=Entries.size(); i>0; --i){
-      auto ToBeMoved = Entries[i-1];
+    for (unsigned i = Entries.size(); i > 0; --i) {
+      auto ToBeMoved = Entries[i - 1];
       assert(ToBeMoved != Globals.end() && "Invalid iterator to be moved!");
-      Globals.splice(I,Globals,ToBeMoved);
+      Globals.splice(I, Globals, ToBeMoved);
       I = ToBeMoved;
     }
   }
@@ -878,9 +879,8 @@ void CGOpenMPRuntime::PostProcessTargetFunction(const Decl *D,
                                         const CGFunctionInfo &FI){
   CGM.SetInternalFunctionAttributes(D, F, FI);
   PostProcessTargetFunction(F);
-
 }
-void CGOpenMPRuntime::PostProcessTargetFunction(llvm::Function *F){
+void CGOpenMPRuntime::PostProcessTargetFunction(llvm::Function *F) {
   // If we are in target mode all the target functions need to be externally
   // visible.
   if (CGM.getLangOpts().OpenMPTargetMode)
@@ -1051,7 +1051,7 @@ static std::string LegalizeTripleString(llvm::Triple TargetTriple) {
 
 // default barrier emit
 void CGOpenMPRuntime::EmitOMPBarrier(SourceLocation L, unsigned Flags,
-    CodeGenFunction &CGF) {
+                                     CodeGenFunction &CGF) {
   CGF.EmitOMPCallWithLocAndTidHelper(OPENMPRTL_FUNC(barrier), L, Flags);
 }
 
@@ -1064,17 +1064,17 @@ void CGOpenMPRuntime::GenerateFinishLabelSetting(SourceLocation Loc,
     CodeGenFunction &CGF, bool prevIsParallel) {
 }
 
-void CGOpenMPRuntime::GenerateNextLabel (CodeGenFunction &CGF,
-    bool prevIsParallel, bool nextIsParallel, const char * CaseBBName) {
-}
+void CGOpenMPRuntime::GenerateNextLabel(CodeGenFunction &CGF,
+                                        bool prevIsParallel,
+                                        bool nextIsParallel,
+                                        const char *CaseBBName) {}
 
 void CGOpenMPRuntime::EnterSimdRegion(CodeGenFunction &CGF,
-    ArrayRef<OMPClause *> Clauses) {
-}
+                                      ArrayRef<OMPClause *> Clauses) {}
 
 void CGOpenMPRuntime::ExitSimdRegion(CodeGenFunction &CGF,
-    llvm::Value * LoopIndex, llvm::Value * LoopCount) {
-}
+                                     llvm::Value *LoopIndex,
+                                     llvm::Value *LoopCount) {}
 
 void CGOpenMPRuntime::GenerateIfMaster (SourceLocation Loc, CapturedStmt *CS,
     CodeGenFunction &CGF) {
@@ -1103,10 +1103,9 @@ void CGOpenMPRuntime::CallSerializedParallelStart(CodeGenFunction &CGF) {
 void CGOpenMPRuntime::CallSerializedParallelEnd(CodeGenFunction &CGF) {
 }
 
-void CGOpenMPRuntime::StartParallelRegionInTarget (CodeGenFunction &CGF,
-    OpenMPDirectiveKind DKind, ArrayRef<OpenMPDirectiveKind> SKinds,
-    const OMPExecutableDirective &S) {
-}
+void CGOpenMPRuntime::StartParallelRegionInTarget(
+    CodeGenFunction &CGF, OpenMPDirectiveKind DKind,
+    ArrayRef<OpenMPDirectiveKind> SKinds, const OMPExecutableDirective &S) {}
 
 void CGOpenMPRuntime::EndParallelRegionInTarget (CodeGenFunction &CGF){
 }
@@ -1125,8 +1124,7 @@ bool CGOpenMPRuntime::IsNestedParallel () {
 void CGOpenMPRuntime::StartNewTargetRegion() {
 }
 
-void CGOpenMPRuntime::StartTeamsRegion() {
-}
+void CGOpenMPRuntime::StartTeamsRegion() {}
 
 llvm::Value *
 CGOpenMPRuntime::AllocateThreadLocalInfo(CodeGenFunction & CGF) {
@@ -1148,21 +1146,23 @@ bool CGOpenMPRuntime::requiresMicroTaskForParallel(){
   return true;
 }
 
-void CGOpenMPRuntime::EmitSimdInitialization(llvm::Value * LoopIndex,
-    llvm::Value * LoopCount, CodeGenFunction &CGF) {
+void CGOpenMPRuntime::EmitSimdInitialization(llvm::Value *LoopIndex,
+                                             llvm::Value *LoopCount,
+                                             CodeGenFunction &CGF) {
   CGBuilderTy &Builder = CGF.Builder;
 
   Builder.CreateStore(llvm::ConstantInt::get(LoopCount->getType(), 0),
                       LoopIndex);
 }
 
-void CGOpenMPRuntime::EmitSimdIncrement(llvm::Value * LoopIndex,
-    llvm::Value * LoopCount, CodeGenFunction &CGF) {
+void CGOpenMPRuntime::EmitSimdIncrement(llvm::Value *LoopIndex,
+                                        llvm::Value *LoopCount,
+                                        CodeGenFunction &CGF) {
   CGBuilderTy &Builder = CGF.Builder;
 
   llvm::Value *NewLoopIndex =
-    Builder.CreateAdd(Builder.CreateLoad(LoopIndex),
-                      llvm::ConstantInt::get(LoopCount->getType(), 1));
+      Builder.CreateAdd(Builder.CreateLoad(LoopIndex),
+                        llvm::ConstantInt::get(LoopCount->getType(), 1));
   Builder.CreateStore(NewLoopIndex, LoopIndex);
 }
 
@@ -1203,57 +1203,51 @@ llvm::Constant* CGOpenMPRuntime::GetDeviceImageEndPointer(
 /// Return a string with the mangled name of a target region for the given
 /// module and target region index
 ///
-std::string
-CGOpenMPRuntime::GetOffloadEntryMangledName() {
+std::string CGOpenMPRuntime::GetOffloadEntryMangledName() {
   return GetOffloadEntryMangledName(NumTargetRegions + NumTargetGlobals);
 }
-std::string
-CGOpenMPRuntime::GetOffloadEntryMangledName(unsigned ID){
+std::string CGOpenMPRuntime::GetOffloadEntryMangledName(unsigned ID) {
   std::string S;
   llvm::raw_string_ostream OS(S);
 
-  assert( ID !=-1u && "Invalid Id use in name mangling??");
+  assert(ID != -1u && "Invalid Id use in name mangling??");
 
   // append the module unique region index
-  OS << "__omptgt__"
-     << ID << '_'
-     << CGM.getLangOpts().OMPModuleUniqueID << '_';
+  OS << "__omptgt__" << ID << '_' << CGM.getLangOpts().OMPModuleUniqueID << '_';
 
   return OS.str();
 }
 
 std::string
 CGOpenMPRuntime::GetOffloadEntryMangledNameForGlobalVariable(StringRef Key,
-                                                             bool Invalidate){
+                                                             bool Invalidate) {
   unsigned Order;
   return GetOffloadEntryMangledNameForGlobalVariable(Key, Order, Invalidate);
 }
-std::string
-CGOpenMPRuntime::GetOffloadEntryMangledNameForGlobalVariable(StringRef Key,
-                                                             unsigned &Order,
-                                                             bool Invalidate){
-  assert( CGM.getLangOpts().OpenMPTargetMode &&
-      "This should only be used in target mode!");
+std::string CGOpenMPRuntime::GetOffloadEntryMangledNameForGlobalVariable(
+    StringRef Key, unsigned &Order, bool Invalidate) {
+  assert(CGM.getLangOpts().OpenMPTargetMode &&
+         "This should only be used in target mode!");
   auto I = GlobalsOrder.find(Key);
-  assert ( I != GlobalsOrder.end() && "Invalid key being used!");
+  assert(I != GlobalsOrder.end() && "Invalid key being used!");
   Order = I->getValue();
   if (Invalidate)
     I->getValue() = -1u;
   return GetOffloadEntryMangledName(Order);
 }
 std::string
-CGOpenMPRuntime::GetOffloadEntryMangledNameForTargetRegion(bool Invalidate){
+CGOpenMPRuntime::GetOffloadEntryMangledNameForTargetRegion(bool Invalidate) {
   unsigned Order;
-  return GetOffloadEntryMangledNameForTargetRegion(Order,Invalidate);
+  return GetOffloadEntryMangledNameForTargetRegion(Order, Invalidate);
 }
 std::string
 CGOpenMPRuntime::GetOffloadEntryMangledNameForTargetRegion(unsigned &Order,
-                                                           bool Invalidate){
-  assert( CGM.getLangOpts().OpenMPTargetMode &&
-      "This should only be used in target mode!");
+                                                           bool Invalidate) {
+  assert(CGM.getLangOpts().OpenMPTargetMode &&
+         "This should only be used in target mode!");
   auto I = TargetRegionsOrder.find(CurTargetParentFunctionName);
   for (auto &O : I->getValue())
-    if (O != -1u){
+    if (O != -1u) {
       Order = O;
       if (Invalidate)
         O = -1u;
@@ -1263,17 +1257,17 @@ CGOpenMPRuntime::GetOffloadEntryMangledNameForTargetRegion(unsigned &Order,
   return std::string();
 }
 std::string
-CGOpenMPRuntime::GetOffloadEntryMangledNameForCtor(bool Invalidate){
+CGOpenMPRuntime::GetOffloadEntryMangledNameForCtor(bool Invalidate) {
   unsigned Order;
   return GetOffloadEntryMangledNameForCtor(Order, Invalidate);
 }
 std::string
 CGOpenMPRuntime::GetOffloadEntryMangledNameForCtor(unsigned &Order,
-                                                   bool Invalidate){
-  assert( CGM.getLangOpts().OpenMPTargetMode &&
-      "This should only be used in target mode!");
+                                                   bool Invalidate) {
+  assert(CGM.getLangOpts().OpenMPTargetMode &&
+         "This should only be used in target mode!");
   for (auto &O : CtorRegionsOrder)
-    if (O != -1u){
+    if (O != -1u) {
       Order = O;
       if (Invalidate)
         O = -1u;
@@ -1284,18 +1278,16 @@ CGOpenMPRuntime::GetOffloadEntryMangledNameForCtor(unsigned &Order,
 }
 std::string
 CGOpenMPRuntime::GetOffloadEntryMangledNameForDtor(StringRef Key,
-                                                   bool Invalidate){
+                                                   bool Invalidate) {
   unsigned Order;
   return GetOffloadEntryMangledNameForDtor(Key, Order, Invalidate);
 }
-std::string
-CGOpenMPRuntime::GetOffloadEntryMangledNameForDtor(StringRef Key,
-                                                   unsigned &Order,
-                                                   bool Invalidate){
-  assert( CGM.getLangOpts().OpenMPTargetMode &&
-      "This should only be used in target mode!");
+std::string CGOpenMPRuntime::GetOffloadEntryMangledNameForDtor(
+    StringRef Key, unsigned &Order, bool Invalidate) {
+  assert(CGM.getLangOpts().OpenMPTargetMode &&
+         "This should only be used in target mode!");
   auto I = DtorRegionsOrder.find(Key);
-  assert ( I != DtorRegionsOrder.end() && "Invalid key being used!");
+  assert(I != DtorRegionsOrder.end() && "Invalid key being used!");
   Order = I->getValue();
   if (Invalidate)
     I->getValue() = -1u;
@@ -1403,16 +1395,14 @@ llvm::Constant* CGOpenMPRuntime::GetTargetRegionsDescriptor(){
 
 /// hooks to register information that should match between host and target
 void CGOpenMPRuntime::registerGlobalVariable(const Decl *D,
-                                             llvm::GlobalVariable* GV){
-  if (CGM.getLangOpts().OpenMPTargetMode){
+                                             llvm::GlobalVariable *GV) {
+  if (CGM.getLangOpts().OpenMPTargetMode) {
     // If, in target mode, if we attempt to emit a global variable entry it
     // should be valid. The check is done by GetOffloadEntry...
     unsigned Order;
-    std::string Name = GetOffloadEntryMangledNameForGlobalVariable(
-        GV->getName(),
-        Order,
-        true);
-    if (llvm::GlobalVariable* G = CreateHostEntryForTargetGlobal(D,GV,Name))
+    std::string Name =
+        GetOffloadEntryMangledNameForGlobalVariable(GV->getName(), Order, true);
+    if (llvm::GlobalVariable *G = CreateHostEntryForTargetGlobal(D, GV, Name))
       OrderForEntry[G] = Order;
     return;
   }
@@ -1428,18 +1418,18 @@ void CGOpenMPRuntime::registerGlobalVariable(const Decl *D,
 
   GlobalsOrder[GV->getName()] = NumTargetGlobals + NumTargetRegions;
   std::string Name = GetOffloadEntryMangledName();
-  CreateHostEntryForTargetGlobal(D,GV,Name);
+  CreateHostEntryForTargetGlobal(D, GV, Name);
   ++NumTargetGlobals;
   return;
 }
-void CGOpenMPRuntime::registerTargetRegion(const Decl *D,
-                                           llvm::Function* Fn,
-                                           llvm::Function* ParentFunction){
-  if (CGM.getLangOpts().OpenMPTargetMode){
+void CGOpenMPRuntime::registerTargetRegion(const Decl *D, llvm::Function *Fn,
+                                           llvm::Function *ParentFunction) {
+  if (CGM.getLangOpts().OpenMPTargetMode) {
     // If we don't have information about a parent function, we should get the
     unsigned Order;
     std::string Name = GetOffloadEntryMangledNameForTargetRegion(Order, true);
-    if (llvm::GlobalVariable* G = CreateHostPtrForCurrentTargetRegion(D,Fn,Name))
+    if (llvm::GlobalVariable *G =
+            CreateHostPtrForCurrentTargetRegion(D, Fn, Name))
       OrderForEntry[G] = Order;
     // We use this variable as an identifier to track the current target region
     // being processed.  This is used to map thread local shared variables to
@@ -1449,61 +1439,61 @@ void CGOpenMPRuntime::registerTargetRegion(const Decl *D,
   }
 
   assert(ParentFunction &&
-      "A Parent function must be provided when not in target mode!");
+         "A Parent function must be provided when not in target mode!");
   TargetRegionsOrder[ParentFunction->getName()].push_back(NumTargetGlobals +
                                                           NumTargetRegions);
   std::string Name = GetOffloadEntryMangledName();
-  CreateHostPtrForCurrentTargetRegion(D,Fn,Name);
+  CreateHostPtrForCurrentTargetRegion(D, Fn, Name);
   ++NumTargetRegions;
   return;
 }
-void CGOpenMPRuntime::registerCtorRegion(llvm::Function* Fn){
-  if (CGM.getLangOpts().OpenMPTargetMode){
+void CGOpenMPRuntime::registerCtorRegion(llvm::Function *Fn) {
+  if (CGM.getLangOpts().OpenMPTargetMode) {
     unsigned Order;
     std::string Name = GetOffloadEntryMangledNameForCtor(Order, true);
-    if (llvm::GlobalVariable* G = CreateHostPtrForCurrentTargetRegion(nullptr,Fn,Name))
+    if (llvm::GlobalVariable *G =
+            CreateHostPtrForCurrentTargetRegion(nullptr, Fn, Name))
       OrderForEntry[G] = Order;
     return;
   }
 
   CtorRegionsOrder.push_back(NumTargetGlobals + NumTargetRegions);
   std::string Name = GetOffloadEntryMangledName();
-  CreateHostPtrForCurrentTargetRegion(nullptr,Fn,Name);
+  CreateHostPtrForCurrentTargetRegion(nullptr, Fn, Name);
   ++NumTargetRegions;
   return;
 }
-void CGOpenMPRuntime::registerDtorRegion(llvm::Function* Fn,
-                                         llvm::Constant* Destructee){
-  if (CGM.getLangOpts().OpenMPTargetMode){
+void CGOpenMPRuntime::registerDtorRegion(llvm::Function *Fn,
+                                         llvm::Constant *Destructee) {
+  if (CGM.getLangOpts().OpenMPTargetMode) {
     unsigned Order;
-    std::string Name = GetOffloadEntryMangledNameForDtor(
-        Destructee->getName(),
-        Order,
-        true);
-    if (llvm::GlobalVariable* G = CreateHostPtrForCurrentTargetRegion(nullptr,Fn,Name))
+    std::string Name =
+        GetOffloadEntryMangledNameForDtor(Destructee->getName(), Order, true);
+    if (llvm::GlobalVariable *G =
+            CreateHostPtrForCurrentTargetRegion(nullptr, Fn, Name))
       OrderForEntry[G] = Order;
     return;
   }
 
   DtorRegionsOrder[Destructee->getName()] = NumTargetGlobals + NumTargetRegions;
   std::string Name = GetOffloadEntryMangledName();
-  CreateHostPtrForCurrentTargetRegion(nullptr,Fn,Name);
+  CreateHostPtrForCurrentTargetRegion(nullptr, Fn, Name);
   ++NumTargetRegions;
   return;
 }
-void CGOpenMPRuntime::registerOtherGlobalVariable(const VarDecl* Other){
+void CGOpenMPRuntime::registerOtherGlobalVariable(const VarDecl *Other) {
   llvm_unreachable("We are not using this for the moment!");
 }
-void CGOpenMPRuntime::registerOtherFunction(const FunctionDecl* Other,
-                                            StringRef Name){
+void CGOpenMPRuntime::registerOtherFunction(const FunctionDecl *Other,
+                                            StringRef Name) {
   if (CGM.getLangOpts().OpenMPTargetMode)
     llvm_unreachable("We are not using this for the moment in target mode!");
 
   // Register lambda functions used in target regions
   if (CGM.OpenMPSupport.getTarget())
-    if (const CXXMethodDecl *MD = dyn_cast<CXXMethodDecl>(Other)){
+    if (const CXXMethodDecl *MD = dyn_cast<CXXMethodDecl>(Other)) {
       const CXXRecordDecl *RD = MD->getParent();
-      if (RD->isLambda()){
+      if (RD->isLambda()) {
         OtherFunctions.insert(Name);
         return;
       }
@@ -1512,7 +1502,7 @@ void CGOpenMPRuntime::registerOtherFunction(const FunctionDecl* Other,
   // We need to understand whether this declaration is valid for the target
   // by looking into the declarative context. If it not, we just return
   const DeclContext *DC = Other->getDeclContext();
-  while (DC && !DC->isOMPDeclareTarget()){
+  while (DC && !DC->isOMPDeclareTarget()) {
     DC = DC->getParent();
   }
 
@@ -1523,18 +1513,18 @@ void CGOpenMPRuntime::registerOtherFunction(const FunctionDecl* Other,
 }
 
 // Return true if there is any OpenMP target code to be generated
-bool CGOpenMPRuntime::hasAnyTargetCodeToBeEmitted(){
+bool CGOpenMPRuntime::hasAnyTargetCodeToBeEmitted() {
   return HasTargetInfoLoaded;
 }
 
 // Return true if the given name maps to any valid target global variable
 // (entry point or not
-bool CGOpenMPRuntime::isValidAnyTargetGlobalVariable(StringRef name){
+bool CGOpenMPRuntime::isValidAnyTargetGlobalVariable(StringRef name) {
   return isValidEntryTargetGlobalVariable(name) ||
-      isValidOtherTargetGlobalVariable(name);
+         isValidOtherTargetGlobalVariable(name);
 }
-bool CGOpenMPRuntime::isValidAnyTargetGlobalVariable(const Decl *D){
-  if (const VarDecl *VD = dyn_cast<VarDecl>(D)){
+bool CGOpenMPRuntime::isValidAnyTargetGlobalVariable(const Decl *D) {
+  if (const VarDecl *VD = dyn_cast<VarDecl>(D)) {
     return isValidAnyTargetGlobalVariable(CGM.getMangledName(GlobalDecl(VD)));
   }
   return false;
@@ -1542,7 +1532,7 @@ bool CGOpenMPRuntime::isValidAnyTargetGlobalVariable(const Decl *D){
 
 // Return true if the given name maps to a valid target global variable that
 // is also an entry point
-bool CGOpenMPRuntime::isValidEntryTargetGlobalVariable(StringRef name){
+bool CGOpenMPRuntime::isValidEntryTargetGlobalVariable(StringRef name) {
   if (GlobalsOrder.find(name) != GlobalsOrder.end())
     return true;
   return false;
@@ -1550,29 +1540,27 @@ bool CGOpenMPRuntime::isValidEntryTargetGlobalVariable(StringRef name){
 
 // Return true if the given name maps to a function that contains target
 // regions that should be emitted
-bool CGOpenMPRuntime::isValidTargetRegionParent(StringRef name){
+bool CGOpenMPRuntime::isValidTargetRegionParent(StringRef name) {
   if (TargetRegionsOrder.find(name) != TargetRegionsOrder.end())
     return true;
   return false;
 }
 
 // Return true if the given name maps to a target global variable
-bool CGOpenMPRuntime::isValidOtherTargetGlobalVariable(StringRef name){
+bool CGOpenMPRuntime::isValidOtherTargetGlobalVariable(StringRef name) {
   return OtherGlobalVariables.count(name);
 }
 
 // Return true if the given name maps to a target function
-bool CGOpenMPRuntime::isValidOtherTargetFunction(StringRef name){
+bool CGOpenMPRuntime::isValidOtherTargetFunction(StringRef name) {
   return OtherFunctions.count(name);
 }
 
 /// Return host pointer for the current target regions. This creates
 /// the offload entry for the target region.
 ///
-llvm::GlobalVariable* CGOpenMPRuntime::CreateHostPtrForCurrentTargetRegion(
-                                                          const Decl *D,
-                                                          llvm::Function *Fn,
-                                                          StringRef Name){
+llvm::GlobalVariable *CGOpenMPRuntime::CreateHostPtrForCurrentTargetRegion(
+    const Decl *D, llvm::Function *Fn, StringRef Name) {
 
   llvm::LLVMContext &C = CGM.getModule().getContext();
   llvm::Module &M = CGM.getModule();
@@ -1595,13 +1583,8 @@ llvm::GlobalVariable* CGOpenMPRuntime::CreateHostPtrForCurrentTargetRegion(
   llvm::Constant *StrPtrInit = llvm::ConstantDataArray::getString(C,Name);
 
   llvm::GlobalVariable *Str = new llvm::GlobalVariable(
-      M,
-      StrPtrInit->getType(),
-      true,
-      llvm::GlobalValue::InternalLinkage,
-      StrPtrInit,
-      Twine(Name) + Twine("_entry_name"));
-
+      M, StrPtrInit->getType(), true, llvm::GlobalValue::InternalLinkage,
+      StrPtrInit, Twine(Name) + Twine("_entry_name"));
 
   llvm::Constant *StrPtr = llvm::ConstantExpr::getBitCast(Str,CGM.Int8PtrTy);
 
@@ -1617,11 +1600,7 @@ llvm::GlobalVariable* CGOpenMPRuntime::CreateHostPtrForCurrentTargetRegion(
           llvm::ConstantInt::get(CGM.Int64Ty, 0), NULL);
 
   llvm::GlobalVariable *Entry = new llvm::GlobalVariable(
-      M,
-      EntryTy,
-      true,
-      llvm::GlobalValue::ExternalLinkage,
-      EntryInit,
+      M, EntryTy, true, llvm::GlobalValue::ExternalLinkage, EntryInit,
       Twine(Name) + Twine("_entry"));
 
   // The entry has to be created in the section the linker expects it to be
@@ -1639,12 +1618,10 @@ llvm::GlobalVariable* CGOpenMPRuntime::CreateHostPtrForCurrentTargetRegion(
 /// Creates the host entry for a given global and places it in the entries
 /// reserved section
 ///
-llvm::GlobalVariable* CGOpenMPRuntime::CreateHostEntryForTargetGlobal(
-                                                     const Decl *D,
-                                                     llvm::GlobalVariable* GV,
-                                                     StringRef Name){
-  assert( isValidEntryTargetGlobalVariable(GV->getName()) &&
-      "Must be valid entry!");
+llvm::GlobalVariable *CGOpenMPRuntime::CreateHostEntryForTargetGlobal(
+    const Decl *D, llvm::GlobalVariable *GV, StringRef Name) {
+  assert(isValidEntryTargetGlobalVariable(GV->getName()) &&
+         "Must be valid entry!");
 
   llvm::LLVMContext &C = CGM.getModule().getContext();
   llvm::Module &M = CGM.getModule();
@@ -1653,7 +1630,7 @@ llvm::GlobalVariable* CGOpenMPRuntime::CreateHostEntryForTargetGlobal(
   // safe to export that so it can loaded by the runtime libraries
   const VarDecl *VD = cast<VarDecl>(D);
   std::string SymName;
-  if (VD->getStorageClass() == SC_Static){
+  if (VD->getStorageClass() == SC_Static) {
     SymName = "__omptgt__static_";
     SymName += CGM.getLangOpts().OMPModuleUniqueID;
     SymName += "__";
@@ -1661,16 +1638,11 @@ llvm::GlobalVariable* CGOpenMPRuntime::CreateHostEntryForTargetGlobal(
 
   SymName += GV->getName();
 
-  llvm::Constant *StrPtrInit =
-      llvm::ConstantDataArray::getString(C,SymName);
+  llvm::Constant *StrPtrInit = llvm::ConstantDataArray::getString(C, SymName);
 
   llvm::GlobalVariable *Str = new llvm::GlobalVariable(
-      M,
-      StrPtrInit->getType(),
-      true,
-      llvm::GlobalValue::InternalLinkage,
-      StrPtrInit,
-      Twine(Name) + Twine("_entry_name"));
+      M, StrPtrInit->getType(), true, llvm::GlobalValue::InternalLinkage,
+      StrPtrInit, Twine(Name) + Twine("_entry_name"));
 
   llvm::Constant *StrPtr = llvm::ConstantExpr::getBitCast(Str,CGM.Int8PtrTy);
 
@@ -1692,11 +1664,7 @@ llvm::GlobalVariable* CGOpenMPRuntime::CreateHostEntryForTargetGlobal(
           NULL);
 
   llvm::GlobalVariable *Entry = new llvm::GlobalVariable(
-      M,
-      EntryTy,
-      true,
-      llvm::GlobalValue::ExternalLinkage,
-      EntryInit,
+      M, EntryTy, true, llvm::GlobalValue::ExternalLinkage, EntryInit,
       Twine(Name) + Twine("_entry"));
 
   // The entry has to be created in the section the linker expects it to be
@@ -1706,7 +1674,7 @@ llvm::GlobalVariable* CGOpenMPRuntime::CreateHostEntryForTargetGlobal(
   Entry->setAlignment(1);
 
   // Record the new entry associated with the provided declaration
-  registerEntryForDeclaration(D,GV);
+  registerEntryForDeclaration(D, GV);
 
   return Entry;
 }
@@ -1744,7 +1712,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
   // Set of global values that are static target entries and should therefore
   // be turned visible
-  llvm::SmallSet<llvm::GlobalVariable*,32> StaticEntries;
+  llvm::SmallSet<llvm::GlobalVariable *, 32> StaticEntries;
 
   // this is the identifier of a master thread, either in a block, warp or
   // entire grid, for each dimension (e.g. threadIdx.x, y and z)
@@ -1755,26 +1723,26 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
   // Master and others label used by the master to control execution of threads
   // in same team
-  llvm::GlobalVariable * MasterLabelShared;
-  llvm::GlobalVariable * OthersLabelShared;
+  llvm::GlobalVariable *MasterLabelShared;
+  llvm::GlobalVariable *OthersLabelShared;
 
   // region labels associated to basic blocks and id generator
   std::vector<llvm::BasicBlock *> regionLabelMap;
   unsigned NextId;
 
   // Starting and ending blocks for control-loop
-  llvm::BasicBlock * StartControl;
-  llvm::BasicBlock * EndControl;
+  llvm::BasicBlock *StartControl;
+  llvm::BasicBlock *EndControl;
 
   // finished is private to each thread and controls ends of control-loop
-  llvm::AllocaInst * FinishedVar;
+  llvm::AllocaInst *FinishedVar;
 
   // minimal needed blocks to build up a control loop
-  llvm::BasicBlock * SequentialStartBlock; // first sequential block
-  llvm::BasicBlock * CheckFinished; // while(!finished) block
-  llvm::BasicBlock * FinishedCase; // block in which we set finished to true
-  llvm::BasicBlock * SynchronizeAndNextState; // synchronization point
-  llvm::BasicBlock * EndTarget; // return
+  llvm::BasicBlock *SequentialStartBlock; // first sequential block
+  llvm::BasicBlock *CheckFinished;        // while(!finished) block
+  llvm::BasicBlock *FinishedCase; // block in which we set finished to true
+  llvm::BasicBlock *SynchronizeAndNextState; // synchronization point
+  llvm::BasicBlock *EndTarget;               // return
 
   // only one parallel region is currently activated as parallel in nvptx,
   // the others are just serialized (use a stack)
@@ -1783,7 +1751,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
   // this is not currently used and updated
   enum OMPRegionTypes {
-    OMP_InitialTarget, // every stack starts with this
+    OMP_InitialTarget,  // every stack starts with this
     OMP_TeamSequential, // if target teams, this is used on top of target
     OMP_Parallel,
     OMP_Sequential,
@@ -1801,45 +1769,41 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
   // - #for simd and #simd select number of lanes = warpSize
   // - no #for #simd or #for simd pragmas in a parallel region: number of lanes
   // = 0
-  enum IterativePragmaPriority {
-    FOR = 0,
-    FORSIMD = 1,
-    SIMD = 2,
-    ELSE = 3
-  };
+  enum IterativePragmaPriority { FOR = 0, FORSIMD = 1, SIMD = 2, ELSE = 3 };
 
   // guard for the switch (switch (NextState) { case... }
-  llvm::AllocaInst * NextState;
+  llvm::AllocaInst *NextState;
 
   // this is an array with two positions two prevent race conditions due
   // to non participating threads arriving too early to read next state
-  llvm::GlobalVariable * ControlState;
+  llvm::GlobalVariable *ControlState;
 
   // index from which we will read the next case label in ControlState
   // it is either 0 or 1
-  llvm::AllocaInst * ControlStateIndex;
+  llvm::AllocaInst *ControlStateIndex;
 
   // number of threads that participate in parallel region multiplied by
   // number of simd lanes associated to each such thread
-  llvm::GlobalVariable * CudaThreadsInParallel;
+  llvm::GlobalVariable *CudaThreadsInParallel;
 
   // number of lanes to be used when we hit first #simd level
-  llvm::GlobalVariable * SimdNumLanes;
+  llvm::GlobalVariable *SimdNumLanes;
 
   // initial value for SimdNumLanes
   int WARP_SIZE = 32; // should obtain from parameters of target function
 
   // Identifier of CUDA thread as a lane
-  llvm::AllocaInst * SimdLaneNum;
+  llvm::AllocaInst *SimdLaneNum;
 
-  llvm::SwitchInst * ControlSwitch;
+  llvm::SwitchInst *ControlSwitch;
 
   // default labels
   int FinishedState = -1;
   int FirstState = 0;
 
-  llvm::GlobalVariable * getMasterLabelShared () const
-     {return MasterLabelShared;}
+  llvm::GlobalVariable *getMasterLabelShared() const {
+    return MasterLabelShared;
+  }
 
    void setMasterLabelShared (llvm::GlobalVariable * _masterLabelShared) {
      MasterLabelShared = _masterLabelShared;
@@ -1863,9 +1827,9 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
      return regionLabelMap;
    }
 
-   llvm::BasicBlock * getEndControlBlock () const { return EndControl; }
+   llvm::BasicBlock *getEndControlBlock() const { return EndControl; }
 
-   llvm::BasicBlock * getCheckFinished () const { return CheckFinished; }
+   llvm::BasicBlock *getCheckFinished() const { return CheckFinished; }
 
    llvm::BasicBlock * getSequentialStartBlock () const {
      return SequentialStartBlock;
@@ -1936,7 +1900,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
     return NextOnParallelStack();
   }
 
-  //enquiry functions for openmp stack
+  // enquiry functions for openmp stack
 
   // Determine if in nested parallel region
   // This means that at least two OMP_Parallel items are found
@@ -1944,17 +1908,20 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
   bool InNestedParallel() {
     int NumParallel = 0;
     for (OMPRegionTypesStackTy::iterator it = OMPRegionTypesStack.begin();
-        it != OMPRegionTypesStack.end(); it++) {
-      if(*it == OMP_Parallel) NumParallel++;
-      if(NumParallel >= 2) return true;
+         it != OMPRegionTypesStack.end(); it++) {
+      if (*it == OMP_Parallel)
+        NumParallel++;
+      if (NumParallel >= 2)
+        return true;
     }
     return false;
   }
 
   bool InParallel() {
     for (OMPRegionTypesStackTy::iterator it = OMPRegionTypesStack.begin();
-        it != OMPRegionTypesStack.end(); it++) {
-      if(*it == OMP_Parallel) return true;
+         it != OMPRegionTypesStack.end(); it++) {
+      if (*it == OMP_Parallel)
+        return true;
     }
     return false;
   }
@@ -1962,16 +1929,16 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
   int NumParallel() {
     int NumParallel = 0;
     for (OMPRegionTypesStackTy::iterator it = OMPRegionTypesStack.begin();
-        it != OMPRegionTypesStack.end(); it++) {
-      if(*it == OMP_Parallel) NumParallel++;
+         it != OMPRegionTypesStack.end(); it++) {
+      if (*it == OMP_Parallel)
+        NumParallel++;
     }
     return NumParallel;
   }
 
   // doing a barrier in NVPTX requires handling the control loop: add a new
   // region and have all threads synchronize at the single control loop barrier
-  void EmitOMPBarrier(SourceLocation L, unsigned Flags,
-      CodeGenFunction &CGF) {
+  void EmitOMPBarrier(SourceLocation L, unsigned Flags, CodeGenFunction &CGF) {
     CGBuilderTy &Bld = CGF.Builder;
     // generate new switch case, then look at region stack and generate thread
     // exclusion code
@@ -1981,35 +1948,36 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
     // 1. We are in a non nested parallel region and we hit any kind of barrier
     // like one at the end of a #for or an explicit one. In this case, exclude
     // all lanes and non participating threads.
-    // 2. We are in a nested parallel or not in a parallel region at all. In this
+    // 2. We are in a nested parallel or not in a parallel region at all. In
+    // this
     // case, exclude all threads except the (team) master
 
     // case 1
     if (NumParallel() == 1) {
       // create a new label for codegen after barrier
-      llvm::BasicBlock * NextRegionBlock = llvm::BasicBlock::Create(
-        CGM.getLLVMContext(), "after.barrier.check.", CGF.CurFn);
+      llvm::BasicBlock *NextRegionBlock = llvm::BasicBlock::Create(
+          CGM.getLLVMContext(), "after.barrier.check.", CGF.CurFn);
 
-      int NextLabel = AddNewRegionLabel (NextRegionBlock);
+      int NextLabel = AddNewRegionLabel(NextRegionBlock);
       ControlSwitch->addCase(Bld.getInt32(NextLabel), NextRegionBlock);
 
       // set next label by the master only
-      llvm::BasicBlock * OnlyMasterSetNext = llvm::BasicBlock::Create(
+      llvm::BasicBlock *OnlyMasterSetNext = llvm::BasicBlock::Create(
           CGM.getLLVMContext(), ".master.only.next.label", CGF.CurFn);
 
-      llvm::Value * callThreadNum = Bld.CreateCall(Get_thread_num());
-      llvm::Value * AmINotMaster = Bld.CreateICmpNE(callThreadNum,
-          Bld.getInt32(MASTER_ID), "NotMaster");
+      llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num());
+      llvm::Value *AmINotMaster =
+          Bld.CreateICmpNE(callThreadNum, Bld.getInt32(MASTER_ID), "NotMaster");
 
       Bld.CreateCondBr(AmINotMaster, SynchronizeAndNextState,
-            OnlyMasterSetNext);
+                       OnlyMasterSetNext);
       Bld.SetInsertPoint(OnlyMasterSetNext);
 
       // set the next label
-      SmallVector<llvm::Value *,2> GEPIdxs;
+      SmallVector<llvm::Value *, 2> GEPIdxs;
       GEPIdxs.push_back(Bld.getInt32(0));
       GEPIdxs.push_back(Bld.CreateLoad(ControlStateIndex));
-      llvm::Value * NextStateValPtr = Bld.CreateGEP(ControlState, GEPIdxs);
+      llvm::Value *NextStateValPtr = Bld.CreateGEP(ControlState, GEPIdxs);
       Bld.CreateStore(Bld.getInt32(NextLabel), NextStateValPtr);
 
       Bld.CreateBr(SynchronizeAndNextState);
@@ -2017,19 +1985,20 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
       // start inserting new region statements into next switch case
       Bld.SetInsertPoint(NextRegionBlock);
 
-      llvm::Value * NeedToBreak = Bld.CreateICmpNE(Bld.CreateLoad(SimdLaneNum),
-            Bld.getInt32(0));
+      llvm::Value *NeedToBreak =
+          Bld.CreateICmpNE(Bld.CreateLoad(SimdLaneNum), Bld.getInt32(0));
 
-      llvm::BasicBlock * AfterBarrierCodeGen = llvm::BasicBlock::Create(
-        CGM.getLLVMContext(), "after.barrier.codegen.", CGF.CurFn);
+      llvm::BasicBlock *AfterBarrierCodeGen = llvm::BasicBlock::Create(
+          CGM.getLLVMContext(), "after.barrier.codegen.", CGF.CurFn);
 
       Bld.CreateCondBr(NeedToBreak, SynchronizeAndNextState,
-          AfterBarrierCodeGen);
+                       AfterBarrierCodeGen);
       Bld.SetInsertPoint(AfterBarrierCodeGen);
     } else if (NumParallel() == 0 || NumParallel() > 1) {
       // case 2
     } else
-    assert(true && "Number of OMP parallel regions cannot be a negative number");
+      assert(true &&
+             "Number of OMP parallel regions cannot be a negative number");
   }
 
   // For NVTPX the control loop is generated when a target construct is found
@@ -2044,12 +2013,12 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
     // we start from the first state which is a sequential region (team-master
     // only)
-    NextState = Bld.CreateAlloca(Bld.getInt32Ty(), Bld.getInt32(1),
-        "NextState");
+    NextState =
+        Bld.CreateAlloca(Bld.getInt32Ty(), Bld.getInt32(1), "NextState");
     Bld.CreateStore(Bld.getInt32(FirstState), NextState);
 
     ControlStateIndex = Bld.CreateAlloca(Bld.getInt32Ty(), Bld.getInt32(1),
-        "ControlStateIndex");
+                                         "ControlStateIndex");
     Bld.CreateStore(Bld.getInt32(0), ControlStateIndex);
 
     char ControlStateName[] = "__omptgt__ControlState";
@@ -2061,32 +2030,30 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
     if (!ControlState)
       ControlState = CGM.getModule().getGlobalVariable(ControlStateName);
     if (!CudaThreadsInParallel)
-      CudaThreadsInParallel = CGM.getModule().getGlobalVariable(CudaThreadsInParallelName);
+      CudaThreadsInParallel =
+          CGM.getModule().getGlobalVariable(CudaThreadsInParallelName);
     if (!SimdNumLanes)
       SimdNumLanes = CGM.getModule().getGlobalVariable(SimdNumLanesName);
 
-    llvm::Type * StaticArray = llvm::ArrayType::get(VarTy,2);
+    llvm::Type *StaticArray = llvm::ArrayType::get(VarTy, 2);
 
     if (!ControlState)
       ControlState = new llvm::GlobalVariable(
-        CGM.getModule(), StaticArray, false,
-        llvm::GlobalValue::CommonLinkage,
-        llvm::Constant::getNullValue(StaticArray), ControlStateName, 0,
-        llvm::GlobalVariable::NotThreadLocal, SHARED_ADDRESS_SPACE, false);
+          CGM.getModule(), StaticArray, false, llvm::GlobalValue::CommonLinkage,
+          llvm::Constant::getNullValue(StaticArray), ControlStateName, 0,
+          llvm::GlobalVariable::NotThreadLocal, SHARED_ADDRESS_SPACE, false);
 
     if (!CudaThreadsInParallel)
       CudaThreadsInParallel = new llvm::GlobalVariable(
-        CGM.getModule(), VarTy, false,
-        llvm::GlobalValue::CommonLinkage, llvm::Constant::getNullValue(VarTy),
-        CudaThreadsInParallelName, 0, llvm::GlobalVariable::NotThreadLocal,
-        SHARED_ADDRESS_SPACE, false);
+          CGM.getModule(), VarTy, false, llvm::GlobalValue::CommonLinkage,
+          llvm::Constant::getNullValue(VarTy), CudaThreadsInParallelName, 0,
+          llvm::GlobalVariable::NotThreadLocal, SHARED_ADDRESS_SPACE, false);
 
     if (!SimdNumLanes)
       SimdNumLanes = new llvm::GlobalVariable(
-            CGM.getModule(), VarTy, false,
-            llvm::GlobalValue::CommonLinkage, llvm::Constant::getNullValue(VarTy),
-            SimdNumLanesName, 0, llvm::GlobalVariable::NotThreadLocal,
-            SHARED_ADDRESS_SPACE, false);
+          CGM.getModule(), VarTy, false, llvm::GlobalValue::CommonLinkage,
+          llvm::Constant::getNullValue(VarTy), SimdNumLanesName, 0,
+          llvm::GlobalVariable::NotThreadLocal, SHARED_ADDRESS_SPACE, false);
 
     Bld.CreateStore(llvm::Constant::getNullValue(StaticArray), ControlState);
     Bld.CreateStore(llvm::Constant::getNullValue(VarTy), CudaThreadsInParallel);
@@ -2097,18 +2064,17 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
     // Bld.CreateStore(llvm::Constant::getNullValue(VarTy), SimdNumLanes);
 
     // team-master sets the initial value for SimdNumLanes
-    llvm::BasicBlock * MasterInit = llvm::BasicBlock::Create(
-            CGM.getLLVMContext(), ".master.init.", CGF.CurFn);
+    llvm::BasicBlock *MasterInit = llvm::BasicBlock::Create(
+        CGM.getLLVMContext(), ".master.init.", CGF.CurFn);
 
-    llvm::BasicBlock * NonMasterInit = llvm::BasicBlock::Create(
-            CGM.getLLVMContext(), ".nonmaster.init.", CGF.CurFn);
+    llvm::BasicBlock *NonMasterInit = llvm::BasicBlock::Create(
+        CGM.getLLVMContext(), ".nonmaster.init.", CGF.CurFn);
 
-    llvm::Value * IsTeamMaster1 = Bld.CreateICmpEQ(
-        Bld.CreateCall(Get_thread_num()), Bld.getInt32(MASTER_ID),
-        "IsTeamMaster");
+    llvm::Value *IsTeamMaster1 =
+        Bld.CreateICmpEQ(Bld.CreateCall(Get_thread_num()),
+                         Bld.getInt32(MASTER_ID), "IsTeamMaster");
 
-    Bld.CreateCondBr(IsTeamMaster1, MasterInit,
-        NonMasterInit);
+    Bld.CreateCondBr(IsTeamMaster1, MasterInit, NonMasterInit);
 
     Bld.SetInsertPoint(MasterInit);
 
@@ -2121,69 +2087,69 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
     // finished boolean controlling the while: create and init to false
     FinishedVar =
-          Bld.CreateAlloca(Bld.getInt1Ty(), Bld.getInt32(1), "finished");
+        Bld.CreateAlloca(Bld.getInt1Ty(), Bld.getInt32(1), "finished");
     Bld.CreateStore(Bld.getInt1(false), FinishedVar);
 
     // set initial simd lane num, which could be changed later on
     // depending on safelen and num_threads clauses
     // this initial setting ensures that #simd will work without being nested in
     // #parallel
-    SimdLaneNum = Bld.CreateAlloca(Bld.getInt32Ty(),
-        Bld.getInt32(1), "SimdLaneNum");
+    SimdLaneNum =
+        Bld.CreateAlloca(Bld.getInt32Ty(), Bld.getInt32(1), "SimdLaneNum");
     Bld.CreateStore(Bld.CreateAnd(Bld.CreateCall(Get_thread_num()),
-        Bld.CreateSub(Bld.CreateLoad(SimdNumLanes),Bld.getInt32(1))),
-        SimdLaneNum);
+                                  Bld.CreateSub(Bld.CreateLoad(SimdNumLanes),
+                                                Bld.getInt32(1))),
+                    SimdLaneNum);
 
     // Create all baseline basic blocks that are needed for any target region
     // to implement the control loop (further added later by AST codegen)
-    llvm::BasicBlock * StartControlLoop = llvm::BasicBlock::Create(
-            CGM.getLLVMContext(), ".start.control", CGF.CurFn);
+    llvm::BasicBlock *StartControlLoop = llvm::BasicBlock::Create(
+        CGM.getLLVMContext(), ".start.control", CGF.CurFn);
 
-    llvm::BasicBlock * SwitchBlock = llvm::BasicBlock::Create(
-            CGM.getLLVMContext(), ".switch.", CGF.CurFn);
+    llvm::BasicBlock *SwitchBlock =
+        llvm::BasicBlock::Create(CGM.getLLVMContext(), ".switch.", CGF.CurFn);
 
-    EndTarget = llvm::BasicBlock::Create(
-        CGM.getLLVMContext(), ".end.target", CGF.CurFn);
+    EndTarget = llvm::BasicBlock::Create(CGM.getLLVMContext(), ".end.target",
+                                         CGF.CurFn);
 
-    llvm::BasicBlock * FirstSequentialCheck = llvm::BasicBlock::Create(
-            CGM.getLLVMContext(), ".seq.start.check", CGF.CurFn);
+    llvm::BasicBlock *FirstSequentialCheck = llvm::BasicBlock::Create(
+        CGM.getLLVMContext(), ".seq.start.check", CGF.CurFn);
 
     SynchronizeAndNextState = llvm::BasicBlock::Create(
-            CGM.getLLVMContext(), ".sync.and.next.state", CGF.CurFn);
+        CGM.getLLVMContext(), ".sync.and.next.state", CGF.CurFn);
 
-    llvm::BasicBlock * DefaultCase = llvm::BasicBlock::Create(
-                CGM.getLLVMContext(), ".default", CGF.CurFn);
+    llvm::BasicBlock *DefaultCase =
+        llvm::BasicBlock::Create(CGM.getLLVMContext(), ".default", CGF.CurFn);
 
-    FinishedCase = llvm::BasicBlock::Create(
-                CGM.getLLVMContext(), ".finished.case.", CGF.CurFn);
+    FinishedCase = llvm::BasicBlock::Create(CGM.getLLVMContext(),
+                                            ".finished.case.", CGF.CurFn);
 
     // while(!finished)
     Bld.CreateBr(StartControlLoop);
     Bld.SetInsertPoint(StartControlLoop);
 
-    llvm::Value * AreWeFinished =
+    llvm::Value *AreWeFinished =
         Bld.CreateICmpEQ(Bld.CreateLoad(FinishedVar), Bld.getInt1(true));
 
     Bld.CreateCondBr(AreWeFinished, EndTarget, SwitchBlock);
 
     // switch(NextState)...
     Bld.SetInsertPoint(SwitchBlock);
-    llvm::Value * SwitchNextState = Bld.CreateLoad(NextState);
+    llvm::Value *SwitchNextState = Bld.CreateLoad(NextState);
 
-//    llvm::Value * PrintArgs [] = {SwitchNextState};
-//    Bld.CreateCall(Get_kmpc_print_int(), PrintArgs);
+    //    llvm::Value * PrintArgs [] = {SwitchNextState};
+    //    Bld.CreateCall(Get_kmpc_print_int(), PrintArgs);
 
-    ControlSwitch = Bld.CreateSwitch(SwitchNextState,
-        DefaultCase);
+    ControlSwitch = Bld.CreateSwitch(SwitchNextState, DefaultCase);
 
     // we always start from sequential for master-only initialization
     // of omp library on nvptx
     ControlSwitch->addCase(Bld.getInt32(FirstState), FirstSequentialCheck);
-    int GetNextLabel = AddNewRegionLabel (FirstSequentialCheck);
+    int GetNextLabel = AddNewRegionLabel(FirstSequentialCheck);
     assert(GetNextLabel == FirstState &&
-        "First sequential state is not first in control switch!");
+           "First sequential state is not first in control switch!");
 
-    FinishedState = AddNewRegionLabel (FinishedCase);
+    FinishedState = AddNewRegionLabel(FinishedCase);
     ControlSwitch->addCase(Bld.getInt32(FinishedState), FinishedCase);
 
     // a bad label is not handled for now
@@ -2200,20 +2166,20 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
     // do not do that but implement while(!finished). This helps
     // the backend ptxas to easily prove convergence
-    //Bld.CreateBr(EndTarget); // go to exit directly
+    // Bld.CreateBr(EndTarget); // go to exit directly
 
     Bld.SetInsertPoint(SynchronizeAndNextState);
     Bld.CreateCall(Get_syncthreads());
 
-    SmallVector<llvm::Value *,2> GEPIdxs;
+    SmallVector<llvm::Value *, 2> GEPIdxs;
     GEPIdxs.push_back(Bld.getInt32(0));
     GEPIdxs.push_back(Bld.CreateLoad(ControlStateIndex));
-    llvm::Value * NextStateValPtr = Bld.CreateGEP(ControlState, GEPIdxs);
-    llvm:: Value * NextStateVal = Bld.CreateLoad(NextStateValPtr);
+    llvm::Value *NextStateValPtr = Bld.CreateGEP(ControlState, GEPIdxs);
+    llvm::Value *NextStateVal = Bld.CreateLoad(NextStateValPtr);
 
     Bld.CreateStore(NextStateVal, NextState);
-    llvm::Value * NextXoredIndex = Bld.CreateXor(Bld.CreateLoad(ControlStateIndex),
-        Bld.getInt32(1));
+    llvm::Value *NextXoredIndex =
+        Bld.CreateXor(Bld.CreateLoad(ControlStateIndex), Bld.getInt32(1));
     Bld.CreateStore(NextXoredIndex, ControlStateIndex);
 
     Bld.CreateBr(StartControlLoop);
@@ -2221,15 +2187,15 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
     // check if we are master, possibly break
     Bld.SetInsertPoint(FirstSequentialCheck);
 
-    llvm::Value * CallThreadNum = Bld.CreateCall(Get_thread_num());
-    llvm::Value * AmITeamMaster = Bld.CreateICmpEQ(CallThreadNum,
-        Bld.getInt32(MASTER_ID), "AmIMaster");
+    llvm::Value *CallThreadNum = Bld.CreateCall(Get_thread_num());
+    llvm::Value *AmITeamMaster =
+        Bld.CreateICmpEQ(CallThreadNum, Bld.getInt32(MASTER_ID), "AmIMaster");
 
-    llvm::BasicBlock * FirstSequentialContent = llvm::BasicBlock::Create(
-             CGM.getLLVMContext(), ".first.seq.", CGF.CurFn);
+    llvm::BasicBlock *FirstSequentialContent = llvm::BasicBlock::Create(
+        CGM.getLLVMContext(), ".first.seq.", CGF.CurFn);
 
     Bld.CreateCondBr(AmITeamMaster, FirstSequentialContent,
-        SynchronizeAndNextState);
+                     SynchronizeAndNextState);
 
     // start codegening content of target pragma
     Bld.SetInsertPoint(FirstSequentialContent);
@@ -2241,156 +2207,157 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
   // \brief For NVTPX generate label setting when closing
   // a target region
-   void GenerateFinishLabelSetting(SourceLocation Loc,
-       CodeGenFunction &CGF, bool prevIsParallel) {
-     CGBuilderTy &Bld = CGF.Builder;
+  void GenerateFinishLabelSetting(SourceLocation Loc, CodeGenFunction &CGF,
+                                  bool prevIsParallel) {
+    CGBuilderTy &Bld = CGF.Builder;
 
-     // Master selects the next labels for everyone
-     // only need to exclude others if we are in a parallel region
-     if (prevIsParallel) {
-       llvm::Value * ThreadIdFinished = Bld.CreateCall(Get_thread_num());
-       llvm::Value * NonMasterNeedToBreak = Bld.CreateICmpNE(ThreadIdFinished,
-              Bld.getInt32(MASTER_ID), "NeedToBreak");
+    // Master selects the next labels for everyone
+    // only need to exclude others if we are in a parallel region
+    if (prevIsParallel) {
+      llvm::Value *ThreadIdFinished = Bld.CreateCall(Get_thread_num());
+      llvm::Value *NonMasterNeedToBreak = Bld.CreateICmpNE(
+          ThreadIdFinished, Bld.getInt32(MASTER_ID), "NeedToBreak");
 
-       llvm::BasicBlock * SetFinished = llvm::BasicBlock::Create(
-           CGM.getLLVMContext(), ".master.set.finished", CGF.CurFn);
+      llvm::BasicBlock *SetFinished = llvm::BasicBlock::Create(
+          CGM.getLLVMContext(), ".master.set.finished", CGF.CurFn);
 
-       Bld.CreateCondBr(NonMasterNeedToBreak, SynchronizeAndNextState,
-           SetFinished);
+      Bld.CreateCondBr(NonMasterNeedToBreak, SynchronizeAndNextState,
+                       SetFinished);
 
-       Bld.SetInsertPoint(SetFinished);
-     } // otherwise, we already excluded non master threads
+      Bld.SetInsertPoint(SetFinished);
+    } // otherwise, we already excluded non master threads
 
-     SmallVector<llvm::Value *,2> GEPIdxs;
-     GEPIdxs.push_back(Bld.getInt32(0));
-     GEPIdxs.push_back(Bld.CreateLoad(ControlStateIndex));
-     llvm::Value * NextStateValPtr = Bld.CreateGEP(ControlState, GEPIdxs);
-     Bld.CreateStore(Bld.getInt32(FinishedState), NextStateValPtr);
+    SmallVector<llvm::Value *, 2> GEPIdxs;
+    GEPIdxs.push_back(Bld.getInt32(0));
+    GEPIdxs.push_back(Bld.CreateLoad(ControlStateIndex));
+    llvm::Value *NextStateValPtr = Bld.CreateGEP(ControlState, GEPIdxs);
+    Bld.CreateStore(Bld.getInt32(FinishedState), NextStateValPtr);
 
-     Bld.CreateBr(SynchronizeAndNextState);
-     //Bld.CreateBr(ReconvergeBlock);
+    Bld.CreateBr(SynchronizeAndNextState);
+    // Bld.CreateBr(ReconvergeBlock);
 
-     // reconverge goes back to sync directly
-     //Bld.SetInsertPoint(ReconvergeBlock);
-     //Bld.CreateBr(SynchronizeAndNextState);
+    // reconverge goes back to sync directly
+    // Bld.SetInsertPoint(ReconvergeBlock);
+    // Bld.CreateBr(SynchronizeAndNextState);
 
-     Bld.SetInsertPoint(EndTarget);
-   }
+    Bld.SetInsertPoint(EndTarget);
+  }
 
-   void GenerateNextLabel (CodeGenFunction &CGF, bool PrevIsParallel,
-       bool NextIsParallel, const char * CaseBBName) {
+  void GenerateNextLabel(CodeGenFunction &CGF, bool PrevIsParallel,
+                         bool NextIsParallel, const char *CaseBBName) {
 
-     // WARNING: the code generation for if-clause will emit first
-     // the else branch (sequential) then the then branch (parallel).
-     // This will provoke closure of the #parallel region in else on the
-     // region stack
-     // going from parallel to sequential corresponds to closing a
-     // parallel region
-     if (PrevIsParallel && !NextIsParallel) {
-       // finish parallel
-       assert((OMPRegionTypesStack.back() == OMP_Parallel) &&
-           "Exiting a parallel region does not match stack state");
-       OMPRegionTypesStack.pop_back();
-     } else if(PrevIsParallel && NextIsParallel) {
-       // going from #parallel into same #parallel: no need to handle region
-       // stack in nvptx
-       assert((OMPRegionTypesStack.back() == OMP_Parallel) &&
-         "parallel region to parallel region switch, but not in parallel"
-         "already");
-     } else if(NextIsParallel) {
-       // going from sequential to parallel or from parallel to parallel means
-       // opening a parallel region
-       OMPRegionTypesStack.push_back(OMP_Parallel);
-     }
+    // WARNING: the code generation for if-clause will emit first
+    // the else branch (sequential) then the then branch (parallel).
+    // This will provoke closure of the #parallel region in else on the
+    // region stack
+    // going from parallel to sequential corresponds to closing a
+    // parallel region
+    if (PrevIsParallel && !NextIsParallel) {
+      // finish parallel
+      assert((OMPRegionTypesStack.back() == OMP_Parallel) &&
+             "Exiting a parallel region does not match stack state");
+      OMPRegionTypesStack.pop_back();
+    } else if (PrevIsParallel && NextIsParallel) {
+      // going from #parallel into same #parallel: no need to handle region
+      // stack in nvptx
+      assert((OMPRegionTypesStack.back() == OMP_Parallel) &&
+             "parallel region to parallel region switch, but not in parallel"
+             "already");
+    } else if (NextIsParallel) {
+      // going from sequential to parallel or from parallel to parallel means
+      // opening a parallel region
+      OMPRegionTypesStack.push_back(OMP_Parallel);
+    }
 
-     CGBuilderTy &Bld = CGF.Builder;
+    CGBuilderTy &Bld = CGF.Builder;
 
-     // create new basic block for next region, get a new label for it
-     // and add it to the switch
-     const std::string NextRegionName = (CaseBBName != 0)?
-         CaseBBName : NextIsParallel? ".par.reg.pre" : ".seq.reg.pre";
-     llvm::BasicBlock * NextRegionBlock = llvm::BasicBlock::Create(
-         CGM.getLLVMContext(), NextRegionName, CGF.CurFn);
+    // create new basic block for next region, get a new label for it
+    // and add it to the switch
+    const std::string NextRegionName =
+        (CaseBBName != 0) ? CaseBBName : NextIsParallel ? ".par.reg.pre"
+                                                        : ".seq.reg.pre";
+    llvm::BasicBlock *NextRegionBlock = llvm::BasicBlock::Create(
+        CGM.getLLVMContext(), NextRegionName, CGF.CurFn);
 
-     int NextLabel = AddNewRegionLabel (NextRegionBlock);
-     ControlSwitch->addCase(Bld.getInt32(NextLabel), NextRegionBlock);
+    int NextLabel = AddNewRegionLabel(NextRegionBlock);
+    ControlSwitch->addCase(Bld.getInt32(NextLabel), NextRegionBlock);
 
-     // end of region: master set next label. If end of parallel region
-     // weed out non master thread
-     if (PrevIsParallel && !NextIsParallel) {
-       llvm::BasicBlock * OnlyMasterSetNext = llvm::BasicBlock::Create(
-         CGM.getLLVMContext(), ".master.only.next.label", CGF.CurFn);
+    // end of region: master set next label. If end of parallel region
+    // weed out non master thread
+    if (PrevIsParallel && !NextIsParallel) {
+      llvm::BasicBlock *OnlyMasterSetNext = llvm::BasicBlock::Create(
+          CGM.getLLVMContext(), ".master.only.next.label", CGF.CurFn);
 
+      llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num());
+      llvm::Value *AmINotMaster =
+          Bld.CreateICmpNE(callThreadNum, Bld.getInt32(MASTER_ID), "NotMaster");
+
+      Bld.CreateCondBr(AmINotMaster, SynchronizeAndNextState,
+                       OnlyMasterSetNext);
+      Bld.SetInsertPoint(OnlyMasterSetNext);
+    }
+
+    // set the next label
+    SmallVector<llvm::Value *, 2> GEPIdxs;
+    GEPIdxs.push_back(Bld.getInt32(0));
+    GEPIdxs.push_back(Bld.CreateLoad(ControlStateIndex));
+    llvm::Value *NextStateValPtr = Bld.CreateGEP(ControlState, GEPIdxs);
+    Bld.CreateStore(Bld.getInt32(NextLabel), NextStateValPtr);
+
+    Bld.CreateBr(SynchronizeAndNextState);
+
+    // start inserting new region statements into next switch case
+    Bld.SetInsertPoint(NextRegionBlock);
+
+    // weed out non master threads if starting sequential region
+    if (!NextIsParallel) {
+      llvm::BasicBlock *OnlyMasterInSequential = llvm::BasicBlock::Create(
+
+          CGM.getLLVMContext(), ".master.only.seq.region", CGF.CurFn);
        llvm::Value * callThreadNum = Bld.CreateCall(Get_thread_num());
-       llvm::Value * AmINotMaster = Bld.CreateICmpNE(callThreadNum,
-             Bld.getInt32(MASTER_ID), "NotMaster");
+       llvm::Value *AmINotMaster = Bld.CreateICmpNE(
+           callThreadNum, Bld.getInt32(MASTER_ID), "NotMaster");
 
        Bld.CreateCondBr(AmINotMaster, SynchronizeAndNextState,
-           OnlyMasterSetNext);
-       Bld.SetInsertPoint(OnlyMasterSetNext);
-     }
-
-     // set the next label
-     SmallVector<llvm::Value *,2> GEPIdxs;
-     GEPIdxs.push_back(Bld.getInt32(0));
-     GEPIdxs.push_back(Bld.CreateLoad(ControlStateIndex));
-     llvm::Value * NextStateValPtr = Bld.CreateGEP(ControlState, GEPIdxs);
-     Bld.CreateStore(Bld.getInt32(NextLabel), NextStateValPtr);
-
-     Bld.CreateBr(SynchronizeAndNextState);
-
-     // start inserting new region statements into next switch case
-     Bld.SetInsertPoint(NextRegionBlock);
-
-     // weed out non master threads if starting sequential region
-     if (!NextIsParallel) {
-       llvm::BasicBlock * OnlyMasterInSequential = llvm::BasicBlock::Create(
-
-         CGM.getLLVMContext(), ".master.only.seq.region", CGF.CurFn);
-       llvm::Value * callThreadNum = Bld.CreateCall(Get_thread_num());
-       llvm::Value * AmINotMaster = Bld.CreateICmpNE(callThreadNum,
-             Bld.getInt32(MASTER_ID), "NotMaster");
-
-       Bld.CreateCondBr(AmINotMaster, SynchronizeAndNextState,
-           OnlyMasterInSequential);
+                        OnlyMasterInSequential);
 
        Bld.SetInsertPoint(OnlyMasterInSequential);
      }
-   }
+  }
 
-   // TODO: integrate within GenerateNextLabel function
-   void EnterSimdRegion(CodeGenFunction &CGF, ArrayRef<OMPClause *> Clauses) {
-     CGBuilderTy &Bld = CGF.Builder;
+  // TODO: integrate within GenerateNextLabel function
+  void EnterSimdRegion(CodeGenFunction &CGF, ArrayRef<OMPClause *> Clauses) {
+    CGBuilderTy &Bld = CGF.Builder;
 
-     // create new basic block for next region, get a new label for it
-     // and add it to the switch
-     const std::string NextRegionName = ".start.simd.";
-     llvm::BasicBlock * NextRegionBlock = llvm::BasicBlock::Create(
-         CGM.getLLVMContext(), NextRegionName, CGF.CurFn);
+    // create new basic block for next region, get a new label for it
+    // and add it to the switch
+    const std::string NextRegionName = ".start.simd.";
+    llvm::BasicBlock *NextRegionBlock = llvm::BasicBlock::Create(
+        CGM.getLLVMContext(), NextRegionName, CGF.CurFn);
 
-     int NextLabel = AddNewRegionLabel (NextRegionBlock);
-     ControlSwitch->addCase(Bld.getInt32(NextLabel), NextRegionBlock);
+    int NextLabel = AddNewRegionLabel(NextRegionBlock);
+    ControlSwitch->addCase(Bld.getInt32(NextLabel), NextRegionBlock);
 
-     if (OMPRegionTypesStack.back() == OMP_Parallel) {
-       // simd inside parallel region: weed out non master threads for
-       // next label setting
-       llvm::BasicBlock * OnlyMasterSetNext = llvm::BasicBlock::Create(
-           CGM.getLLVMContext(), ".master.only.next.label", CGF.CurFn);
+    if (OMPRegionTypesStack.back() == OMP_Parallel) {
+      // simd inside parallel region: weed out non master threads for
+      // next label setting
+      llvm::BasicBlock *OnlyMasterSetNext = llvm::BasicBlock::Create(
+          CGM.getLLVMContext(), ".master.only.next.label", CGF.CurFn);
 
-       llvm::Value * callThreadNum = Bld.CreateCall(Get_thread_num());
-       llvm::Value * AmINotMaster = Bld.CreateICmpNE(callThreadNum,
-           Bld.getInt32(MASTER_ID), "NotMaster");
+      llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num());
+      llvm::Value *AmINotMaster =
+          Bld.CreateICmpNE(callThreadNum, Bld.getInt32(MASTER_ID), "NotMaster");
 
-       Bld.CreateCondBr(AmINotMaster, SynchronizeAndNextState,
-         OnlyMasterSetNext);
-       Bld.SetInsertPoint(OnlyMasterSetNext);
+      Bld.CreateCondBr(AmINotMaster, SynchronizeAndNextState,
+                       OnlyMasterSetNext);
+      Bld.SetInsertPoint(OnlyMasterSetNext);
      }
 
      // set the next label
-     SmallVector<llvm::Value *,2> GEPIdxs;
+     SmallVector<llvm::Value *, 2> GEPIdxs;
      GEPIdxs.push_back(Bld.getInt32(0));
      GEPIdxs.push_back(Bld.CreateLoad(ControlStateIndex));
-     llvm::Value * NextStateValPtr = Bld.CreateGEP(ControlState, GEPIdxs);
+     llvm::Value *NextStateValPtr = Bld.CreateGEP(ControlState, GEPIdxs);
      Bld.CreateStore(Bld.getInt32(NextLabel), NextStateValPtr);
 
      Bld.CreateBr(SynchronizeAndNextState);
@@ -2400,64 +2367,66 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
      // handle safelen clause, if specified
      for (ArrayRef<OMPClause *>::iterator I = Clauses.begin(),
-         E = Clauses.end(); I != E; ++I)
-        if (*I && (*I)->getClauseKind() == OMPC_safelen) {
-          OMPClause *C = dyn_cast<OMPClause>(*I);
-          RValue Len = CGF.EmitAnyExpr(cast<OMPSafelenClause>(C)->getSafelen(),
+                                          E = Clauses.end();
+          I != E; ++I)
+       if (*I && (*I)->getClauseKind() == OMPC_safelen) {
+         OMPClause *C = dyn_cast<OMPClause>(*I);
+         RValue Len = CGF.EmitAnyExpr(cast<OMPSafelenClause>(C)->getSafelen(),
                                       AggValueSlot::ignored(), true);
-          llvm::ConstantInt *Val = dyn_cast<llvm::ConstantInt>(Len.getScalarVal());
-          assert(Val);
-          Bld.CreateStore(Val, SimdNumLanes);
-        }
+         llvm::ConstantInt *Val =
+             dyn_cast<llvm::ConstantInt>(Len.getScalarVal());
+         assert(Val);
+         Bld.CreateStore(Val, SimdNumLanes);
+       }
 
      // in simd region, weed out lanes in excess
-     llvm::BasicBlock * LaneNotInExcessBlock = llvm::BasicBlock::Create(
+     llvm::BasicBlock *LaneNotInExcessBlock = llvm::BasicBlock::Create(
          CGM.getLLVMContext(), ".lane.not.in.excess.", CGF.CurFn);
 
-     llvm::Value * IsLaneInExcess = Bld.CreateICmpSGT(
+     llvm::Value *IsLaneInExcess = Bld.CreateICmpSGT(
          Bld.CreateLoad(SimdLaneNum), Bld.CreateLoad(SimdNumLanes));
      Bld.CreateCondBr(IsLaneInExcess, SynchronizeAndNextState,
-         LaneNotInExcessBlock);
+                      LaneNotInExcessBlock);
 
      // lanes not in excess execute simd region
      Bld.SetInsertPoint(LaneNotInExcessBlock);
-   }
+  }
 
-   // TODO: integrate within GenerateNextLabel function
-   void ExitSimdRegion(CodeGenFunction &CGF, llvm::Value * LoopIndex,
-       llvm::Value * LoopCount) {
-     // only the master sets the next label
+  // TODO: integrate within GenerateNextLabel function
+  void ExitSimdRegion(CodeGenFunction &CGF, llvm::Value *LoopIndex,
+                      llvm::Value *LoopCount) {
+    // only the master sets the next label
      CGBuilderTy &Bld = CGF.Builder;
 
      // create new basic block for next region, get a new label for it
      // and add it to the switch
      const std::string NextRegionName =
-         (OMPRegionTypesStack.back() == OMP_Parallel) ?
-             ".after.simd.in.parallel" : "after.simd.in.seq.";
-     llvm::BasicBlock * NextRegionBlock = llvm::BasicBlock::Create(
+         (OMPRegionTypesStack.back() == OMP_Parallel)
+             ? ".after.simd.in.parallel"
+             : "after.simd.in.seq.";
+     llvm::BasicBlock *NextRegionBlock = llvm::BasicBlock::Create(
          CGM.getLLVMContext(), NextRegionName, CGF.CurFn);
 
-     int NextLabel = AddNewRegionLabel (NextRegionBlock);
+     int NextLabel = AddNewRegionLabel(NextRegionBlock);
      ControlSwitch->addCase(Bld.getInt32(NextLabel), NextRegionBlock);
 
      // simd inside parallel region: weed out non master threads for
      // next label setting
-     llvm::BasicBlock * OnlyMasterSetNext = llvm::BasicBlock::Create(
+     llvm::BasicBlock *OnlyMasterSetNext = llvm::BasicBlock::Create(
          CGM.getLLVMContext(), ".master.only.next.label", CGF.CurFn);
 
-     llvm::Value * callThreadNum = Bld.CreateCall(Get_thread_num());
-     llvm::Value * AmINotMaster = Bld.CreateICmpNE(callThreadNum,
-         Bld.getInt32(MASTER_ID), "NotMaster");
+     llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num());
+     llvm::Value *AmINotMaster =
+         Bld.CreateICmpNE(callThreadNum, Bld.getInt32(MASTER_ID), "NotMaster");
 
-     Bld.CreateCondBr(AmINotMaster, SynchronizeAndNextState,
-         OnlyMasterSetNext);
+     Bld.CreateCondBr(AmINotMaster, SynchronizeAndNextState, OnlyMasterSetNext);
      Bld.SetInsertPoint(OnlyMasterSetNext);
 
      // set the next label
-     SmallVector<llvm::Value *,2> GEPIdxs;
+     SmallVector<llvm::Value *, 2> GEPIdxs;
      GEPIdxs.push_back(Bld.getInt32(0));
      GEPIdxs.push_back(Bld.CreateLoad(ControlStateIndex));
-     llvm::Value * NextStateValPtr = Bld.CreateGEP(ControlState, GEPIdxs);
+     llvm::Value *NextStateValPtr = Bld.CreateGEP(ControlState, GEPIdxs);
      Bld.CreateStore(Bld.getInt32(NextLabel), NextStateValPtr);
 
      Bld.CreateBr(SynchronizeAndNextState);
@@ -2467,22 +2436,24 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
      // weed out cuda threads for the next region, depending if parallel
      // or sequential
-     llvm::BasicBlock * NextRegion = nullptr;
+     llvm::BasicBlock *NextRegion = nullptr;
      if (OMPRegionTypesStack.back() == OMP_Parallel) {
        // closely nested in parallel, weed out non openmp threads
-       NextRegion = llvm::BasicBlock::Create(
-           CGM.getLLVMContext(), ".par.reg.code", CGF.CurFn);
+       NextRegion = llvm::BasicBlock::Create(CGM.getLLVMContext(),
+                                             ".par.reg.code", CGF.CurFn);
 
-       Bld.CreateCondBr(Bld.CreateICmpNE(Bld.CreateLoad(SimdLaneNum),
-         Bld.getInt32(0)), SynchronizeAndNextState, NextRegion);
+       Bld.CreateCondBr(
+           Bld.CreateICmpNE(Bld.CreateLoad(SimdLaneNum), Bld.getInt32(0)),
+           SynchronizeAndNextState, NextRegion);
      } else {
        // going back to team-master only region: exclude all threads execpt
        // master
-       NextRegion = llvm::BasicBlock::Create(
-         CGM.getLLVMContext(), ".seq.reg.code", CGF.CurFn);
+       NextRegion = llvm::BasicBlock::Create(CGM.getLLVMContext(),
+                                             ".seq.reg.code", CGF.CurFn);
 
-       Bld.CreateCondBr(Bld.CreateICmpNE(Bld.CreateCall(Get_thread_num()),
-           Bld.getInt32(0)), SynchronizeAndNextState, NextRegion);
+       Bld.CreateCondBr(
+           Bld.CreateICmpNE(Bld.CreateCall(Get_thread_num()), Bld.getInt32(0)),
+           SynchronizeAndNextState, NextRegion);
      }
 
      Bld.SetInsertPoint(NextRegion);
@@ -2490,33 +2461,33 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
      // restore last iteration value into LoopCount variable because
      // the explicit SIMD increment is NumLanes-strided
      Bld.CreateStore(LoopCount, LoopIndex);
-   }
+  }
 
-   void GenerateIfMaster (SourceLocation Loc, CapturedStmt *CS,
-        CodeGenFunction &CGF) {
-     CGBuilderTy &Bld = CGF.Builder;
+  void GenerateIfMaster(SourceLocation Loc, CapturedStmt *CS,
+                        CodeGenFunction &CGF) {
+    CGBuilderTy &Bld = CGF.Builder;
 
-     llvm::BasicBlock * ifMasterBlock = llvm::BasicBlock::Create(
-         CGM.getLLVMContext(), ".if.master", CGF.CurFn);
+    llvm::BasicBlock *ifMasterBlock =
+        llvm::BasicBlock::Create(CGM.getLLVMContext(), ".if.master", CGF.CurFn);
 
-     llvm::BasicBlock * fallThroughMaster = llvm::BasicBlock::Create(
-         CGM.getLLVMContext(), ".fall.through.master", CGF.CurFn);
+    llvm::BasicBlock *fallThroughMaster = llvm::BasicBlock::Create(
+        CGM.getLLVMContext(), ".fall.through.master", CGF.CurFn);
 
-     llvm::Value * callThreadNum = Bld.CreateCall(Get_thread_num());
-     llvm::Value * amIMasterCond = Bld.CreateICmpEQ(callThreadNum,
-         Bld.getInt32(MASTER_ID), "amIMaster");
+    llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num());
+    llvm::Value *amIMasterCond =
+        Bld.CreateICmpEQ(callThreadNum, Bld.getInt32(MASTER_ID), "amIMaster");
 
-     Bld.CreateCondBr(amIMasterCond, ifMasterBlock, fallThroughMaster);
+    Bld.CreateCondBr(amIMasterCond, ifMasterBlock, fallThroughMaster);
 
-     Bld.SetInsertPoint(ifMasterBlock);
+    Bld.SetInsertPoint(ifMasterBlock);
 
-     CGF.EmitStmt(CS->getCapturedStmt());
+    CGF.EmitStmt(CS->getCapturedStmt());
 
-     Bld.CreateBr(fallThroughMaster);
+    Bld.CreateBr(fallThroughMaster);
 
-     Bld.SetInsertPoint(fallThroughMaster);
+    Bld.SetInsertPoint(fallThroughMaster);
 
-     Bld.CreateCall(Get_syncthreads());
+    Bld.CreateCall(Get_syncthreads());
    }
 
    // \brief scan entire parallel region looking for #for directive.
@@ -2530,12 +2501,14 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
      // traverse all children: if #for is found, return true else
      // continue scanning subtree
-     for(Stmt::const_child_iterator ii=S->child_begin(), ie=S->child_end();
-         ii != ie; ++ii) {
+     for (Stmt::const_child_iterator ii = S->child_begin(), ie = S->child_end();
+          ii != ie; ++ii) {
        // if we found a #for in the current node or, recursively, in one of its
        // children directly return true without looking any more
-       if (isa<OMPForDirective>(*ii)) return true;
-       if (ParallelRegionHasOpenMPLoop(*ii)) return true;
+       if (isa<OMPForDirective>(*ii))
+         return true;
+       if (ParallelRegionHasOpenMPLoop(*ii))
+         return true;
      }
 
      // scanned the entire region and no #for was found
@@ -2553,13 +2526,14 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
      // traverse all children: if #for simd or #simd is found, return true else
      // continue scanning subtree
-     for(Stmt::const_child_iterator ii=S->child_begin(), ie=S->child_end();
-         ii != ie; ++ii) {
+     for (Stmt::const_child_iterator ii = S->child_begin(), ie = S->child_end();
+          ii != ie; ++ii) {
        // if we found a #simd or #for simd in the current node or, recursively,
        // in one of its children directly return true without looking any more
        if (isa<OMPSimdDirective>(*ii) || isa<OMPForSimdDirective>(*ii))
          return true;
-       if (ParallelRegionHasSimd(*ii)) return true;
+       if (ParallelRegionHasSimd(*ii))
+         return true;
      }
 
      // scanned the entire region and no #for was found
@@ -2570,22 +2544,27 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
    // etc. and decide amount of lanes that can be dedicated to execute #simd
    // regions
    int CalculateNumberOfLanes(OpenMPDirectiveKind DKind,
-       ArrayRef<OpenMPDirectiveKind> SKinds, const OMPExecutableDirective &S) {
+                              ArrayRef<OpenMPDirectiveKind> SKinds,
+                              const OMPExecutableDirective &S) {
 
      // #parallel for eliminates all #simd inside
-     if (isa<OMPParallelForDirective>(S)) return 1;
+     if (isa<OMPParallelForDirective>(S))
+       return 1;
 
      // #parallel for simd uses WARP_SIZE lanes
      // TODO: handle the case in which #parallel for simd contain a further
      // #for
-     if (isa<OMPParallelForSimdDirective>(S)) return WARP_SIZE;
+     if (isa<OMPParallelForSimdDirective>(S))
+       return WARP_SIZE;
 
      // when there is an independent single #for, bail out and use 1 lane
-     if (ParallelRegionHasOpenMPLoop(&S)) return 1;
+     if (ParallelRegionHasOpenMPLoop(&S))
+       return 1;
 
      // no single #for, search for #simd or #for simd and if found, select
      // WARP_SIZE lanes
-     if (ParallelRegionHasSimd(&S)) return WARP_SIZE;
+     if (ParallelRegionHasSimd(&S))
+       return WARP_SIZE;
 
      // finally, no #for, #for simd, or #simd: use 1 lane
      return 1;
@@ -2817,30 +2796,27 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
    // the following function disables the barrier after firstprivate, reduction
    // and copyin. This is not needed on nvptx backend
-   bool RequireFirstprivateSynchronization() {
-     return false;
-   }
+   bool RequireFirstprivateSynchronization() { return false; }
 
    // the following two functions deal with nested parallelism
    // by calling the appropriate codegen functions above
-   void StartParallelRegionInTarget (CodeGenFunction &CGF,
-       OpenMPDirectiveKind DKind, ArrayRef<OpenMPDirectiveKind> SKinds,
-       const OMPExecutableDirective &S)
-   {
+   void StartParallelRegionInTarget(CodeGenFunction &CGF,
+                                    OpenMPDirectiveKind DKind,
+                                    ArrayRef<OpenMPDirectiveKind> SKinds,
+                                    const OMPExecutableDirective &S) {
      CGBuilderTy &Bld = CGF.Builder;
 
      if (!NestedParallelStack.back()) { // not already in a parallel region
 
        // analyze parallel region and calculate best number of lanes
-       int NumLanes = CalculateNumberOfLanes (DKind, SKinds, S);
+       int NumLanes = CalculateNumberOfLanes(DKind, SKinds, S);
        Bld.CreateStore(Bld.getInt32(NumLanes), SimdNumLanes);
 
-
        llvm::Value *PrepareParallelArgs[] = {Bld.CreateCall(Get_num_threads()),
-           Bld.CreateLoad(SimdNumLanes)};
+                                             Bld.CreateLoad(SimdNumLanes)};
 
-       llvm::Value * PrepareParallel = CGF.EmitRuntimeCall(OPENMPRTL_FUNC(
-           kernel_prepare_parallel), PrepareParallelArgs);
+       llvm::Value *PrepareParallel = CGF.EmitRuntimeCall(
+           OPENMPRTL_FUNC(kernel_prepare_parallel), PrepareParallelArgs);
 
        Bld.CreateStore(PrepareParallel, CudaThreadsInParallel);
 
@@ -2848,18 +2824,18 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
        // check if thread does not act either as a lane or as a thread (called
        // excluded from parallel region)
-       llvm::Value * MyThreadId = Bld.CreateCall(Get_thread_num());
-       llvm::Value * AmINotInParallel = Bld.CreateICmpSGE(MyThreadId,
-           Bld.CreateLoad(CudaThreadsInParallel));
+       llvm::Value *MyThreadId = Bld.CreateCall(Get_thread_num());
+       llvm::Value *AmINotInParallel =
+           Bld.CreateICmpSGE(MyThreadId, Bld.CreateLoad(CudaThreadsInParallel));
 
-       llvm::BasicBlock * IfIsNoLaneNoParallelThread = llvm::BasicBlock::Create(
-            CGM.getLLVMContext(), ".if.is.excluded", CGF.CurFn);
+       llvm::BasicBlock *IfIsNoLaneNoParallelThread = llvm::BasicBlock::Create(
+           CGM.getLLVMContext(), ".if.is.excluded", CGF.CurFn);
 
-       llvm::BasicBlock * IfIsParallelThreadOrLane = llvm::BasicBlock::Create(
-            CGM.getLLVMContext(), ".if.is.parthread.or.lane", CGF.CurFn);
+       llvm::BasicBlock *IfIsParallelThreadOrLane = llvm::BasicBlock::Create(
+           CGM.getLLVMContext(), ".if.is.parthread.or.lane", CGF.CurFn);
 
        Bld.CreateCondBr(AmINotInParallel, IfIsNoLaneNoParallelThread,
-           IfIsParallelThreadOrLane);
+                        IfIsParallelThreadOrLane);
 
        Bld.SetInsertPoint(IfIsNoLaneNoParallelThread);
 
@@ -2875,23 +2851,24 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
        // calculate my simd lane num to exclude cuda threads that will
        // only act as simd lanes and not parallel threads
        Bld.CreateStore(Bld.CreateAnd(Bld.CreateCall(Get_thread_num()),
-           Bld.CreateSub(Bld.CreateLoad(SimdNumLanes),Bld.getInt32(1))),
-           SimdLaneNum);
+                                     Bld.CreateSub(Bld.CreateLoad(SimdNumLanes),
+                                                   Bld.getInt32(1))),
+                       SimdLaneNum);
 
        llvm::Value *InitParallelArgs[] = {Bld.CreateLoad(SimdNumLanes)};
 
        CGF.EmitRuntimeCall(OPENMPRTL_FUNC(kernel_parallel), InitParallelArgs);
 
        // only lane id 0 (lane master) is a thread in parallel
-       llvm::BasicBlock * IfIsLaneNotParallelThread = llvm::BasicBlock::Create(
-                   CGM.getLLVMContext(), ".if.is.lane", CGF.CurFn);
+       llvm::BasicBlock *IfIsLaneNotParallelThread = llvm::BasicBlock::Create(
+           CGM.getLLVMContext(), ".if.is.lane", CGF.CurFn);
 
-       llvm::BasicBlock * ParallelRegionCG = llvm::BasicBlock::Create(
-                   CGM.getLLVMContext(), ".par.reg.code", CGF.CurFn);
+       llvm::BasicBlock *ParallelRegionCG = llvm::BasicBlock::Create(
+           CGM.getLLVMContext(), ".par.reg.code", CGF.CurFn);
 
-
-       Bld.CreateCondBr(Bld.CreateICmpNE(Bld.CreateLoad(SimdLaneNum),
-           Bld.getInt32(0)), IfIsLaneNotParallelThread, ParallelRegionCG);
+       Bld.CreateCondBr(
+           Bld.CreateICmpNE(Bld.CreateLoad(SimdLaneNum), Bld.getInt32(0)),
+           IfIsLaneNotParallelThread, ParallelRegionCG);
 
        Bld.SetInsertPoint(IfIsLaneNotParallelThread);
 
@@ -2908,37 +2885,38 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
    void EndParallelRegionInTarget (CodeGenFunction &CGF)
    {
-//     CGBuilderTy &Bld = CGF.Builder;
+     //     CGBuilderTy &Bld = CGF.Builder;
 
      // we need to inspect the previous layer to understand what type
      // of end we need
      PopParallelRegion();
      // check if we are in a nested parallel region
      if (!NestedParallelStack.back()) { // not nested parallel
-     // check if current thread participated to parallel region
-     // todo: optimize away if the parallel region is a contiguous case
-     // This is **not right**. Checking if I am excluded, simd or thread
-     // must only happens when changing labels. There is no label change
-     // in principle when we end a parallel region
-//       llvm::BasicBlock * IfIsLaneNotParallelThread = llvm::BasicBlock::Create(
-//           CGM.getLLVMContext(), ".if.is.lane", CGF.CurFn);
-//
-//       llvm::BasicBlock * ExitParallel = llvm::BasicBlock::Create(
-//           CGM.getLLVMContext(), ".exit.par", CGF.CurFn);
-//
-//       Bld.CreateCondBr(Bld.CreateICmpNE(Bld.CreateLoad(SimdLaneNum),
-//           Bld.getInt32(0)), IfIsLaneNotParallelThread, ExitParallel);
-//
-//       Bld.SetInsertPoint(IfIsLaneNotParallelThread);
-//       Bld.CreateBr(ReconvergeWithExcludedFromParallel);
-//
-//       Bld.SetInsertPoint(ExitParallel);
+       // check if current thread participated to parallel region
+       // todo: optimize away if the parallel region is a contiguous case
+       // This is **not right**. Checking if I am excluded, simd or thread
+       // must only happens when changing labels. There is no label change
+       // in principle when we end a parallel region
+       //       llvm::BasicBlock * IfIsLaneNotParallelThread =
+       //       llvm::BasicBlock::Create(
+       //           CGM.getLLVMContext(), ".if.is.lane", CGF.CurFn);
+       //
+       //       llvm::BasicBlock * ExitParallel = llvm::BasicBlock::Create(
+       //           CGM.getLLVMContext(), ".exit.par", CGF.CurFn);
+       //
+       //       Bld.CreateCondBr(Bld.CreateICmpNE(Bld.CreateLoad(SimdLaneNum),
+       //           Bld.getInt32(0)), IfIsLaneNotParallelThread, ExitParallel);
+       //
+       //       Bld.SetInsertPoint(IfIsLaneNotParallelThread);
+       //       Bld.CreateBr(ReconvergeWithExcludedFromParallel);
+       //
+       //       Bld.SetInsertPoint(ExitParallel);
        CallParallelRegionEnd(CGF);
 
        CGM.getOpenMPRuntime().GenerateNextLabel(CGF, true, false);
 
-//       Bld.CreateBr(SynchronizeAndNextState);
-//       Bld.SetInsertPoint(ReconvergeWithExcludedFromParallel);
+       //       Bld.CreateBr(SynchronizeAndNextState);
+       //       Bld.SetInsertPoint(ReconvergeWithExcludedFromParallel);
      } else { // nested parallel region: close serialize
        CallSerializedParallelEnd (CGF);
      }
@@ -3004,26 +2982,25 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
    // #pragma omp simd specialization for NVPTX
    // \warning assume no more than 32 lanes in #simd
-   void EmitSimdInitialization(llvm::Value * LoopIndex, llvm::Value * LoopCount,
-       CodeGenFunction &CGF) {
+   void EmitSimdInitialization(llvm::Value *LoopIndex, llvm::Value *LoopCount,
+                               CodeGenFunction &CGF) {
      CGBuilderTy &Builder = CGF.Builder;
 
-     llvm::Value * SimdLaneNumSext = Builder.CreateSExt(SimdLaneNum,
-         LoopCount->getType()->getPointerTo());
+     llvm::Value *SimdLaneNumSext =
+         Builder.CreateSExt(SimdLaneNum, LoopCount->getType()->getPointerTo());
 
-     llvm::Value * InitialValue = Builder.CreateAdd(
-         llvm::ConstantInt::get(LoopCount->getType(), 0),
-         Builder.CreateLoad(SimdLaneNumSext));
+     llvm::Value *InitialValue =
+         Builder.CreateAdd(llvm::ConstantInt::get(LoopCount->getType(), 0),
+                           Builder.CreateLoad(SimdLaneNumSext));
      Builder.CreateStore(InitialValue, LoopIndex);
    }
 
-   void EmitSimdIncrement(llvm::Value * LoopIndex, llvm::Value * LoopCount,
-       CodeGenFunction &CGF) {
+   void EmitSimdIncrement(llvm::Value *LoopIndex, llvm::Value *LoopCount,
+                          CodeGenFunction &CGF) {
      CGBuilderTy &Builder = CGF.Builder;
 
-     llvm::Value * NewLoopIndexValue = Builder.CreateAdd(
-         Builder.CreateLoad(LoopIndex),
-         Builder.CreateLoad(SimdNumLanes));
+     llvm::Value *NewLoopIndexValue = Builder.CreateAdd(
+         Builder.CreateLoad(LoopIndex), Builder.CreateLoad(SimdNumLanes));
 
      Builder.CreateStore(NewLoopIndexValue, LoopIndex);
    }
@@ -3034,7 +3011,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
      OthersLabelShared = 0;
      regionLabelMap.clear();
      NextId = 0;
-//     InspectorExecutorSwitch = 0;
+     //     InspectorExecutorSwitch = 0;
      StartControl = 0;
      EndControl = 0;
      FinishedVar = 0;
@@ -3072,65 +3049,64 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 public:
    unsigned SHARED_ADDRESS_SPACE = 3;
 
-   CGOpenMPRuntime_NVPTX(CodeGenModule &CGM) :
-      CGOpenMPRuntime(CGM), ArchName(CGM.getTarget().getTriple().getArchName()),
-      MASTER_ID(0), MasterLabelShared(0), OthersLabelShared(0), NextId(0),
-      StartControl(0), EndControl(0), FinishedVar(0),
-      SequentialStartBlock(0), CheckFinished(0), FinishedCase(0),
-      SynchronizeAndNextState(0), EndTarget(0),  NextState(0),
-      ControlState(0), ControlStateIndex(0), CudaThreadsInParallel(0),
-      SimdNumLanes(0), SimdLaneNum(0), ControlSwitch(0) {
+   CGOpenMPRuntime_NVPTX(CodeGenModule &CGM)
+       : CGOpenMPRuntime(CGM),
+         ArchName(CGM.getTarget().getTriple().getArchName()), MASTER_ID(0),
+         MasterLabelShared(0), OthersLabelShared(0), NextId(0), StartControl(0),
+         EndControl(0), FinishedVar(0), SequentialStartBlock(0),
+         CheckFinished(0), FinishedCase(0), SynchronizeAndNextState(0),
+         EndTarget(0), NextState(0), ControlState(0), ControlStateIndex(0),
+         CudaThreadsInParallel(0), SimdNumLanes(0), SimdLaneNum(0),
+         ControlSwitch(0) {
 
      LocalThrTy = llvm::StructType::create(
-	        "local_thr_info",
-			CGM.Int32Ty /* priv */,
-			CGM.Int32Ty /* current_event */,
-	        CGM.Int32Ty /* eventsNumber */,
-			CGM.Int32Ty /* chunk_warp */,
-	        CGM.Int32Ty /* num_iterations */,
-			NULL);
+         "local_thr_info", CGM.Int32Ty /* priv */,
+         CGM.Int32Ty /* current_event */, CGM.Int32Ty /* eventsNumber */,
+         CGM.Int32Ty /* chunk_warp */, CGM.Int32Ty /* num_iterations */, NULL);
   }
 
-   // This may be a good way of having simd in place for nvptx in a nice
-   // way, but it is not yet clear to me how to sort this out nicely, especially
-   // because of the residual loop requirement
-//   class CGPragmaOmpSimdNVPTX : public CodeGenFunction::CGPragmaOmpSimd {
-//     public:
-//     CGPragmaOmpSimdNVPTX(const OMPExecutableDirective *S)
-//         : SimdOmp(S) {}
-//
-//       // Uncomment those functions that need to be re-implemented for OpenMP
-//       /*
-//       virtual bool emitSafelen(CodeGenFunction *CGF) const;
-//       virtual bool walkLocalVariablesToEmit(
-//                       CodeGenFunction *CGF,
-//                       CGSIMDForStmtInfo *Info) const;
-//       */
-//       virtual void emitInit(CodeGenFunction &CGF,
-//           llvm::Value *&LoopIndex, llvm::Value *&LoopCount);
-//
-//       virtual void emitIncrement(CodeGenFunction &CGF,
-//                                  llvm::Value *IndexVar) const { }
-//
-//       /*
-//       virtual void emitLinearFinal(CodeGenFunction &CGF) const;
-//
-//       virtual SourceLocation getForLoc() const;
-//       virtual SourceRange getSourceRange() const;
-//       virtual const Stmt *getInit() const;
-//       virtual const Expr *getCond() const;
-//       virtual const CapturedStmt *getAssociatedStmt() const;
-//       virtual const Expr *getLoopCount() const;
-//       virtual Stmt *extractLoopBody(Stmt *S) const;
-//       virtual bool isOmp() const { return true; }
-//       virtual const Stmt *getStmt() const { return SimdOmp; }
-//       llvm::ConstantInt *emitClauseTail(CodeGenFunction *CGF, Expr *E) const;
-//       */
-//       virtual ~CGPragmaOmpSimdNVPTX() { }
-//
-//     private:
-//       const OMPExecutableDirective *SimdOmp;
-//   };
+  // This may be a good way of having simd in place for nvptx in a nice
+  // way, but it is not yet clear to me how to sort this out nicely, especially
+  // because of the residual loop requirement
+  //   class CGPragmaOmpSimdNVPTX : public CodeGenFunction::CGPragmaOmpSimd {
+  //     public:
+  //     CGPragmaOmpSimdNVPTX(const OMPExecutableDirective *S)
+  //         : SimdOmp(S) {}
+  //
+  //       // Uncomment those functions that need to be re-implemented for
+  //       OpenMP
+  //       /*
+  //       virtual bool emitSafelen(CodeGenFunction *CGF) const;
+  //       virtual bool walkLocalVariablesToEmit(
+  //                       CodeGenFunction *CGF,
+  //                       CGSIMDForStmtInfo *Info) const;
+  //       */
+  //       virtual void emitInit(CodeGenFunction &CGF,
+  //           llvm::Value *&LoopIndex, llvm::Value *&LoopCount);
+  //
+  //       virtual void emitIncrement(CodeGenFunction &CGF,
+  //                                  llvm::Value *IndexVar) const { }
+  //
+  //       /*
+  //       virtual void emitLinearFinal(CodeGenFunction &CGF) const;
+  //
+  //       virtual SourceLocation getForLoc() const;
+  //       virtual SourceRange getSourceRange() const;
+  //       virtual const Stmt *getInit() const;
+  //       virtual const Expr *getCond() const;
+  //       virtual const CapturedStmt *getAssociatedStmt() const;
+  //       virtual const Expr *getLoopCount() const;
+  //       virtual Stmt *extractLoopBody(Stmt *S) const;
+  //       virtual bool isOmp() const { return true; }
+  //       virtual const Stmt *getStmt() const { return SimdOmp; }
+  //       llvm::ConstantInt *emitClauseTail(CodeGenFunction *CGF, Expr *E)
+  //       const;
+  //       */
+  //       virtual ~CGPragmaOmpSimdNVPTX() { }
+  //
+  //     private:
+  //       const OMPExecutableDirective *SimdOmp;
+  //   };
 
   /// Implement some target dependent transformation for the target region
   /// outlined function
@@ -3317,21 +3293,21 @@ public:
   // special handling for composite pragmas:
   bool RequiresStride(OpenMPDirectiveKind Kind, OpenMPDirectiveKind SKind) {
     switch (Kind) {
-       case OMPD_for_simd:
-       case OMPD_parallel_for_simd:
-         return true;
-       case OMPD_distribute_parallel_for:
-       case OMPD_distribute_parallel_for_simd:
-       case OMPD_teams_distribute_parallel_for:
-       case OMPD_teams_distribute_parallel_for_simd:
-       case OMPD_target_teams_distribute_parallel_for:
-       case OMPD_target_teams_distribute_parallel_for_simd:
-         if (SKind == OMPD_distribute) {
-           return true;
-         }
-       default:
-         break;
-       }
+    case OMPD_for_simd:
+    case OMPD_parallel_for_simd:
+      return true;
+    case OMPD_distribute_parallel_for:
+    case OMPD_distribute_parallel_for_simd:
+    case OMPD_teams_distribute_parallel_for:
+    case OMPD_teams_distribute_parallel_for_simd:
+    case OMPD_target_teams_distribute_parallel_for:
+    case OMPD_target_teams_distribute_parallel_for_simd:
+      if (SKind == OMPD_distribute) {
+        return true;
+      }
+    default:
+      break;
+    }
     return false;
   }
 
@@ -3341,24 +3317,25 @@ public:
 		  OpenMPDirectiveKind Kind, OpenMPDirectiveKind SKind, llvm::Value * PSt) {
 
 	  CGBuilderTy &Builder = CGF.Builder;
-	  llvm::Value *NextIdx;
+          llvm::Value *NextIdx;
 
-	  // when distribute contains a parallel for, each distribute iteration
+          // when distribute contains a parallel for, each distribute iteration
 	  // executes "stride" instructions of the innermost for
-	  // also valid for #for simd, because we explicitly transform the single
-	  // loop into two loops
+          // also valid for #for simd, because we explicitly transform the
+          // single
+          // loop into two loops
 
-	  if (RequiresStride(Kind, SKind)) {
-	    llvm::Value * Stride = Builder.CreateLoad(PSt);
-	    NextIdx = Builder.CreateAdd(
-	        Idx, Stride, ".next.idx.", false,
-	        QTy->isSignedIntegerOrEnumerationType());
-	  } else
-	    NextIdx = Builder.CreateAdd(
-	        Idx, llvm::ConstantInt::get(IdxTy, 1), ".next.idx.", false,
-	        QTy->isSignedIntegerOrEnumerationType());
+          if (RequiresStride(Kind, SKind)) {
+            llvm::Value *Stride = Builder.CreateLoad(PSt);
+            NextIdx =
+                Builder.CreateAdd(Idx, Stride, ".next.idx.", false,
+                                  QTy->isSignedIntegerOrEnumerationType());
+          } else
+            NextIdx = Builder.CreateAdd(
+                Idx, llvm::ConstantInt::get(IdxTy, 1), ".next.idx.", false,
+                QTy->isSignedIntegerOrEnumerationType());
 
-	  assert (NextIdx && "NextIdx variable not set");
+          assert (NextIdx && "NextIdx variable not set");
 
 	  return NextIdx;
   }
@@ -3504,9 +3481,9 @@ public:
   /// the entries in the same section as desired and do not generate any symbols
   /// in target mode (we just can't use them)
 
-  llvm::GlobalVariable* CreateHostPtrForCurrentTargetRegion(const Decl *D,
-                                           llvm::Function *Fn,
-                                           StringRef Name){
+  llvm::GlobalVariable *CreateHostPtrForCurrentTargetRegion(const Decl *D,
+                                                            llvm::Function *Fn,
+                                                            StringRef Name) {
     if (CGM.getLangOpts().OpenMPTargetMode)
       return nullptr;
 
@@ -3514,17 +3491,17 @@ public:
     return nullptr;
   }
 
-  llvm::GlobalVariable* CreateHostEntryForTargetGlobal(const Decl *D,
-                                      llvm::GlobalVariable* GV,
-                                      StringRef Name){
+  llvm::GlobalVariable *CreateHostEntryForTargetGlobal(const Decl *D,
+                                                       llvm::GlobalVariable *GV,
+                                                       StringRef Name) {
 
-    if (CGM.getLangOpts().OpenMPTargetMode){
+    if (CGM.getLangOpts().OpenMPTargetMode) {
 
       const VarDecl *VD = cast<VarDecl>(D);
 
       // Create an externally visible global variable for static data so it can
       // be loaded by the OpenMP runtime
-      if (VD->getStorageClass() == SC_Static){
+      if (VD->getStorageClass() == SC_Static) {
         StaticEntries.insert(GV);
       }
       return nullptr;
@@ -3563,7 +3540,7 @@ public:
 #define NVPTX_GEP_BUG_IS_FIXED
 #ifdef NVPTX_GEP_BUG_IS_FIXED
       // Get the type associated with each ID (the table row)
-      llvm::DenseMap<int, llvm::SmallVector<llvm::Type*, 16>> RowTys;
+      llvm::DenseMap<int, llvm::SmallVector<llvm::Type *, 16>> RowTys;
 
       llvm::DenseMap<int, int> NumSharedInTargetRegions;
       for (auto L : ValuesToBeInSharedMemory){
@@ -3579,19 +3556,17 @@ public:
       for (auto it : NumSharedInTargetRegions) {
         auto TargetRegion = it.first;
 
-        llvm::StructType *RowTy = llvm::StructType::create(RowTys[TargetRegion]);
+        llvm::StructType *RowTy =
+            llvm::StructType::create(RowTys[TargetRegion]);
 
         // Create the table, assume we have a maximum of 1024 threads.
-        llvm::ArrayType *TblTy = llvm::ArrayType::get(RowTy,1024);
+        llvm::ArrayType *TblTy = llvm::ArrayType::get(RowTy, 1024);
 
         llvm::GlobalVariable *Tbl = new llvm::GlobalVariable(
-                  CGM.getModule(),
-                  TblTy,
-                  false,llvm::GlobalValue::InternalLinkage,
-                  llvm::Constant::getNullValue(TblTy),
-                  Twine("__omptgt__shared_data_tbl_"), 0,
-                  llvm::GlobalVariable::NotThreadLocal,
-                  SHARED_ADDRESS_SPACE, false);
+            CGM.getModule(), TblTy, false, llvm::GlobalValue::InternalLinkage,
+            llvm::Constant::getNullValue(TblTy),
+            Twine("__omptgt__shared_data_tbl_"), 0,
+            llvm::GlobalVariable::NotThreadLocal, SHARED_ADDRESS_SPACE, false);
 
         SharedValueTbl[TargetRegion] = Tbl;
       }
@@ -3615,7 +3590,7 @@ public:
 
         llvm::Value *Comp[] = {Zero,Row,Col};
         llvm::Constant *Addr =
-            llvm::ConstantExpr::getGetElementPtr(nullptr,Tbl,Comp,true);
+            llvm::ConstantExpr::getGetElementPtr(nullptr, Tbl, Comp, true);
 
         llvm::PointerType *Ty = cast<llvm::PointerType>(Addr->getType());
         llvm::Type *FixedTy = llvm::PointerType::get(Ty->getElementType(), 0);
@@ -3646,7 +3621,7 @@ public:
     }
 
     // Make sure the static entries are turned visible
-    for (auto G : StaticEntries){
+    for (auto G : StaticEntries) {
       std::string NewName = "__omptgt__static_";
       NewName += CGM.getLangOpts().OMPModuleUniqueID;
       NewName += "__";
@@ -3657,25 +3632,25 @@ public:
 
     // Legalize names of globals and functions.
     // FIXME: This should be moved to the backend.
-    for (auto &I : CGM.getModule().getGlobalList()){
+    for (auto &I : CGM.getModule().getGlobalList()) {
       if (!I.hasInternalLinkage())
         continue;
       if (I.getName().find('.') == I.getName().npos)
         continue;
 
       std::string N = I.getName();
-      std::replace(N.begin(), N.end(), '.','_');
-      I.setName(Twine("__ptxnamefix__")+Twine(N));
+      std::replace(N.begin(), N.end(), '.', '_');
+      I.setName(Twine("__ptxnamefix__") + Twine(N));
     }
-    for (auto &I : CGM.getModule().getFunctionList()){
+    for (auto &I : CGM.getModule().getFunctionList()) {
       if (I.isIntrinsic())
         continue;
       if (I.getName().find('.') == I.getName().npos)
         continue;
 
       std::string N = I.getName();
-      std::replace(N.begin(), N.end(), '.','_');
-      I.setName(Twine("__ptxnamefix__")+Twine(N));
+      std::replace(N.begin(), N.end(), '.', '_');
+      I.setName(Twine("__ptxnamefix__") + Twine(N));
     }
 
     CGOpenMPRuntime::PostProcessModule(CGM);

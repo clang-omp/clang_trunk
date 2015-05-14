@@ -60,12 +60,12 @@ namespace {
     SmallVector<CXXMethodDecl *, 8> DeferredInlineMethodDefinitions;
 
   public:
-    CodeGeneratorImpl(DiagnosticsEngine &diags, const std::string& ModuleName,
-                      const CodeGenOptions &CGO, llvm::LLVMContext& C,
+    CodeGeneratorImpl(DiagnosticsEngine &diags, const std::string &ModuleName,
+                      const CodeGenOptions &CGO, llvm::LLVMContext &C,
                       CoverageSourceInfo *CoverageInfo = nullptr)
-      : Diags(diags), Ctx(nullptr), CodeGenOpts(CGO), HandlingTopLevelDecls(0),
-        CoverageInfo(CoverageInfo), NothingToCodegen(false),
-        M(new llvm::Module(ModuleName, C)) {}
+        : Diags(diags), Ctx(nullptr), CodeGenOpts(CGO),
+          HandlingTopLevelDecls(0), CoverageInfo(CoverageInfo),
+          NothingToCodegen(false), M(new llvm::Module(ModuleName, C)) {}
     ~CodeGeneratorImpl() override {
       // There should normally not be any leftover inline method definitions.
       assert(DeferredInlineMethodDefinitions.empty() ||
@@ -106,9 +106,10 @@ namespace {
       for (size_t i = 0, e = CodeGenOpts.DependentLibraries.size(); i < e; ++i)
         HandleDependentLibrary(CodeGenOpts.DependentLibraries[i]);
 
-      NothingToCodegen =  Builder->hasOpenMPRuntime() &&
-            Builder->getLangOpts().OpenMPTargetMode &&
-            !Builder->getOpenMPRuntime().hasAnyTargetCodeToBeEmitted();
+      NothingToCodegen =
+          Builder->hasOpenMPRuntime() &&
+          Builder->getLangOpts().OpenMPTargetMode &&
+          !Builder->getOpenMPRuntime().hasAnyTargetCodeToBeEmitted();
     }
 
     void HandleCXXStaticMemberVarInstantiation(VarDecl *VD) override {
@@ -156,7 +157,6 @@ namespace {
           Builder->getLangOpts().OpenMPTargetMode &&
           !Builder->getOpenMPRuntime().hasAnyTargetCodeToBeEmitted())
         return;
-
 
       // We may want to emit this definition. However, that decision might be
       // based on computing the linkage, and we have to defer that in case we

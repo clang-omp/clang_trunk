@@ -625,8 +625,8 @@ CodeGenFunction::GenerateCXXGlobalInitFunc(llvm::Function *Fn,
         // to keep track of how many entry points we have while adding the
         // constructors
 
-        std::string NewName = CGM.getOpenMPRuntime().
-            GetOffloadEntryMangledNameForCtor();
+        std::string NewName =
+            CGM.getOpenMPRuntime().GetOffloadEntryMangledNameForCtor();
 
         Fn->setName(NewName);
         CGM.getOpenMPRuntime().registerCtorRegion(Fn);

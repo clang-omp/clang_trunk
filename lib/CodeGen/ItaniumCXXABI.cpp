@@ -1911,8 +1911,8 @@ static void emitOMPOfloadingKernelTarget(CodeGenFunction &CGF,
   CodeGenModule &CGM = CGF.CGM;
 
   // Create the function that will call the the destructor ( void omptgt_() )
-  std::string CallerName = CGM.getOpenMPRuntime().
-                GetOffloadEntryMangledNameForDtor(addr->getName());
+  std::string CallerName =
+      CGM.getOpenMPRuntime().GetOffloadEntryMangledNameForDtor(addr->getName());
   llvm::FunctionType *CallerTy = llvm::FunctionType::get(CGM.VoidTy, false);
   llvm::Function *Caller = llvm::Function::Create(CallerTy,
       llvm::GlobalValue::InternalLinkage, CallerName, &CGM.getModule());

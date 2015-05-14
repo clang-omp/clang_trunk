@@ -122,20 +122,20 @@ int foo(int a){
   // CHK-CODEGEN-HOST:  %[[FAILOFF1:[a-zA-Z0-9_\.]+]] = call i32 @__tgt_target(
   // Device ID
   // CHK-CODEGEN-HOST:  i32 -1,
-  // CHK-CODEGEN-HOST:  i8* bitcast (void (i32*)* @__omptgt__{{[0-9]+}}_[[ID]]_ to i8*),
-  // Num of arguments for the target region
-  // CHK-CODEGEN-HOST:  i32 1, 
-  // CHK-CODEGEN-HOST:  i8** %[[BP1]], i8** %[[P1]], i64* %[[S1]],
-  // CHK-CODEGEN-HOST:  i32* getelementptr inbounds ([1 x i32], [1 x i32]* @.tgt_types{{\.?[0-9]*}}, i32 0, i32 0))
-  
+// CHK-CODEGEN-HOST:  i8* bitcast (void (i32*)* @__omptgt__{{[0-9]+}}_[[ID]]_ to i8*),
+// Num of arguments for the target region
+// CHK-CODEGEN-HOST:  i32 1,
+// CHK-CODEGEN-HOST:  i8** %[[BP1]], i8** %[[P1]], i64* %[[S1]],
+// CHK-CODEGEN-HOST:  i32* getelementptr inbounds ([1 x i32], [1 x i32]* @.tgt_types{{\.?[0-9]*}}, i32 0, i32 0))
+
   // Call host version if offloading failed
   // CHK-CODEGEN-HOST:  %[[CMP1:[a-zA-Z0-9_\.]+]] = icmp eq i32 %[[FAILOFF1]], 0
   // CHK-CODEGEN-HOST:  br i1 %[[CMP1]], label %{{.*}}, label %[[FAILOFFLAB1:[a-zA-Z0-9_\.]+]]
   // CHK-CODEGEN-HOST:  [[FAILOFFLAB1]]:
-  // CHK-CODEGEN-HOST:  call void @__omptgt__{{[0-9]+}}_[[ID]]_(i32*
+// CHK-CODEGEN-HOST:  call void @__omptgt__{{[0-9]+}}_[[ID]]_(i32*
 
-  // CHK-CODEGEN-TARGET1: define void @__omptgt__{{[0-9]+}}_[[ID:[0-9a-f]+_[0-9a-f]+]]_
-  // CHK-CODEGEN-TARGET2: define void @__omptgt__{{[0-9]+}}_[[ID:[0-9a-f]+_[0-9a-f]+]]_
+// CHK-CODEGEN-TARGET1: define void @__omptgt__{{[0-9]+}}_[[ID:[0-9a-f]+_[0-9a-f]+]]_
+// CHK-CODEGEN-TARGET2: define void @__omptgt__{{[0-9]+}}_[[ID:[0-9a-f]+_[0-9a-f]+]]_
 #pragma omp target
   {
     GV = a += tsquare(a);
@@ -158,20 +158,20 @@ int foo(int a){
     // CHK-CODEGEN-HOST:  %[[FAILOFF2:[a-zA-Z0-9_\.]+]] = call i32 @__tgt_target(
     // Device ID
     // CHK-CODEGEN-HOST:  i32 -1,
-    // CHK-CODEGEN-HOST:  i8* bitcast (void (i32*)* @__omptgt__{{[0-9]+}}_[[ID]]_ to i8*),
-    // Num of arguments for the target region
-    // CHK-CODEGEN-HOST:  i32 1, 
-    // CHK-CODEGEN-HOST:  i8** %[[BP2]], i8** %[[P2]], i64* %[[S2]],
-    // CHK-CODEGEN-HOST:  i32* getelementptr inbounds ([1 x i32], [1 x i32]* @.tgt_types{{\.?[0-9]*}}, i32 0, i32 0))
-  
+// CHK-CODEGEN-HOST:  i8* bitcast (void (i32*)* @__omptgt__{{[0-9]+}}_[[ID]]_ to i8*),
+// Num of arguments for the target region
+// CHK-CODEGEN-HOST:  i32 1,
+// CHK-CODEGEN-HOST:  i8** %[[BP2]], i8** %[[P2]], i64* %[[S2]],
+// CHK-CODEGEN-HOST:  i32* getelementptr inbounds ([1 x i32], [1 x i32]* @.tgt_types{{\.?[0-9]*}}, i32 0, i32 0))
+
     // Call host version if offloading failed
     // CHK-CODEGEN-HOST:  %[[CMP2:[a-zA-Z0-9_\.]+]] = icmp eq i32 %[[FAILOFF2]], 0
     // CHK-CODEGEN-HOST:  br i1 %[[CMP2]], label %{{.*}}, label %[[FAILOFFLAB2:[a-zA-Z0-9_\.]+]]
     // CHK-CODEGEN-HOST:  [[FAILOFFLAB2]]:
-    // CHK-CODEGEN-HOST:  call void @__omptgt__{{[0-9]+}}_[[ID]]_(i32*
+// CHK-CODEGEN-HOST:  call void @__omptgt__{{[0-9]+}}_[[ID]]_(i32*
 
-    // CHK-CODEGEN-TARGET1: define void @__omptgt__{{[0-9]+}}_[[ID]]_
-    // CHK-CODEGEN-TARGET2: define void @__omptgt__{{[0-9]+}}_[[ID]]_
+// CHK-CODEGEN-TARGET1: define void @__omptgt__{{[0-9]+}}_[[ID]]_
+// CHK-CODEGEN-TARGET2: define void @__omptgt__{{[0-9]+}}_[[ID]]_
 #pragma omp target
     {
       a -= tdouble(a) + tadd(a) + GV;

@@ -220,7 +220,7 @@ typedef int32_t(omp_get_num_teams)();
 // Target-NVPTX specific functions, we may need to move these elsewhere
 typedef void(__kmpc_kernel_init)();
 typedef int(__kmpc_kernel_prepare_parallel)(int32_t num_threads,
-    int32_t num_simd_lanes);
+                                            int32_t num_simd_lanes);
 typedef void(__kmpc_kernel_parallel)(int32_t num_simd_lanes);
 typedef void(__kmpc_kernel_end_parallel)();
 typedef void(__kmpc_serialized_parallel)(ident_t *loc, int32_t global_tid);
