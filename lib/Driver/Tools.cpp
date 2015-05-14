@@ -215,7 +215,7 @@ static bool AddLTOInputs(Compilation &C, const JobAction &JA, const Tool &T,
       if (ArgString.length() > 2 && ArgString.substr(0, 2) == "-L") {
         std::string LibPath = ArgString.substr(2, ArgString.length() - 2);
         const char *OpenMPRTInput =
-          Args.MakeArgString(LibPath + "/libiomp5.bc");
+            Args.MakeArgString(LibPath + "/libiomp5.bc");
         if (llvm::sys::fs::exists(OpenMPRTInput)) {
           LLVMLinkCmdArgs.push_back(OpenMPRTInput);
           OpenMPRTIsBitcode = true;
@@ -234,26 +234,23 @@ static bool AddLTOInputs(Compilation &C, const JobAction &JA, const Tool &T,
     if (OpenMPRTIsBitcode || LLVMLinkCmdArgs.size() > 1) {
       // Gather bitcode files using llvm-link.
       TmpName = C.getDriver().GetTemporaryPath(FileName, "bc");
-     ResultingBitcodeF = C.getArgs().MakeArgString(TmpName.c_str());
-     LLVMLinkCmdArgs.push_back("-o");
-     LLVMLinkCmdArgs.push_back(ResultingBitcodeF);
-     const char *LLVMLinkExec =
-       Args.MakeArgString(TC.getDriver().Dir + "/llvm-link");
-     C.addCommand(
-       llvm::make_unique<Command>(JA, T, LLVMLinkExec, LLVMLinkCmdArgs));
+      ResultingBitcodeF = C.getArgs().MakeArgString(TmpName.c_str());
+      LLVMLinkCmdArgs.push_back("-o");
+      LLVMLinkCmdArgs.push_back(ResultingBitcodeF);
+      const char *LLVMLinkExec =
+          Args.MakeArgString(TC.getDriver().Dir + "/llvm-link");
+      C.addCommand(
+          llvm::make_unique<Command>(JA, T, LLVMLinkExec, LLVMLinkCmdArgs));
 
-     // Optimize resulting bitcode file using opt.
-     ArgStringList OptCmdArgs;
-     OptCmdArgs.push_back(ResultingBitcodeF);
-     OptCmdArgs.push_back("-O3"); // LTO
-     OptCmdArgs.push_back("-o");
-     OptCmdArgs.push_back(ResultingBitcodeF);
-     const char *OptExec =
-       Args.MakeArgString(TC.getDriver().Dir + "/opt");
-     C.addCommand(
-       llvm::make_unique<Command>(JA, T, OptExec, OptCmdArgs));
-    }
-    else {
+      // Optimize resulting bitcode file using opt.
+      ArgStringList OptCmdArgs;
+      OptCmdArgs.push_back(ResultingBitcodeF);
+      OptCmdArgs.push_back("-O3"); // LTO
+      OptCmdArgs.push_back("-o");
+      OptCmdArgs.push_back(ResultingBitcodeF);
+      const char *OptExec = Args.MakeArgString(TC.getDriver().Dir + "/opt");
+      C.addCommand(llvm::make_unique<Command>(JA, T, OptExec, OptCmdArgs));
+    } else {
       // Single object file, no LTO.
       ResultingBitcodeF = C.getArgs().MakeArgString(LLVMLinkCmdArgs.back());
     }
@@ -266,10 +263,8 @@ static bool AddLTOInputs(Compilation &C, const JobAction &JA, const Tool &T,
     LlcCmdArgs.push_back("-o");
     LlcCmdArgs.push_back(ObjectF);
     LlcCmdArgs.push_back("-filetype=obj");
-    const char *LlcExec =
-      Args.MakeArgString(TC.getDriver().Dir + "/llc");
-     C.addCommand(
-      llvm::make_unique<Command>(JA, T, LlcExec, LlcCmdArgs));
+    const char *LlcExec = Args.MakeArgString(TC.getDriver().Dir + "/llc");
+    C.addCommand(llvm::make_unique<Command>(JA, T, LlcExec, LlcCmdArgs));
 
     // Add object file to linker inputs
     CmdArgs.push_back(ObjectF);
@@ -2858,10 +2853,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   bool IsWindowsMSVC = getToolChain().getTriple().isWindowsMSVCEnvironment();
 
   assert(((Inputs.size() == 1) ||
-          (Inputs.size() == 2 && JA.getOffloadingDevice()
-                              && isa<CompileJobAction>(JA)))
-      && "Expecting 1 or 2 inputs (OpenMP host file)");
-	const InputInfo &Input = Inputs[0];
+          (Inputs.size() == 2 && JA.getOffloadingDevice() &&
+           isa<CompileJobAction>(JA))) &&
+         "Expecting 1 or 2 inputs (OpenMP host file)");
+  const InputInfo &Input = Inputs[0];
 
   // Invoke ourselves in -cc1 mode.
   //
@@ -2888,9 +2883,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     }
 
     // inform the frontend we are generating code for a target
-    if ( JA.getOffloadingDevice() ){
+    if (JA.getOffloadingDevice()) {
       CmdArgs.push_back("-omp-target-mode");
-      if (isa<CompileJobAction>(JA)){
+      if (isa<CompileJobAction>(JA)) {
         CmdArgs.push_back("-omp-host-output-file-path");
         CmdArgs.push_back(Args.MakeArgString(Inputs[1].getFilename()));
       }
@@ -8317,7 +8312,7 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
       AddGoldPlugin(ToolChain, Args, CmdArgs, JA.getOffloadingDevice());
     else {
       OpenMPRTIsBitcode =
-        AddLTOInputs(C, JA, *this, ToolChain, Output, Inputs,Args, CmdArgs);
+          AddLTOInputs(C, JA, *this, ToolChain, Output, Inputs, Args, CmdArgs);
     }
   }
 
@@ -9210,10 +9205,8 @@ static void BitcodeToCubin(Compilation &C, const JobAction &JA, const Tool &T,
     std::string CPUFlag = "-mcpu=" + CPU;
     LlcCmdArgs.push_back(C.getArgs().MakeArgString(CPUFlag));
   }
-  const char *LlcExec =
-    Args.MakeArgString(TC.getDriver().Dir + "/llc");
-  C.addCommand(
-    llvm::make_unique<Command>(JA, T, LlcExec, LlcCmdArgs));
+  const char *LlcExec = Args.MakeArgString(TC.getDriver().Dir + "/llc");
+  C.addCommand(llvm::make_unique<Command>(JA, T, LlcExec, LlcCmdArgs));
 
   // Assemble PTX.
   TmpName = C.getDriver().GetTemporaryPath(Name, "cubin");
@@ -9227,10 +9220,8 @@ static void BitcodeToCubin(Compilation &C, const JobAction &JA, const Tool &T,
     AsCmdArgs.push_back("-arch");
     AsCmdArgs.push_back(Args.MakeArgString(CPU));
   }
-  const char *AsExec =
-    Args.MakeArgString(TC.GetProgramPath("ptxas"));
-  C.addCommand(
-    llvm::make_unique<Command>(JA, T, AsExec, AsCmdArgs));
+  const char *AsExec = Args.MakeArgString(TC.GetProgramPath("ptxas"));
+  C.addCommand(llvm::make_unique<Command>(JA, T, AsExec, AsCmdArgs));
 
   // Pass .cubin to nvlink
   CmdArgs.push_back(CubinF);
@@ -9312,7 +9303,7 @@ void NVPTX::Link::ConstructJob(Compilation &C, const JobAction &JA,
     }
 
     assert(FoundLibDevice && "Could not find libdevice in specified paths!");
-    
+
     // Optimize NVIDIA math library with -nvvm-reflect (for correctness).
     ArgStringList OptCmdArgs;
     OptCmdArgs.push_back(Args.MakeArgString(LibDeviceInput.c_str()));
@@ -9345,8 +9336,7 @@ void NVPTX::Link::ConstructJob(Compilation &C, const JobAction &JA,
   if (LinkMath) {
     if (LinkTimeOptimization) {
       LLVMLinkCmdArgs.push_back(Args.MakeArgString(LibDevice));
-    }
-    else {
+    } else {
       BitcodeToCubin(C, JA, *this, getToolChain(), "libdevice",
                      LibDevice.c_str(), Args, CmdArgs);
     }
@@ -9363,33 +9353,31 @@ void NVPTX::Link::ConstructJob(Compilation &C, const JobAction &JA,
 
     if (LLVMLinkCmdArgs.size() > 1) {
       // Gather bitcode files using llvm-link.
-     TmpName = C.getDriver().GetTemporaryPath(FileName, "bc");
-     ResultingBitcodeF = C.getArgs().MakeArgString(TmpName.c_str());
-     LLVMLinkCmdArgs.push_back("-o");
-     LLVMLinkCmdArgs.push_back(ResultingBitcodeF);
-     const char *LLVMLinkExec =
-       Args.MakeArgString(getToolChain().getDriver().Dir + "/llvm-link");
-     C.addCommand(
-       llvm::make_unique<Command>(JA, *this, LLVMLinkExec, LLVMLinkCmdArgs));
+      TmpName = C.getDriver().GetTemporaryPath(FileName, "bc");
+      ResultingBitcodeF = C.getArgs().MakeArgString(TmpName.c_str());
+      LLVMLinkCmdArgs.push_back("-o");
+      LLVMLinkCmdArgs.push_back(ResultingBitcodeF);
+      const char *LLVMLinkExec =
+          Args.MakeArgString(getToolChain().getDriver().Dir + "/llvm-link");
+      C.addCommand(
+          llvm::make_unique<Command>(JA, *this, LLVMLinkExec, LLVMLinkCmdArgs));
 
       // Optimize resulting bitcode file using opt.
-     ArgStringList OptCmdArgs;
-     OptCmdArgs.push_back(ResultingBitcodeF);
-     OptCmdArgs.push_back("-O3"); // LTO
-     OptCmdArgs.push_back("-o");
-     OptCmdArgs.push_back(ResultingBitcodeF);
-     const char *OptExec =
-       Args.MakeArgString(getToolChain().getDriver().Dir + "/opt");
-     C.addCommand(
-       llvm::make_unique<Command>(JA, *this, OptExec, OptCmdArgs));
-    }
-    else {
+      ArgStringList OptCmdArgs;
+      OptCmdArgs.push_back(ResultingBitcodeF);
+      OptCmdArgs.push_back("-O3"); // LTO
+      OptCmdArgs.push_back("-o");
+      OptCmdArgs.push_back(ResultingBitcodeF);
+      const char *OptExec =
+          Args.MakeArgString(getToolChain().getDriver().Dir + "/opt");
+      C.addCommand(llvm::make_unique<Command>(JA, *this, OptExec, OptCmdArgs));
+    } else {
       // Single object file, no LTO.
       ResultingBitcodeF = C.getArgs().MakeArgString(LLVMLinkCmdArgs.back());
     }
 
-    BitcodeToCubin(C, JA, *this, getToolChain(), FileName,
-                   ResultingBitcodeF, Args, CmdArgs);
+    BitcodeToCubin(C, JA, *this, getToolChain(), FileName, ResultingBitcodeF,
+                   Args, CmdArgs);
   }
 
   // nvlink relies on the extension used by the input files

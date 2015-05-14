@@ -196,7 +196,8 @@ protected:
   typedef llvm::StringMap<TargetRegionOrderPerFunctionTy> TargetRegionsOrderTy;
   TargetRegionsOrderTy TargetRegionsOrder;
 
-  // Ctor regions: {order_priority1, order_priority2, ..., order_priority_default }
+  // Ctor regions: {order_priority1, order_priority2, ...,
+  // order_priority_default }
   typedef llvm::SmallVector<unsigned, 32> CtorRegionsOrderTy;
   CtorRegionsOrderTy CtorRegionsOrder;
 
@@ -216,13 +217,13 @@ protected:
   bool HasTargetInfoLoaded;
 
   // Array containing the target entries, in the order they should appear
-  llvm::DenseMap<llvm::GlobalVariable*,unsigned> OrderForEntry;
+  llvm::DenseMap<llvm::GlobalVariable *, unsigned> OrderForEntry;
 
   // Map between declarations and the target constants.
   // This is useful to trace whether a given target region was processed before
   // and avoid duplicate the code generation. The code generation for a target
   // directive may be called more than once if ,e.g., if-clauses are employed
-  typedef llvm::DenseMap<const  Decl*, llvm::Constant*> DeclsToEntriesMapTy ;
+  typedef llvm::DenseMap<const Decl *, llvm::Constant *> DeclsToEntriesMapTy;
   DeclsToEntriesMapTy DeclsToEntriesMap;
 
   // Target regions descriptor for the current compilation unit
@@ -232,37 +233,32 @@ protected:
   /// the offload entry for the target region. This takes the record decl
   /// associated with the target region to determine the ordering of the entry.
   ///
-  virtual llvm::GlobalVariable* CreateHostPtrForCurrentTargetRegion(
-                                                   const Decl *D,
-                                                   llvm::Function *Fn,
-                                                   StringRef Name);
+  virtual llvm::GlobalVariable *
+  CreateHostPtrForCurrentTargetRegion(const Decl *D, llvm::Function *Fn,
+                                      StringRef Name);
 
   /// \brief  Creates the host entry for a given global and places it in the
   /// entries reserved section
   ///
-  virtual llvm::GlobalVariable* CreateHostEntryForTargetGlobal(const Decl *D,
-                                              llvm::GlobalVariable* GV,
-                                              StringRef Name);
+  virtual llvm::GlobalVariable *
+  CreateHostEntryForTargetGlobal(const Decl *D, llvm::GlobalVariable *GV,
+                                 StringRef Name);
 
 public:
   // register the name of the current function whose target regions are being
   // identified
-  void registerCurTargetParentFunctionName(StringRef s){
+  void registerCurTargetParentFunctionName(StringRef s) {
     CurTargetParentFunctionName = s;
   }
 
   // hooks to register information that should match between host and target
-  void registerGlobalVariable(const Decl *D,
-                              llvm::GlobalVariable* GV);
-  void registerTargetRegion(const Decl *D,
-                            llvm::Function* Fn,
-                            llvm::Function* ParentFunction);
-  void registerCtorRegion(llvm::Function* Fn);
-  void registerDtorRegion(llvm::Function* Fn,
-                          llvm::Constant* Destructee);
-  void registerOtherGlobalVariable(const VarDecl* Other);
-  void registerOtherFunction(const FunctionDecl* Other,
-                             StringRef Name);
+  void registerGlobalVariable(const Decl *D, llvm::GlobalVariable *GV);
+  void registerTargetRegion(const Decl *D, llvm::Function *Fn,
+                            llvm::Function *ParentFunction);
+  void registerCtorRegion(llvm::Function *Fn);
+  void registerDtorRegion(llvm::Function *Fn, llvm::Constant *Destructee);
+  void registerOtherGlobalVariable(const VarDecl *Other);
+  void registerOtherFunction(const FunctionDecl *Other, StringRef Name);
 
   // Return true if there is any OpenMP target code to be generated
   bool hasAnyTargetCodeToBeEmitted();
@@ -307,7 +303,7 @@ public:
   void setRequiresSharedVersion(llvm::Value *V);
 
   // Return the registered constant for a given declaration
-  llvm::Constant* getEntryForDeclaration(const Decl *D);
+  llvm::Constant *getEntryForDeclaration(const Decl *D);
 
   // Register a declaration with a constant that describes the entry point
   void registerEntryForDeclaration(const Decl *D, llvm::Constant *C);
@@ -498,19 +494,21 @@ public:
   ///
   std::string GetOffloadEntryMangledName();
   std::string GetOffloadEntryMangledName(unsigned ID);
-  std::string GetOffloadEntryMangledNameForGlobalVariable(StringRef Key,
-                                                       unsigned &Order,
-                                                       bool Invalidate = false);
-  std::string GetOffloadEntryMangledNameForGlobalVariable(StringRef Key,
-                                                       bool Invalidate = false);
-  std::string GetOffloadEntryMangledNameForTargetRegion(unsigned &Order,
-                                                       bool Invalidate = false);
-  std::string GetOffloadEntryMangledNameForTargetRegion(bool Invalidate = false);
+  std::string
+  GetOffloadEntryMangledNameForGlobalVariable(StringRef Key, unsigned &Order,
+                                              bool Invalidate = false);
+  std::string
+  GetOffloadEntryMangledNameForGlobalVariable(StringRef Key,
+                                              bool Invalidate = false);
+  std::string
+  GetOffloadEntryMangledNameForTargetRegion(unsigned &Order,
+                                            bool Invalidate = false);
+  std::string
+  GetOffloadEntryMangledNameForTargetRegion(bool Invalidate = false);
   std::string GetOffloadEntryMangledNameForCtor(unsigned &Order,
                                                 bool Invalidate = false);
   std::string GetOffloadEntryMangledNameForCtor(bool Invalidate = false);
-  std::string GetOffloadEntryMangledNameForDtor(StringRef Key,
-                                                unsigned &Order,
+  std::string GetOffloadEntryMangledNameForDtor(StringRef Key, unsigned &Order,
                                                 bool Invalidate = false);
   std::string GetOffloadEntryMangledNameForDtor(StringRef Key,
                                                 bool Invalidate = false);
@@ -537,7 +535,7 @@ public:
   // \brief in default case, just emit call to omp RT barrier
   // in other cases more codegen may be needed
   virtual void EmitOMPBarrier(SourceLocation L, unsigned Flags,
-      CodeGenFunction &CGF);
+                              CodeGenFunction &CGF);
 
   /// \brief Code generation helper in target regions. Create a control-loop
   //  with inspector/executor for special back-ends (e.g. nvptx)
@@ -551,8 +549,9 @@ public:
 
   // \brief Function to close an openmp region. Set the labels and generate
   // new switch case
-  virtual void GenerateNextLabel (CodeGenFunction &CGF, bool prevIsParallel,
-      bool nextIsParallel, const char * CaseBBName = 0);
+  virtual void GenerateNextLabel(CodeGenFunction &CGF, bool prevIsParallel,
+                                 bool nextIsParallel,
+                                 const char *CaseBBName = 0);
 
   virtual void GenerateIfMaster (SourceLocation Loc, CapturedStmt *CS,
       CodeGenFunction &CGF);
@@ -560,12 +559,12 @@ public:
   // \brief Code generation when entering a simd region. For nvptx backend,
   // interact with control loop to select proper threads
   virtual void EnterSimdRegion(CodeGenFunction &CGF,
-      ArrayRef<OMPClause *> Clauses);
+                               ArrayRef<OMPClause *> Clauses);
 
   // \brief Code generation when exiting a simd region. For nvptx backend,
   // interact with control loop to select proper threads in following region
-  virtual void ExitSimdRegion(CodeGenFunction &CGF, llvm::Value * LoopIndex,
-      llvm::Value * LoopCount);
+  virtual void ExitSimdRegion(CodeGenFunction &CGF, llvm::Value *LoopIndex,
+                              llvm::Value *LoopCount);
 
   // \brief Rename function if part of standard libraries. This is useful to
   // distinguish whether such functions are called from the device, as they
@@ -587,13 +586,12 @@ public:
 
   virtual void CallSerializedParallelEnd(CodeGenFunction &CGF);
 
-  virtual bool RequireFirstprivateSynchronization() {
-    return true;
-  }
+  virtual bool RequireFirstprivateSynchronization() { return true; }
 
-  virtual void StartParallelRegionInTarget (CodeGenFunction &CGF,
-      OpenMPDirectiveKind DKind, ArrayRef<OpenMPDirectiveKind> SKinds,
-      const OMPExecutableDirective &S);
+  virtual void StartParallelRegionInTarget(CodeGenFunction &CGF,
+                                           OpenMPDirectiveKind DKind,
+                                           ArrayRef<OpenMPDirectiveKind> SKinds,
+                                           const OMPExecutableDirective &S);
 
   virtual void EndParallelRegionInTarget (CodeGenFunction &CGF);
 
@@ -619,11 +617,12 @@ public:
   virtual bool requiresMicroTaskForParallel();
 
   // \brief Emit initialization of index for #pragma omp simd loop
-  virtual void EmitSimdInitialization(llvm::Value * LoopIndex,
-      llvm::Value * LoopCount, CodeGenFunction &CGF);
+  virtual void EmitSimdInitialization(llvm::Value *LoopIndex,
+                                      llvm::Value *LoopCount,
+                                      CodeGenFunction &CGF);
 
-  virtual void EmitSimdIncrement(llvm::Value * LoopIndex,
-      llvm::Value * LoopCount, CodeGenFunction &CGF);
+  virtual void EmitSimdIncrement(llvm::Value *LoopIndex, llvm::Value *LoopCount,
+                                 CodeGenFunction &CGF);
 
   // to be removed
   virtual llvm::Value * Get_kmpc_print_int();

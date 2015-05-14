@@ -463,9 +463,9 @@ void foo(){
 	
 	// 1st target region shouldn't have any arguments
 	// CK6: call i32 @__tgt_target(i32 -1, i8* {{[^,]*}}, i32 0, i8** null, i8** null, i64* null, i32* null)
-  // CK6: call void @__omptgt__{{[0-9]+}}_[[ID:[0-9a-f]+_[0-9a-f]+]]_()
- 
-	#pragma omp target
+// CK6: call void @__omptgt__{{[0-9]+}}_[[ID:[0-9a-f]+_[0-9a-f]+]]_()
+
+        #pragma omp target
   {
     GA[0] = 90;
     GA[1] = 80;
@@ -501,7 +501,7 @@ void foo(){
   
   // Second target region has two arguments: A and i
   // CK6: call i32 @__tgt_target(i32 -1, i8* {{.*}}, i32 2, i8** {{[^,]*}}, i8** {{[^,]*}}, i64* {{[^,]*}}, i32* getelementptr inbounds ([2 x i32], [2 x i32]* @.tgt_types, i32 0, i32 0))
-  // CK6: call void @__omptgt__{{[0-9]+}}_[[ID]]_({{[^,]*}}, {{[^,]*}})
+// CK6: call void @__omptgt__{{[0-9]+}}_[[ID]]_({{[^,]*}}, {{[^,]*}})
   #pragma omp target
   {
     for (i=0; i<10; ++i)

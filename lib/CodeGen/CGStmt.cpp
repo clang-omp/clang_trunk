@@ -2486,9 +2486,12 @@ void CodeGenFunction::EmitPragmaSimd(CodeGenFunction::CGPragmaSimdWrapper &W) {
   if (W.isOmp())
     CGM.OpenMPSupport.endOpenMPRegion();
 }
-void CodeGenFunction::EmitPragmaSimdNVPTX(CodeGenFunction::CGPragmaSimdWrapper &W) {
-  ArrayRef<OMPClause *> clauses = isa<OMPExecutableDirective>(W.getStmt()) ?
-      cast<OMPExecutableDirective>(W.getStmt())->clauses() : nullptr;
+void CodeGenFunction::EmitPragmaSimdNVPTX(
+    CodeGenFunction::CGPragmaSimdWrapper &W) {
+  ArrayRef<OMPClause *> clauses =
+      isa<OMPExecutableDirective>(W.getStmt())
+          ? cast<OMPExecutableDirective>(W.getStmt())->clauses()
+          : nullptr;
   CGM.getOpenMPRuntime().EnterSimdRegion(*this, clauses);
 
   if (W.isOmp()) {
@@ -2528,13 +2531,13 @@ void CodeGenFunction::EmitPragmaSimdNVPTX(CodeGenFunction::CGPragmaSimdWrapper &
   // In the 'omp simd' we may have more than one loop counter due to
   // 'collapse', so we check loopcount instead of loop counter.
   if (!W.isOmp()) {
-    EmitBranchOnBoolExpr(W.getCond(), ThenBlock, ContBlock,
-      getProfileCount(W.getAssociatedStmt()->getCapturedStmt()));
+    EmitBranchOnBoolExpr(
+        W.getCond(), ThenBlock, ContBlock,
+        getProfileCount(W.getAssociatedStmt()->getCapturedStmt()));
     EmitBlock(ThenBlock);
-  }
-  else {
+  } else {
     llvm::Value *BoolCondVal = Builder.CreateICmpSLT(
-      llvm::ConstantInt::get(LoopCount->getType(), 0), LoopCount);
+        llvm::ConstantInt::get(LoopCount->getType(), 0), LoopCount);
     Builder.CreateCondBr(BoolCondVal, ThenBlock, ContBlock);
     EmitBlock(ThenBlock);
   }
@@ -2578,8 +2581,8 @@ void CodeGenFunction::EmitPragmaSimdNVPTX(CodeGenFunction::CGPragmaSimdWrapper &
       llvm::BasicBlock *ForBody = createBasicBlock("for.body");
 
       // Use LoopCount and LoopIndex for iteration.
-      BoolCondVal = Builder.CreateICmpULT(Builder.CreateLoad(LoopIndex),
-                                          LoopCount);
+      BoolCondVal =
+          Builder.CreateICmpULT(Builder.CreateLoad(LoopIndex), LoopCount);
 
       // C99 6.8.5p2/p4: The first substatement is executed if the expression
       // compares unequal to 0.  The condition must be a scalar type.
@@ -2644,7 +2647,6 @@ void CodeGenFunction::EmitPragmaSimdNVPTX(CodeGenFunction::CGPragmaSimdWrapper &
 
   if (W.isOmp())
     CGM.OpenMPSupport.endOpenMPRegion();
-
 }
 
 void CodeGenFunction::EmitSIMDForHelperBody(const Stmt *S) {
