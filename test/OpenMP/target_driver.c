@@ -24,26 +24,40 @@
 // RUN:   | FileCheck -check-prefix=CHK-COMMANDS %s
 //
 
-// Host commands: PPC uses integrated preprocessor and assembler
+// Host commands: PPC uses integrated preprocessor and assembler.
+// However, given that we have OpenMP targets the compile and backend phases are not combined.
 // CHK-COMMANDS: clang{{.*}}" "-cc1" "-fopenmp" "-omptargets=powerpc64-ibm-linux-gnu,nvptx64-nvidia-cuda" "-omp-main-file-path" "[[SRC:[^ ]+]].c"
-// CHK-COMMANDS: "-emit-obj"
-// CHK-COMMANDS: "-o" "[[HOSTOBJ:.+]].o"
+// CHK-COMMANDS: "-emit-llvm-bc"
+// CHK-COMMANDS: "-o" "[[HOSTBC:.+]].bc"
 // CHK-COMMANDS: "-x" "c" "[[SRC]].c"
 
-// Target1 commands (nvptx uses host preprocessor definitions)
-// CHK-COMMANDS: clang{{.*}}" "-cc1" "-fopenmp" "-omptargets=powerpc64-ibm-linux-gnu,nvptx64-nvidia-cuda" "-omp-target-mode" "-omp-main-file-path" "[[SRC]].c" "-triple" "powerpc64--linux" "-E"
+// CHK-COMMANDS: clang{{.*}}" "-cc1" "-fopenmp" "-omptargets=powerpc64-ibm-linux-gnu,nvptx64-nvidia-cuda" "-omp-main-file-path" "[[SRC]].c"
+// CHK-COMMANDS: "-emit-obj"
+// CHK-COMMANDS: "-o" "[[HOSTOBJ:.+]].o"
+// CHK-COMMANDS: "-x" "ir" "[[HOSTBC]].bc"
+
+// Target1 command PPC uses integrated assembler. Preprocessor is not integrated
+// as the compiler phase needs to take the *.bc file from the host.
+// CHK-COMMANDS: clang{{.*}}" "-cc1" "-fopenmp" "-omptargets=powerpc64-ibm-linux-gnu,nvptx64-nvidia-cuda" "-omp-target-mode" "-omp-main-file-path" "[[SRC]].c" "-triple" "powerpc64-ibm-linux-gnu" "-E"
 // CHK-COMMANDS: "-o" "[[T1PP:.+]].i" "-x" "c" "[[SRC]].c"
+// CHK-COMMANDS: clang{{.*}}" "-cc1" "-fopenmp" "-omptargets=powerpc64-ibm-linux-gnu,nvptx64-nvidia-cuda" "-omp-target-mode" "-omp-host-output-file-path" "[[HOSTBC]].bc" "-omp-main-file-path" "[[SRC]].c" "-triple" "powerpc64-ibm-linux-gnu" "-emit-llvm-bc"
+// CHK-COMMANDS: "-o" "[[T1BC:.+]].bc" "-x" "cpp-output" "[[T1PP]].i"
+// CHK-COMMANDS: clang{{.*}}" "-cc1" "-fopenmp" "-omptargets=powerpc64-ibm-linux-gnu,nvptx64-nvidia-cuda" "-omp-target-mode" "-omp-main-file-path" "[[SRC]].c" "-triple" "powerpc64-ibm-linux-gnu" "-emit-obj"
+// CHK-COMMANDS: "-o" "[[T1OBJ:.+]].o" "-x" "ir" "[[T1BC]].bc"
+// CHK-COMMANDS: ld" {{.*}}"--eh-frame-hdr" "-m" "elf64ppc" "-shared" "-o" "[[T1LIB:.+]].so" {{.*}} "[[T1OBJ]].o"
+
+// Target2 commands (nvptx uses host preprocessor definitions)
+// CHK-COMMANDS: clang{{.*}}" "-cc1" "-fopenmp" "-omptargets=powerpc64-ibm-linux-gnu,nvptx64-nvidia-cuda" "-omp-target-mode" "-omp-main-file-path" "[[SRC]].c" "-triple" "powerpc64--linux" "-E"
+// CHK-COMMANDS: "-o" "[[T2PP:.+]].i" "-x" "c" "[[SRC]].c"
+// CHK-COMMANDS: clang{{.*}}" "-cc1" "-fopenmp" "-omptargets=powerpc64-ibm-linux-gnu,nvptx64-nvidia-cuda" "-omp-target-mode" "-omp-host-output-file-path" "[[HOSTBC]].bc" "-omp-main-file-path" "[[SRC]].c" "-triple" "nvptx64-nvidia-cuda" "-emit-llvm-bc"
+// CHK-COMMANDS: "-o" "[[T2BC:.+]].bc" "-x" "cpp-output" "[[T2PP]].i"
 // CHK-COMMANDS: clang{{.*}}" "-cc1" "-fopenmp" "-omptargets=powerpc64-ibm-linux-gnu,nvptx64-nvidia-cuda" "-omp-target-mode" "-omp-main-file-path" "[[SRC]].c" "-triple" "nvptx64-nvidia-cuda" "-S"
 // CHK-COMMANDS: "-target-cpu" "sm_20"
-// CHK-COMMANDS: "-o" "[[T1ASM:.+]].s" "-x" "cpp-output" "[[T1PP]].i"
-// CHK-COMMANDS: ptxas" "-o" "[[T1OBJ:.+]].o" "-c" "-arch" "sm_20" "[[T1ASM]].s"
-// CHK-COMMANDS: cp" "[[T1OBJ]].o" "[[T1CBIN:.+]].cubin"
-// CHK-COMMANDS: nvlink" "-o" "[[T1LIB:.+]].so" "-arch" "sm_20" {{.*}}"[[T1CBIN]].cubin"
+// CHK-COMMANDS: "-o" "[[T2ASM:.+]].s" "-x" "ir" "[[T2BC]].bc"
+// CHK-COMMANDS: ptxas" "-o" "[[T2OBJ:.+]].o" "-c" "-arch" "sm_20" "[[T2ASM]].s"
+// CHK-COMMANDS: cp" "[[T2OBJ]].o" "[[T2CBIN:.+]].cubin"
+// CHK-COMMANDS: nvlink" "-o" "[[T2LIB:.+]].so" "-arch" "sm_20" {{.*}}"[[T2CBIN]].cubin"
 
-// Target2 command PPC uses integrated preprocessor and assembler
-// CHK-COMMANDS: clang{{.*}}" "-cc1" "-fopenmp" "-omptargets=powerpc64-ibm-linux-gnu,nvptx64-nvidia-cuda" "-omp-target-mode" "-omp-main-file-path" "[[SRC]].c" "-triple" "powerpc64-ibm-linux-gnu" "-emit-obj"
-// CHK-COMMANDS: "-o" "[[T2OBJ:.+]].o" "-x" "c" "[[SRC]].c"
-// CHK-COMMANDS: ld" {{.*}}"--eh-frame-hdr" "-m" "elf64ppc" "-shared" "-o" "[[T2LIB:.+]].so" {{.*}} "[[T2OBJ]].o"
 
 // Final linking command
 // CHK-COMMANDS: ld" {{.*}}"-o" "a.out"  {{.*}}"[[HOSTOBJ]].o" "-liomp5" "-lomptarget" {{.*}} "-T" "[[LKSCRIPT:.+]].lk"
@@ -68,7 +82,7 @@
 // CHK-SUBTARGET: clang{{.*}}" "-cc1" "-fopenmp" "-omptargets=nvptx64sm_35-nvidia-cuda" "-omp-target-mode" "-omp-main-file-path" {{.*}} "-triple" "nvptx64sm_35-nvidia-cuda" "-S"
 // CHK-SUBTARGET: "-target-cpu" "sm_35"
 // CHK-SUBTARGET: "-o" "[[ASM:.+]].s"
-// CHK-SUBTARGET: "-x" "cpp-output" "[[PP:.+]].i"
+// CHK-SUBTARGET: "-x" "ir" "[[BC:.+]].bc"
 
 /// Check the automatic detection of target files
 // RUN:   %clang -fopenmp -target powerpc64-linux -omptargets=nvptx64sm_35-nvidia-cuda %s -S 2>&1
@@ -90,3 +104,9 @@
 // CHK-SEP-COMPILATION: {{.*}}" "[[TGTOBJ]].o" "[[TGTCUBIN:.+]].cubin"
 // CHK-SEP-COMPILATION: nvlink" "-o" "[[TGTSO:.+]].so"  {{.*}}"[[TGTCUBIN]].cubin"
 // CHK-SEP-COMPILATION: ld" {{.*}}"[[HOSTOBJ]].o" "[[HOSTOBJ2:.+]].o" {{.*}}"-T" "[[LKS:.+]].lk"
+
+/// Check host output file no exist message
+// RUN:   not %clang_cc1 "-fopenmp" "-omptargets=powerpc64-ibm-linux-gnu,nvptx64-nvidia-cuda" "-triple" "powerpc64-ibm-linux-gnu" "-omp-host-output-file-path" "abcd.efgh" %s 2>&1 \
+// RUN:   | FileCheck -check-prefix=CHK-HOSTFILE-NOEXIST %s
+// CHK-HOSTFILE-NOEXIST: error: The provided  host compiler output 'abcd.efgh' is required to generate code for OpenMP target regions and cannot be found.
+

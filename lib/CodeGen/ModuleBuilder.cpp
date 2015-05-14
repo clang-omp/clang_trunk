@@ -13,6 +13,7 @@
 
 #include "clang/CodeGen/ModuleBuilder.h"
 #include "CGDebugInfo.h"
+#include "CGOpenMPRuntime.h"
 #include "CodeGenModule.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclObjC.h"
@@ -49,6 +50,8 @@ namespace {
 
     CoverageSourceInfo *CoverageInfo;
 
+    unsigned NothingToCodegen : 1;
+
   protected:
     std::unique_ptr<llvm::Module> M;
     std::unique_ptr<CodeGen::CodeGenModule> Builder;
@@ -61,9 +64,8 @@ namespace {
                       const CodeGenOptions &CGO, llvm::LLVMContext& C,
                       CoverageSourceInfo *CoverageInfo = nullptr)
       : Diags(diags), Ctx(nullptr), CodeGenOpts(CGO), HandlingTopLevelDecls(0),
-        CoverageInfo(CoverageInfo),
+        CoverageInfo(CoverageInfo), NothingToCodegen(false),
         M(new llvm::Module(ModuleName, C)) {}
-
     ~CodeGeneratorImpl() override {
       // There should normally not be any leftover inline method definitions.
       assert(DeferredInlineMethodDefinitions.empty() ||
@@ -103,17 +105,21 @@ namespace {
 
       for (size_t i = 0, e = CodeGenOpts.DependentLibraries.size(); i < e; ++i)
         HandleDependentLibrary(CodeGenOpts.DependentLibraries[i]);
+
+      NothingToCodegen =  Builder->hasOpenMPRuntime() &&
+            Builder->getLangOpts().OpenMPTargetMode &&
+            !Builder->getOpenMPRuntime().hasAnyTargetCodeToBeEmitted();
     }
 
     void HandleCXXStaticMemberVarInstantiation(VarDecl *VD) override {
-      if (Diags.hasErrorOccurred())
+      if (Diags.hasErrorOccurred() || NothingToCodegen)
         return;
 
       Builder->HandleCXXStaticMemberVarInstantiation(VD);
     }
 
     bool HandleTopLevelDecl(DeclGroupRef DG) override {
-      if (Diags.hasErrorOccurred())
+      if (Diags.hasErrorOccurred() || NothingToCodegen)
         return true;
 
       HandlingTopLevelDeclRAII HandlingDecl(*this);
@@ -126,7 +132,7 @@ namespace {
     }
 
     void EmitDeferredDecls() {
-      if (DeferredInlineMethodDefinitions.empty())
+      if (DeferredInlineMethodDefinitions.empty() || NothingToCodegen)
         return;
 
       // Emit any deferred inline method definitions. Note that more deferred
@@ -139,10 +145,18 @@ namespace {
     }
 
     void HandleInlineMethodDefinition(CXXMethodDecl *D) override {
-      if (Diags.hasErrorOccurred())
+      if (Diags.hasErrorOccurred() || NothingToCodegen)
         return;
 
       assert(D->doesThisDeclarationHaveABody());
+
+      // If we are generating code for an OpenMP target but we don't have any
+      // offloading info, don't bother codegening anything.
+      if (Builder->hasOpenMPRuntime() &&
+          Builder->getLangOpts().OpenMPTargetMode &&
+          !Builder->getOpenMPRuntime().hasAnyTargetCodeToBeEmitted())
+        return;
+
 
       // We may want to emit this definition. However, that decision might be
       // based on computing the linkage, and we have to defer that in case we
@@ -166,7 +180,7 @@ namespace {
     /// client hack on the type, which can occur at any point in the file
     /// (because these can be defined in declspecs).
     void HandleTagDeclDefinition(TagDecl *D) override {
-      if (Diags.hasErrorOccurred())
+      if (Diags.hasErrorOccurred() || NothingToCodegen)
         return;
 
       Builder->UpdateCompletedType(D);
@@ -194,7 +208,7 @@ namespace {
     }
 
     void HandleTagDeclRequiredDefinition(const TagDecl *D) override {
-      if (Diags.hasErrorOccurred())
+      if (Diags.hasErrorOccurred() || NothingToCodegen)
         return;
 
       if (CodeGen::CGDebugInfo *DI = Builder->getModuleDebugInfo())
@@ -210,19 +224,26 @@ namespace {
         return;
       }
 
+      // Even if NothingToCodegen is true, we need to properly release the
+      // module so it resolves the debug information properly
       if (Builder)
         Builder->Release();
     }
 
     void CompleteTentativeDefinition(VarDecl *D) override {
-      if (Diags.hasErrorOccurred())
+      if (Diags.hasErrorOccurred() || NothingToCodegen)
         return;
 
       Builder->EmitTentativeDefinition(D);
     }
 
     void HandleVTable(CXXRecordDecl *RD) override {
-      if (Diags.hasErrorOccurred())
+      if (Diags.hasErrorOccurred() || NothingToCodegen)
+        return;
+
+      // Virtual functions are not allowed in OpenMP target regions
+      if (Builder->hasOpenMPRuntime() &&
+          Builder->getLangOpts().OpenMPTargetMode)
         return;
 
       Builder->EmitVTable(RD);

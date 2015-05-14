@@ -375,7 +375,8 @@ public:
   /// like -fsyntax-only or --analyze.
   std::unique_ptr<Action>
   ConstructPhaseAction(const ToolChain &TC, const llvm::opt::ArgList &Args,
-                       phases::ID Phase, std::unique_ptr<Action> Input) const;
+                       phases::ID Phase, std::unique_ptr<Action> Input,
+                       std::unique_ptr<Action> OpenMPDepInput) const;
 
   /// BuildJobsForAction - Construct the jobs to perform for the
   /// action \p A.

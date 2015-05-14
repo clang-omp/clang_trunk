@@ -4439,6 +4439,7 @@ bool ASTReader::ParseLanguageOptions(const RecordData &Record,
 
   // OpenMP options
   LangOpts.OMPModuleUniqueID = ReadString(Record, Idx);
+  LangOpts.OMPHostOutputFile = ReadString(Record, Idx);
   for (unsigned N = Record[Idx++]; N; --N) {
     LangOpts.OMPTargetTriples.push_back(
         llvm::Triple(ReadString(Record, Idx)));

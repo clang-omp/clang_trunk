@@ -11,52 +11,42 @@
 
 
 // Entries and map type of the global variable
-// CHK-CODEGEN-HOST: @GV = global i32 123
-// CHK-CODEGEN-HOST: @__omptgt__gbl__0_[[ID:[0-9a-f]+_[0-9a-f]+]]__entry_name = internal constant [3 x i8] c"GV\00"
-// CHK-CODEGEN-HOST: @__omptgt__gbl__0_[[ID]]__entry = constant { i8*, i8*, i64 } { i8* bitcast (i32* @GV to i8*),
-// CHK-CODEGEN-HOST:   i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__gbl__0_[[ID]]__entry_name, i32 0, i32 0), i64 4
-// CHK-CODEGEN-HOST: }, section ".openmptgt_host_entries", align 1
+// CHK-CODEGEN-HOST-DAG: @GV = global i32 123
+// CHK-CODEGEN-HOST-DAG: @__omptgt__[[G0:[0-9]+]]_[[ID:[0-9a-f]+_[0-9a-f]+]]__entry_name = internal constant [3 x i8] c"GV\00"
+// CHK-CODEGEN-HOST-DAG: @__omptgt__[[G0]]_[[ID]]__entry = constant { i8*, i8*, i64 } { i8* bitcast (i32* @GV to i8*),
+// CHK-CODEGEN-HOST-DAG:   i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__[[G0]]_[[ID]]__entry_name, i32 0, i32 0), i64 4 }, section ".openmptgt_host_entries", align 1
 
-// CHK-CODEGEN-TARGET1: @__omptgt__gbl__0_[[ID:[0-9a-f]+_[0-9a-f]+]]__entry_name = internal constant [3 x i8] c"GV\00"
-// CHK-CODEGEN-TARGET1: @__omptgt__gbl__0_[[ID]]__entry = constant { i8*, i8*, i64 } { i8* bitcast (i32* @GV to i8*),
-// CHK-CODEGEN-TARGET1:   i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__gbl__0_[[ID]]__entry_name, i32 0, i32 0), i64 4
-// CHK-CODEGEN-TARGET1: }, section ".openmptgt_host_entries", align 1
+// CHK-CODEGEN-TARGET1-DAG: @__omptgt__[[G0:[0-9]+]]_[[ID:[0-9a-f]+_[0-9a-f]+]]__entry_name = internal constant [3 x i8] c"GV\00"
+// CHK-CODEGEN-TARGET1-DAG: @__omptgt__[[G0]]_[[ID]]__entry = constant { i8*, i8*, i64 } { i8* bitcast (i32* @GV to i8*),
+// CHK-CODEGEN-TARGET1-DAG:   i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__[[G0]]_[[ID]]__entry_name, i32 0, i32 0), i64 4 }, section ".openmptgt_host_entries", align 1
 
 // Entries and map type of 1st target region
-// CHK-CODEGEN-HOST: @__omptgt__0_[[ID]]__entry_name =
-// CHK-CODEGEN-HOST: internal constant [{{[1-9][0-9]*}} x i8] c"__omptgt__0_[[ID]]_\00"
-// CHK-CODEGEN-HOST: @__omptgt__0_[[ID]]__entry = constant { i8*, i8*, i64 } {
-// CHK-CODEGEN-HOST: i8* bitcast (void (i32*)* @__omptgt__0_[[ID]]_ to i8*), 
-// CHK-CODEGEN-HOST: i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8], [{{[1-9][0-9]*}} x i8]* @__omptgt__0_[[ID]]__entry_name, i32 0, i32 0), i64 0
-// CHK-CODEGEN-HOST: }, section ".openmptgt_host_entries", align 1
-// CHK-CODEGEN-HOST: [[M1:@.tgt_types[0-9]*]] = private constant [1 x i32] [i32 3]
+// CHK-CODEGEN-HOST-DAG: @__omptgt__[[E0:[0-9]+]]_[[ID]]__entry_name = internal constant [{{[1-9][0-9]*}} x i8] c"__omptgt__[[E0]]_[[ID]]_\00"
+// CHK-CODEGEN-HOST-DAG: @__omptgt__[[E0]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
+// CHK-CODEGEN-HOST-DAG: i8* bitcast (void (i32*)* @__omptgt__[[E0]]_[[ID]]_ to i8*),
+// CHK-CODEGEN-HOST-DAG: i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8], [{{[1-9][0-9]*}} x i8]* @__omptgt__[[E0]]_[[ID]]__entry_name, i32 0, i32 0), i64 0 }, section ".openmptgt_host_entries", align 1
+// CHK-CODEGEN-HOST-DAG: @.tgt_types[[M1:\.?[0-9]*]] = private constant [1 x i32] [i32 3]
 
-// CHK-CODEGEN-TARGET1: @__omptgt__0_[[ID]]__entry_name =
-// CHK-CODEGEN-TARGET1: internal constant [{{[1-9][0-9]*}} x i8] c"__omptgt__0_[[ID]]_\00"
-// CHK-CODEGEN-TARGET1: @__omptgt__0_[[ID]]__entry = constant { i8*, i8*, i64 } {
-// CHK-CODEGEN-TARGET1: i8* bitcast (void (i32*)* @__omptgt__0_[[ID]]_ to i8*), 
-// CHK-CODEGEN-TARGET1: i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8], [{{[1-9][0-9]*}} x i8]* @__omptgt__0_[[ID]]__entry_name, i32 0, i32 0), i64 0
-// CHK-CODEGEN-TARGET1: }, section ".openmptgt_host_entries", align 1
+// CHK-CODEGEN-TARGET1-DAG: @__omptgt__[[E0:[0-9]+]]_[[ID]]__entry_name = internal constant [{{[1-9][0-9]*}} x i8] c"__omptgt__[[E0]]_[[ID]]_\00"
+// CHK-CODEGEN-TARGET1-DAG: @__omptgt__[[E0]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
+// CHK-CODEGEN-TARGET1-DAG: i8* bitcast (void (i32*)* @__omptgt__[[E0]]_[[ID]]_ to i8*),
+// CHK-CODEGEN-TARGET1-DAG: i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8], [{{[1-9][0-9]*}} x i8]* @__omptgt__[[E0]]_[[ID]]__entry_name, i32 0, i32 0), i64 0 }, section ".openmptgt_host_entries", align 1
 
 // Entries and map type of 2nd target region
-// CHK-CODEGEN-HOST: @__omptgt__1_[[ID]]__entry_name = 
-// CHK-CODEGEN-HOST: internal constant [{{[1-9][0-9]*}} x i8] c"__omptgt__1_[[ID]]_\00"
-// CHK-CODEGEN-HOST: @__omptgt__1_[[ID]]__entry = constant { i8*, i8*, i64 } {
-// CHK-CODEGEN-HOST: i8* bitcast (void (i32*)* @__omptgt__1_[[ID]]_ to i8*), 
-// CHK-CODEGEN-HOST: i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8], [{{[1-9][0-9]*}} x i8]* @__omptgt__1_[[ID]]__entry_name, i32 0, i32 0), i64 0
-// CHK-CODEGEN-HOST: }, section ".openmptgt_host_entries", align 1
-// CHK-CODEGEN-HOST: [[M2:@.tgt_types.[0-9]*]] = private constant [1 x i32] [i32 3]
+// CHK-CODEGEN-HOST-DAG: @__omptgt__[[E1:[0-9]+]]_[[ID]]__entry_name = internal constant [{{[1-9][0-9]*}} x i8] c"__omptgt__[[E1]]_[[ID]]_\00"
+// CHK-CODEGEN-HOST-DAG: @__omptgt__[[E1]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
+// CHK-CODEGEN-HOST-DAG: i8* bitcast (void (i32*)* @__omptgt__[[E1]]_[[ID]]_ to i8*),
+// CHK-CODEGEN-HOST-DAG: i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8], [{{[1-9][0-9]*}} x i8]* @__omptgt__[[E1]]_[[ID]]__entry_name, i32 0, i32 0), i64 0 }, section ".openmptgt_host_entries", align 1
+// CHK-CODEGEN-HOST-DAG: @.tgt_types[[M2:\.?[0-9]*]] = private constant [1 x i32] [i32 3]
 
-// CHK-CODEGEN-TARGET1: @__omptgt__1_[[ID]]__entry_name = 
-// CHK-CODEGEN-TARGET1: internal constant [{{[1-9][0-9]*}} x i8] c"__omptgt__1_[[ID]]_\00"
-// CHK-CODEGEN-TARGET1: @__omptgt__1_[[ID]]__entry = constant { i8*, i8*, i64 } {
-// CHK-CODEGEN-TARGET1: i8* bitcast (void (i32*)* @__omptgt__1_[[ID]]_ to i8*), 
-// CHK-CODEGEN-TARGET1: i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8], [{{[1-9][0-9]*}} x i8]* @__omptgt__1_[[ID]]__entry_name, i32 0, i32 0), i64 0
-// CHK-CODEGEN-TARGET1: }, section ".openmptgt_host_entries", align 1
+// CHK-CODEGEN-TARGET1-DAG: @__omptgt__[[E1:[0-9]+]]_[[ID]]__entry_name = internal constant [{{[1-9][0-9]*}} x i8] c"__omptgt__[[E1]]_[[ID]]_\00"
+// CHK-CODEGEN-TARGET1-DAG: @__omptgt__[[E1]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
+// CHK-CODEGEN-TARGET1-DAG: i8* bitcast (void (i32*)* @__omptgt__[[E1]]_[[ID]]_ to i8*),
+// CHK-CODEGEN-TARGET1-DAG: i8* getelementptr inbounds ([{{[1-9][0-9]*}} x i8], [{{[1-9][0-9]*}} x i8]* @__omptgt__[[E1]]_[[ID]]__entry_name, i32 0, i32 0), i64 0 }, section ".openmptgt_host_entries", align 1
 
 // Host entries range defined by the linker
-// CHK-CODEGEN-HOST: @__omptgt__host_entries_begin = external constant { i8*, i8*, i64 }
-// CHK-CODEGEN-HOST: @__omptgt__host_entries_end = external constant { i8*, i8*, i64 }
+// CHK-CODEGEN-HOST-DAG: @__omptgt__host_entries_begin = external constant { i8*, i8*, i64 }
+// CHK-CODEGEN-HOST-DAG: @__omptgt__host_entries_end = external constant { i8*, i8*, i64 }
 
 // Targets image start and end - set by the linker
 // CHK-CODEGEN-HOST-DAG: @__omptgt__img_start_[[T1:powerpc64_ibm_linux_gnu]] = external constant i8
@@ -64,11 +54,11 @@
 // CHK-CODEGEN-HOST-DAG: @__omptgt__img_start_[[T2:nvptx64_nvidia_cuda]] = external constant i8
 // CHK-CODEGEN-HOST-DAG: @__omptgt__img_end_[[T2:nvptx64_nvidia_cuda]] = external constant i8
 
-// CHK-CODEGEN-HOST: @__omptgt__device_images = internal constant [2 x { i8*, i8*, { i8*, i8*, i64 }*, { i8*, i8*, i64 }* }] [
-// CHK-CODEGEN-HOST: { i8*, i8*, { i8*, i8*, i64 }*, { i8*, i8*, i64 }* } { i8* @__omptgt__img_start_[[T1]], i8* @__omptgt__img_end_[[T1]],
-// CHK-CODEGEN-HOST: { i8*, i8*, i64 }* @__omptgt__host_entries_begin, { i8*, i8*, i64 }* @__omptgt__host_entries_end },
-// CHK-CODEGEN-HOST: { i8*, i8*, { i8*, i8*, i64 }*, { i8*, i8*, i64 }* } { i8* @__omptgt__img_start_[[T2]], i8* @__omptgt__img_end_[[T2]],
-// CHK-CODEGEN-HOST: { i8*, i8*, i64 }* @__omptgt__host_entries_begin, { i8*, i8*, i64 }* @__omptgt__host_entries_end }]
+// CHK-CODEGEN-HOST-DAG: @__omptgt__device_images = internal constant [2 x { i8*, i8*, { i8*, i8*, i64 }*, { i8*, i8*, i64 }* }] [
+// CHK-CODEGEN-HOST-DAG: { i8*, i8*, { i8*, i8*, i64 }*, { i8*, i8*, i64 }* } { i8* @__omptgt__img_start_[[T1]], i8* @__omptgt__img_end_[[T1]],
+// CHK-CODEGEN-HOST-DAG: { i8*, i8*, i64 }* @__omptgt__host_entries_begin, { i8*, i8*, i64 }* @__omptgt__host_entries_end },
+// CHK-CODEGEN-HOST-DAG: { i8*, i8*, { i8*, i8*, i64 }*, { i8*, i8*, i64 }* } { i8* @__omptgt__img_start_[[T2]], i8* @__omptgt__img_end_[[T2]],
+// CHK-CODEGEN-HOST-DAG: { i8*, i8*, i64 }* @__omptgt__host_entries_begin, { i8*, i8*, i64 }* @__omptgt__host_entries_end }]
 
 // Target descriptor consists of the number of entries, s pointer to an array of images
 // and the begin and end pointer of the entries range
@@ -132,20 +122,20 @@ int foo(int a){
   // CHK-CODEGEN-HOST:  %[[FAILOFF1:[a-zA-Z0-9_\.]+]] = call i32 @__tgt_target(
   // Device ID
   // CHK-CODEGEN-HOST:  i32 -1,
-  // CHK-CODEGEN-HOST:  i8* bitcast (void (i32*)* @__omptgt__0_[[ID]]_ to i8*),
+  // CHK-CODEGEN-HOST:  i8* bitcast (void (i32*)* @__omptgt__{{[0-9]+}}_[[ID]]_ to i8*),
   // Num of arguments for the target region
   // CHK-CODEGEN-HOST:  i32 1, 
   // CHK-CODEGEN-HOST:  i8** %[[BP1]], i8** %[[P1]], i64* %[[S1]],
-  // CHK-CODEGEN-HOST:  i32* getelementptr inbounds ([1 x i32], [1 x i32]* [[M1]], i32 0, i32 0))
+  // CHK-CODEGEN-HOST:  i32* getelementptr inbounds ([1 x i32], [1 x i32]* @.tgt_types{{\.?[0-9]*}}, i32 0, i32 0))
   
   // Call host version if offloading failed
   // CHK-CODEGEN-HOST:  %[[CMP1:[a-zA-Z0-9_\.]+]] = icmp eq i32 %[[FAILOFF1]], 0
   // CHK-CODEGEN-HOST:  br i1 %[[CMP1]], label %{{.*}}, label %[[FAILOFFLAB1:[a-zA-Z0-9_\.]+]]
   // CHK-CODEGEN-HOST:  [[FAILOFFLAB1]]:
-  // CHK-CODEGEN-HOST:  call void @__omptgt__0_[[ID]]_(i32*
+  // CHK-CODEGEN-HOST:  call void @__omptgt__{{[0-9]+}}_[[ID]]_(i32*
 
-  // CHK-CODEGEN-TARGET1: define void @__omptgt__0_[[ID:[0-9a-f]+_[0-9a-f]+]]_
-  // CHK-CODEGEN-TARGET2: define void @__omptgt__0_[[ID:[0-9a-f]+_[0-9a-f]+]]_
+  // CHK-CODEGEN-TARGET1: define void @__omptgt__{{[0-9]+}}_[[ID:[0-9a-f]+_[0-9a-f]+]]_
+  // CHK-CODEGEN-TARGET2: define void @__omptgt__{{[0-9]+}}_[[ID:[0-9a-f]+_[0-9a-f]+]]_
 #pragma omp target
   {
     GV = a += tsquare(a);
@@ -168,20 +158,20 @@ int foo(int a){
     // CHK-CODEGEN-HOST:  %[[FAILOFF2:[a-zA-Z0-9_\.]+]] = call i32 @__tgt_target(
     // Device ID
     // CHK-CODEGEN-HOST:  i32 -1,
-    // CHK-CODEGEN-HOST:  i8* bitcast (void (i32*)* @__omptgt__1_[[ID]]_ to i8*),
+    // CHK-CODEGEN-HOST:  i8* bitcast (void (i32*)* @__omptgt__{{[0-9]+}}_[[ID]]_ to i8*),
     // Num of arguments for the target region
     // CHK-CODEGEN-HOST:  i32 1, 
     // CHK-CODEGEN-HOST:  i8** %[[BP2]], i8** %[[P2]], i64* %[[S2]],
-    // CHK-CODEGEN-HOST:  i32* getelementptr inbounds ([1 x i32], [1 x i32]* [[M2]], i32 0, i32 0))
+    // CHK-CODEGEN-HOST:  i32* getelementptr inbounds ([1 x i32], [1 x i32]* @.tgt_types{{\.?[0-9]*}}, i32 0, i32 0))
   
     // Call host version if offloading failed
     // CHK-CODEGEN-HOST:  %[[CMP2:[a-zA-Z0-9_\.]+]] = icmp eq i32 %[[FAILOFF2]], 0
     // CHK-CODEGEN-HOST:  br i1 %[[CMP2]], label %{{.*}}, label %[[FAILOFFLAB2:[a-zA-Z0-9_\.]+]]
     // CHK-CODEGEN-HOST:  [[FAILOFFLAB2]]:
-    // CHK-CODEGEN-HOST:  call void @__omptgt__1_[[ID]]_(i32*
+    // CHK-CODEGEN-HOST:  call void @__omptgt__{{[0-9]+}}_[[ID]]_(i32*
 
-    // CHK-CODEGEN-TARGET1: define void @__omptgt__1_[[ID]]_
-    // CHK-CODEGEN-TARGET2: define void @__omptgt__1_[[ID]]_
+    // CHK-CODEGEN-TARGET1: define void @__omptgt__{{[0-9]+}}_[[ID]]_
+    // CHK-CODEGEN-TARGET2: define void @__omptgt__{{[0-9]+}}_[[ID]]_
 #pragma omp target
     {
       a -= tdouble(a) + tadd(a) + GV;

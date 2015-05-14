@@ -91,7 +91,7 @@ public:
 
   const char *getClassName() const { return Action::getClassName(getKind()); }
 
-  bool getOwnsInputs() { return OwnsInputs; }
+  bool getOwnsInputs() const { return OwnsInputs; }
   void setOwnsInputs(bool Value) { OwnsInputs = Value; }
 
   const char *getOffloadingDevice() const { return OffloadingDevice; }
@@ -214,6 +214,7 @@ class CompileJobAction : public JobAction {
   void anchor() override;
 public:
   CompileJobAction(std::unique_ptr<Action> Input, types::ID OutputType);
+  CompileJobAction(ActionList &Inputs, types::ID OutputType);
 
   static bool classof(const Action *A) {
     return A->getKind() == CompileJobClass;

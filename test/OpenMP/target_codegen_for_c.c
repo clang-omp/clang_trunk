@@ -194,58 +194,61 @@ void T2(){
 // Verify if the order and sizes of the entries is consistent to what we have in the 
 // source code
 
-// CK3: @GA = common global [20 x i32] zeroinitializer
-// CK3: @__omptgt__gbl__[[G0:[0-9]+]]_[[ID:[0-9a-f]+_[0-9a-f]+]]__entry_name = internal constant [3 x i8] c"GA\00"
-// CK3: @__omptgt__gbl__[[G0]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
-// CK3: i8* bitcast ([20 x i32]* @GA to i8*), 
-// CK3: i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__gbl__[[G0]]_[[ID]]__entry_name, i32 0, i32 0),
-// CK3: i64 80 }, section ".openmptgt_host_entries"
+// CK3-DAG: @GA = common global [20 x i32] zeroinitializer
+// CK3-DAG: @__omptgt__[[G0:[0-9]+]]_[[ID:[0-9a-f]+_[0-9a-f]+]]__entry_name = internal constant [3 x i8] c"GA\00"
+// CK3-DAG: @__omptgt__[[G0]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
+// CK3-DAG: i8* bitcast ([20 x i32]* @GA to i8*),
+// CK3-DAG: i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__[[G0]]_[[ID]]__entry_name, i32 0, i32 0), i64 80 }, section ".openmptgt_host_entries"
 
-// CK3: @GB = global [10 x i32] [i32 9, i32 8, i32 7, i32 6, i32 5, i32 4, i32 3, i32 2, i32 1, i32 0]
-// CK3: @__omptgt__gbl__[[G1:[0-9]+]]_[[ID]]__entry_name = internal constant [3 x i8] c"GB\00"
-// CK3: @__omptgt__gbl__[[G1]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
-// CK3: i8* bitcast ([10 x i32]* @GB to i8*), 
-// CK3: i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__gbl__[[G1]]_[[ID]]__entry_name, i32 0, i32 0),
-// CK3: i64 40 }, section ".openmptgt_host_entries"
+// CK3-DAG: @GB = global [10 x i32] [i32 9, i32 8, i32 7, i32 6, i32 5, i32 4, i32 3, i32 2, i32 1, i32 0]
+// CK3-DAG: @__omptgt__[[G1:[0-9]+]]_[[ID]]__entry_name = internal constant [3 x i8] c"GB\00"
+// CK3-DAG: @__omptgt__[[G1]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
+// CK3-DAG: i8* bitcast ([10 x i32]* @GB to i8*),
+// CK3-DAG: i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__[[G1]]_[[ID]]__entry_name, i32 0, i32 0), i64 40 }, section ".openmptgt_host_entries"
 
-// CK3: @GC = common global i32 0
-// CK3: @__omptgt__gbl__[[G2:[0-9]+]]_[[ID]]__entry_name = internal constant [3 x i8] c"GC\00"
-// CK3: @__omptgt__gbl__[[G2]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
-// CK3: i8* bitcast (i32* @GC to i8*), 
-// CK3: i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__gbl__[[G2]]_[[ID]]__entry_name, i32 0, i32 0),
-// CK3: i64 4 }, section ".openmptgt_host_entries"
+// CK3-DAG: @GC = common global i32 0
+// CK3-DAG: @__omptgt__[[G2:[0-9]+]]_[[ID]]__entry_name = internal constant [3 x i8] c"GC\00"
+// CK3-DAG: @__omptgt__[[G2]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
+// CK3-DAG: i8* bitcast (i32* @GC to i8*),
+// CK3-DAG: i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__[[G2]]_[[ID]]__entry_name, i32 0, i32 0), i64 4 }, section ".openmptgt_host_entries"
 
-// CK3: @GD = global i32 5
-// CK3: @__omptgt__gbl__[[G3:[0-9]+]]_[[ID]]__entry_name = internal constant [3 x i8] c"GD\00"
-// CK3: @__omptgt__gbl__[[G3]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
-// CK3: i8* bitcast (i32* @GD to i8*), 
-// CK3: i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__gbl__[[G3]]_[[ID]]__entry_name, i32 0, i32 0),
-// CK3: i64 4 }, section ".openmptgt_host_entries"
+// CK3-DAG: @GD = global i32 5
+// CK3-DAG: @__omptgt__[[G3:[0-9]+]]_[[ID]]__entry_name = internal constant [3 x i8] c"GD\00"
+// CK3-DAG: @__omptgt__[[G3]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
+// CK3-DAG: i8* bitcast (i32* @GD to i8*),
+// CK3-DAG: i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__[[G3]]_[[ID]]__entry_name, i32 0, i32 0), i64 4 }, section ".openmptgt_host_entries"
 
-// CK3: @__omptgt__[[E0:[0-9]+]]_[[ID]]__entry_name = internal constant [{{[1-9][0-9]+}} x i8] c"__omptgt__[[E0]]_[[ID]]_\00"
-// CK3: @__omptgt__[[E0]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
-// CK3: i8* bitcast (void (i32*, [100 x i32]*)* @__omptgt__[[E0]]_[[ID]]_ to i8*), 
-// CK3: i8* getelementptr inbounds ([{{[1-9][0-9]+}} x i8], [{{[1-9][0-9]+}} x i8]* @__omptgt__[[E0]]_[[ID]]__entry_name, i32 0, i32 0),
-// CK3: i64 0 }, section ".openmptgt_host_entries"
+// CK3-DAG: @GE = global i32 6
+// CK3-DAG: @__omptgt__[[G4:[0-9]+]]_[[ID]]__entry_name = internal constant [3 x i8] c"GE\00"
+// CK3-DAG: @__omptgt__[[G4]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
+// CK3-DAG: i8* bitcast (i32* @GE to i8*),
+// CK3-DAG: i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__[[G4]]_[[ID]]__entry_name, i32 0, i32 0), i64 4 }, section ".openmptgt_host_entries"
 
-// CK3: @__omptgt__[[E1:[0-9]+]]_[[ID]]__entry_name = internal constant [{{[1-9][0-9]+}} x i8] c"__omptgt__[[E1]]_[[ID]]_\00"
-// CK3: @__omptgt__[[E1]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
-// CK3: i8* bitcast (void (i32*, [100 x i32]*)* @__omptgt__[[E1]]_[[ID]]_ to i8*), 
-// CK3: i8* getelementptr inbounds ([{{[1-9][0-9]+}} x i8], [{{[1-9][0-9]+}} x i8]* @__omptgt__[[E1]]_[[ID]]__entry_name, i32 0, i32 0),
-// CK3: i64 0 }, section ".openmptgt_host_entries"
+// There are three target regions
+// CK3-DAG: i8* bitcast (void (i32*, [100 x i32]*)* @__omptgt__[[E0:[0-9]+]]_[[ID]]_ to i8*),
+// CK3-DAG: i8* bitcast (void (i32*, [100 x i32]*)* @__omptgt__[[E1:[0-9]+]]_[[ID]]_ to i8*),
+// CK3-DAG: i8* bitcast (void (i32*)* @__omptgt__[[E2:[0-9]+]]_[[ID]]_ to i8*),
 
-// CK3: @GE = global i32 6
-// CK3: @__omptgt__gbl__[[G4:[0-9]+]]_[[ID]]__entry_name = internal constant [3 x i8] c"GE\00"
-// CK3: @__omptgt__gbl__[[G4]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
-// CK3: i8* bitcast (i32* @GE to i8*), 
-// CK3: i8* getelementptr inbounds ([3 x i8], [3 x i8]* @__omptgt__gbl__[[G4]]_[[ID]]__entry_name, i32 0, i32 0),
-// CK3: i64 4 }, section ".openmptgt_host_entries"
+// CK3-DAG: @__omptgt__[[E0]]_[[ID]]__entry_name = internal constant [{{[1-9][0-9]+}} x i8] c"__omptgt__[[E0]]_[[ID]]_\00"
+// CK3-DAG: @__omptgt__[[E0]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
+// CK3-DAG: i8* getelementptr inbounds ([{{[1-9][0-9]+}} x i8], [{{[1-9][0-9]+}} x i8]* @__omptgt__[[E0]]_[[ID]]__entry_name, i32 0, i32 0), i64 0 }, section ".openmptgt_host_entries"
 
-// CK3: @__omptgt__[[E2:[0-9]+]]_[[ID]]__entry_name = internal constant [{{[1-9][0-9]+}} x i8] c"__omptgt__[[E2]]_[[ID]]_\00"
-// CK3: @__omptgt__[[E2]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
-// CK3: i8* bitcast (void (i32*)* @__omptgt__2_[[ID]]_ to i8*), 
-// CK3: i8* getelementptr inbounds ([{{[1-9][0-9]+}} x i8], [{{[1-9][0-9]+}} x i8]* @__omptgt__[[E2]]_[[ID]]__entry_name, i32 0, i32 0),
-// CK3: i64 0 }, section ".openmptgt_host_entries"
+// CK3-DAG: @__omptgt__[[E1]]_[[ID]]__entry_name = internal constant [{{[1-9][0-9]+}} x i8] c"__omptgt__[[E1]]_[[ID]]_\00"
+// CK3-DAG: @__omptgt__[[E1]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
+// CK3-DAG: i8* getelementptr inbounds ([{{[1-9][0-9]+}} x i8], [{{[1-9][0-9]+}} x i8]* @__omptgt__[[E1]]_[[ID]]__entry_name, i32 0, i32 0), i64 0 }, section ".openmptgt_host_entries"
+
+// CK3-DAG: @__omptgt__[[E2]]_[[ID]]__entry_name = internal constant [{{[1-9][0-9]+}} x i8] c"__omptgt__[[E2]]_[[ID]]_\00"
+// CK3-DAG: @__omptgt__[[E2]]_[[ID]]__entry = constant { i8*, i8*, i64 } {
+// CK3-DAG: i8* getelementptr inbounds ([{{[1-9][0-9]+}} x i8], [{{[1-9][0-9]+}} x i8]* @__omptgt__[[E2]]_[[ID]]__entry_name, i32 0, i32 0), i64 0 }, section ".openmptgt_host_entries"
+
+// CK3: !openmp.offloading.info
+// CK3-DAG: !{i32 0, !"GA", i32 [[G0]]}
+// CK3-DAG: !{i32 0, !"GB", i32 [[G1]]}
+// CK3-DAG: !{i32 0, !"GC", i32 [[G2]]}
+// CK3-DAG: !{i32 0, !"GD", i32 [[G3]]}
+// CK3-DAG: !{i32 0, !"GE", i32 [[G4]]}
+// CK3-DAG: !{i32 1, !"foo", i32 [[E2]]}
+// CK3-DAG: !{i32 1, !"bar"
 
 #pragma omp declare target
 int GA[20];
@@ -315,13 +318,13 @@ void foo(){
 // in #declare target
 
 // CK4:     @IF = global i32 0
-// CK4-NOT: @__omptgt__gbl__
+// CK4-NOT: @__omptgt__1
 // CK4:     @GBL1 = global i32 123
-// CK4-NOT: @__omptgt__gbl__
+// CK4-NOT: @__omptgt__1
 // CK4:     @GBL3 = global i32 0
-// CK4-NOT: @__omptgt__gbl__
+// CK4-NOT: @__omptgt__1
 // CK4:     @GBL2 = common global i32 0
-// CK4-NOT: @__omptgt__gbl__
+// CK4-NOT: @__omptgt__1
 
 int IF=0;
 int GBL1=123;
@@ -460,7 +463,7 @@ void foo(){
 	
 	// 1st target region shouldn't have any arguments
 	// CK6: call i32 @__tgt_target(i32 -1, i8* {{[^,]*}}, i32 0, i8** null, i8** null, i64* null, i32* null)
-  // CK6: call void @__omptgt__0_[[ID:[0-9a-f]+_[0-9a-f]+]]_()
+  // CK6: call void @__omptgt__{{[0-9]+}}_[[ID:[0-9a-f]+_[0-9a-f]+]]_()
  
 	#pragma omp target
   {
@@ -498,7 +501,7 @@ void foo(){
   
   // Second target region has two arguments: A and i
   // CK6: call i32 @__tgt_target(i32 -1, i8* {{.*}}, i32 2, i8** {{[^,]*}}, i8** {{[^,]*}}, i64* {{[^,]*}}, i32* getelementptr inbounds ([2 x i32], [2 x i32]* @.tgt_types, i32 0, i32 0))
-  // CK6: call void @__omptgt__1_[[ID]]_({{[^,]*}}, {{[^,]*}})
+  // CK6: call void @__omptgt__{{[0-9]+}}_[[ID]]_({{[^,]*}}, {{[^,]*}})
   #pragma omp target
   {
     for (i=0; i<10; ++i)

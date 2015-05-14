@@ -1685,6 +1685,15 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
       Diags.Report(clang::diag::err_drv_omp_target_requires_main_file_path);
   }
 
+  // Get OpenMP host file path if any and report if a non existent file is
+  // found
+  if (Arg *A = Args.getLastArg(options::OPT_omp_host_output_file_path)){
+    Opts.OMPHostOutputFile = A->getValue();
+    if (!llvm::sys::fs::exists(Opts.OMPHostOutputFile))
+      Diags.Report(clang::diag::err_drv_omp_host_result_file_not_found)
+        << Opts.OMPHostOutputFile;
+  }
+
   // Record whether the __DEPRECATED define was requested.
   Opts.Deprecated = Args.hasFlag(OPT_fdeprecated_macro,
                                  OPT_fno_deprecated_macro,

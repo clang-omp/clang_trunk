@@ -1919,11 +1919,6 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
   if (const auto *VD = dyn_cast<VarDecl>(ND)) {
     // CodeGen for threadprivate variables.
     if (getLangOpts().OpenMP) {
-      if (CGM.getOpenMPRuntime().isTargetCapturedGlobal(VD)){
-        llvm::Value *Val = CapturedStmtInfo->getCachedVar(VD);
-        assert( Val && "Captured global not in the captured cache??");
-        return MakeAddrLValue(Val, T, Alignment);
-      }
       if (llvm::Value *Val =
               CGM.getOpenMPRuntime().CreateOpenMPThreadPrivateCached(
                   VD, E->getExprLoc(), *this))

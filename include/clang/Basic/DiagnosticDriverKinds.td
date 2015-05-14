@@ -121,6 +121,8 @@ def err_drv_invalid_omp_target : Error<
   "OpenMP target is invalid: '%0'">;
 def err_drv_omp_target_requires_main_file_path : Error<
   "Main-file path is required to generate code for OpenMP target regions. Use -omp-main-file-path 'path'.">;
+def err_drv_omp_host_result_file_not_found : Error<
+  "The provided host compiler output '%0' is required to generate code for OpenMP target regions and cannot be found.">;
 def err_drv_omp_module_id_required : Error<
   "Unable to generate module ID from input file '%0' for OpenMP target code generation. Make sure the file exists in the file system.">;
 def err_drv_omp_target_translation_not_available : Error<

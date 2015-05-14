@@ -1150,6 +1150,8 @@ static void ScanFunctionTargetRegions(CodeGenModule &CGM, const FunctionDecl*D){
   CodeGenFunction CGF(CGM);
   CGF.CurFuncDecl = D;
 
+  CGM.getOpenMPRuntime().registerCurTargetParentFunctionName(
+      CGM.getMangledName(GlobalDecl(D)));
   FindAndProcessTargetRegions(CGF, D->getBody());
   return;
 }
@@ -1158,18 +1160,6 @@ void CodeGenModule::EmitDeferred() {
   // Emit code for any potentially referenced deferred decls.  Since a
   // previously unused static decl may become used during the generation of code
   // for a static function, iterate until no changes are made.
-
-  // If we are in OpenMP Target Mode and we are emiting deferred declarations it
-  // means they were in some declare target construct. Therefore we load that
-  // information in the OpenMP stack.
-  bool UseOpenMPDeclareTarget = OpenMPRuntime &&
-                                OpenMPSupport.isEmpty() &&
-                                LangOpts.OpenMPTargetMode;
-
-  if (UseOpenMPDeclareTarget){
-    OpenMPSupport.startOpenMPRegion(false);
-    OpenMPSupport.setTargetDeclare(true);
-  }
 
   if (!DeferredVTables.empty()) {
     EmitDeferredVTables();
@@ -1181,11 +1171,8 @@ void CodeGenModule::EmitDeferred() {
   }
 
   // Stop if we're out of both deferred v-tables and deferred declarations.
-  if (DeferredDeclsToEmit.empty()){
-    if (!OpenMPSupport.isEmpty())
-      OpenMPSupport.endOpenMPRegion();
+  if (DeferredDeclsToEmit.empty())
     return;
-  }
 
   // Grab the list of decls to emit. If EmitGlobalDefinition schedules more
   // work, it will not interfere with this.
@@ -1197,19 +1184,12 @@ void CodeGenModule::EmitDeferred() {
     llvm::GlobalValue *GV = G.GV;
     G.GV = nullptr;
 
-    // In target code we may have inexistent global values meaning that they
-    // may refer to host global and we are in OpenMP target mode. Therefore we
-    // will scan these declaration looking for target regions
-    if (LangOpts.OpenMPTargetMode &&
-        !GV && !D.getDecl()->getDeclContext()->isOMPDeclareTarget()){
-      const auto *FD = cast<FunctionDecl>(D.getDecl());
-
-      // Unset declare target while we scan the host function
-      OpenMPSupport.setTargetDeclare(false);
-      ScanFunctionTargetRegions(*this,FD);
-      OpenMPSupport.setTargetDeclare(true);
-
-      continue;
+    if (getLangOpts().OpenMPTargetMode){
+      StringRef N = getMangledName(D);
+      if (!getOpenMPRuntime().isValidAnyTargetGlobalVariable(N) &&
+          !getOpenMPRuntime().isValidTargetRegionParent(N) &&
+          !getOpenMPRuntime().isValidOtherTargetFunction(N))
+        return;
     }
 
     assert(!GV || GV == GetGlobalValue(getMangledName(D)));
@@ -1242,12 +1222,6 @@ void CodeGenModule::EmitDeferred() {
     const OMPDeclareSimdDecl *DSimd = DeferredOMP.back();
     DeferredOMP.pop_back();
     EmitOMPDeclareSimd(DSimd);
-  }
-
-  if (UseOpenMPDeclareTarget){
-    OpenMPSupport.endOpenMPRegion();
-    assert(OpenMPSupport.isEmpty() &&
-        "Expecting an empty stack after closing the last Decl Target region!");
   }
 }
 
@@ -1372,6 +1346,10 @@ bool CodeGenModule::MustBeEmitted(const ValueDecl *Global) {
   // Never defer when EmitAllDecls is specified.
   if (LangOpts.EmitAllDecls)
     return true;
+  // If in OpenMP target mode, always attempt to emit the global declarations
+  // relying on the name to filter them out
+  if (LangOpts.OpenMPTargetMode)
+    return true;
 
   return getContext().DeclMustBeEmitted(Global);
 }
@@ -1470,6 +1448,14 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
 
   // Ignore declarations, they will be emitted on their first use.
   if (const auto *FD = dyn_cast<FunctionDecl>(Global)) {
+    // In target mode we should only emit what is related with the target
+    if (getLangOpts().OpenMPTargetMode){
+      StringRef MangledName = getMangledName(GD);
+      if (!getOpenMPRuntime().isValidTargetRegionParent(MangledName) &&
+          !getOpenMPRuntime().isValidOtherTargetFunction(MangledName))
+        return;
+    }
+
     // Forward declarations are emitted lazily on first use.
     if (!FD->doesThisDeclarationHaveABody()) {
       if (!FD->doesDeclarationForceExternallyVisibleDefinition())
@@ -1486,6 +1472,13 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
       return;
     }
   } else {
+    // In target mode we should only emit what is related with the target
+    if (getLangOpts().OpenMPTargetMode){
+      StringRef MangledName = getMangledName(GD);
+      if (!getOpenMPRuntime().isValidAnyTargetGlobalVariable(MangledName))
+        return;
+    }
+
     const auto *VD = cast<VarDecl>(Global);
     assert(VD->isFileVarDecl() && "Cannot emit local var decl as global.");
 
@@ -1509,22 +1502,6 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
       cast<VarDecl>(Global)->hasInit()) {
     DelayedCXXInitPosition[Global] = CXXGlobalInits.size();
     CXXGlobalInits.push_back(nullptr);
-  }
-
-  // If we are generating code for a OpenMP target and there is a Host function
-  // to be deferred, it means that is a deferred function used by the host
-  // that we didn't scan yet looking for target regions, therefore we need to
-  // scan it later when we emit the deferred target declaration.
-  // FIXME: At this point we don't know if this global has a use, so it is
-  // possible the host didn't generate code for target regions inside this
-  // function.
-  if (OpenMPRuntime && getLangOpts().OpenMPTargetMode
-      && !Global->getDeclContext()->isOMPDeclareTarget()){
-      //&& !OpenMPRuntime->isEntryDeclaration(Global)){
-      if (Global->getKind() == Decl::Function)
-        addDeferredDeclToEmit(nullptr, GD);
-
-    return;
   }
 
   // If the value has already been used, add it directly to the
@@ -1639,6 +1616,13 @@ void CodeGenModule::EmitGlobalDefinition(GlobalDecl GD, llvm::GlobalValue *GV) {
                                  "Generating code for declaration");
   
   if (isa<FunctionDecl>(D)) {
+
+    if (getLangOpts().OpenMPTargetMode ) {
+      StringRef N = getMangledName(GD);
+      if (!getOpenMPRuntime().isValidTargetRegionParent(N) &&
+          !getOpenMPRuntime().isValidOtherTargetFunction(N))
+        return;
+    }
     // At -O0, don't generate IR for functions with available_externally 
     // linkage.
     if (!shouldEmitFunction(GD))
@@ -1665,6 +1649,10 @@ void CodeGenModule::EmitGlobalDefinition(GlobalDecl GD, llvm::GlobalValue *GV) {
   }
 
   if (const auto *VD = dyn_cast<VarDecl>(D)) {
+    if (getLangOpts().OpenMPTargetMode){
+      if (!getOpenMPRuntime().isValidAnyTargetGlobalVariable(VD))
+        return;
+    }
     EmitGlobalVarDefinition(VD);
     for (VarDecl::redecl_iterator I = VD->redecls_begin(),
                                   E = VD->redecls_end();
@@ -1699,7 +1687,7 @@ CodeGenModule::GetOrCreateLLVMFunction(StringRef MangledName,
   // Process function name as required by the OpenMP runtime
   if (OpenMPRuntime) {
     // Make sure this is not a user-defined function (FIXME)
-    if (!OpenMPRuntime->isEntryDeclaration(D))
+    if (!OpenMPRuntime->isValidEntryTargetGlobalVariable(MangledName))
       MangledName = OpenMPRuntime->RenameStandardFunction(MangledName);
   }
 
@@ -1748,6 +1736,13 @@ CodeGenModule::GetOrCreateLLVMFunction(StringRef MangledName,
                      llvm::AttributeSet::get(VMContext,
                                              llvm::AttributeSet::FunctionIndex,
                                              B));
+  }
+
+  // If we are not in target mode, we need to register this declaration as
+  // relevant for the target
+  if (D && !getLangOpts().OpenMPTargetMode && hasOpenMPRuntime()){
+    getOpenMPRuntime().registerOtherFunction(cast<FunctionDecl>(D),
+                                             F->getName());
   }
 
   if (!DontDefer) {
@@ -1903,23 +1898,15 @@ CodeGenModule::GetOrCreateLLVMGlobal(StringRef MangledName,
     return llvm::ConstantExpr::getBitCast(Entry, Ty);
   }
 
-  // If we are compiling with OpenMP we need to enforce entries ordering
-  // in the module
-  llvm::GlobalVariable *Successor = nullptr;
-  if (OpenMPRuntime){
-    Successor = OpenMPRuntime->getNextGlobalVarForEntryDeclaration(D);
-  }
-
   unsigned AddrSpace = GetGlobalVarAddressSpace(D, Ty->getAddressSpace());
   auto *GV = new llvm::GlobalVariable(
       getModule(), Ty->getElementType(), false,
-      llvm::GlobalValue::ExternalLinkage, nullptr, MangledName, Successor,
+      llvm::GlobalValue::ExternalLinkage, nullptr, MangledName, nullptr,
       llvm::GlobalVariable::NotThreadLocal, AddrSpace);
 
-  // Create the OpenMP entries for this global making sure it follows the
-  // right ordering
-  if (OpenMPRuntime){
-    OpenMPRuntime->CreateHostEntryForTargetGlobal(D,GV,Successor);
+  // Create the OpenMP entries for this global
+  if (OpenMPRuntime && D){
+    OpenMPRuntime->registerGlobalVariable(D,GV);
   }
 
   // This is the first use or definition of a mangled name.  If there is a
@@ -2142,10 +2129,10 @@ void CodeGenModule::maybeSetTrivialComdat(const Decl &D,
 
 void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D) {
 
-  // If we are generating code for a target we only generate the var definition
-  // if it is inside a declare target region
-  if ( LangOpts.OpenMPTargetMode && !OpenMPRuntime->isEntryDeclaration(D) )
-    return;
+  if (getLangOpts().OpenMPTargetMode){
+    if (!getOpenMPRuntime().isValidAnyTargetGlobalVariable(D))
+      return;
+  }
 
   llvm::Constant *Init = nullptr;
   QualType ASTTy = D->getType();
@@ -2564,10 +2551,15 @@ void CodeGenModule::EmitGlobalFunctionDefinition(GlobalDecl GD,
 
   // If we are generating code for a target we need to look
   // into the function declarations for target regions instead
-  // of codegening the function
-  if ( LangOpts.OpenMPTargetMode && !OpenMPSupport.getTargetDeclare() ){
-    ScanFunctionTargetRegions(*this,D);
-    return;
+  // of codegening the function if it is a valid parent.
+  if ( LangOpts.OpenMPTargetMode ){
+    StringRef Name = getMangledName(GD);
+    if (getOpenMPRuntime().isValidTargetRegionParent(Name)){
+      ScanFunctionTargetRegions(*this,D);
+      return;
+    }
+    if (!getOpenMPRuntime().isValidOtherTargetFunction(Name))
+      return;
   }
 
   // If a method is deffered then defer its omp directive too.
@@ -3402,6 +3394,17 @@ void CodeGenModule::EmitNamespace(const NamespaceDecl *ND) {
   }
 }
 
+/// EmitFunctionTemplate - Emit declaration in a function template if needed
+void CodeGenModule::EmitFunctionTemplate(const FunctionTemplateDecl *D){
+  // In OpenMP target mode we need to look into the declarations inside
+  // the function templates because they may have been emitted for the host
+  if (getLangOpts().OpenMPTargetMode){
+    for (auto *I : D->specializations()) {
+      EmitGlobal(I);
+    }
+  }
+}
+
 // EmitLinkageSpec - Emit all declarations in a linkage spec.
 void CodeGenModule::EmitLinkageSpec(const LinkageSpecDecl *LSD) {
   if (LSD->getLanguage() != LinkageSpecDecl::lang_c &&
@@ -3425,15 +3428,6 @@ void CodeGenModule::EmitLinkageSpec(const LinkageSpecDecl *LSD) {
 void CodeGenModule::EmitTopLevelDecl(Decl *D) {
   // Ignore dependent declarations.
   if (D->getDeclContext() && D->getDeclContext()->isDependentContext())
-    return;
-
-  // Ignore any declaration other than Function and OMPDeclareTarget
-  // if we are generating code for a target
-  if ( LangOpts.OpenMPTargetMode && !(D->getKind() == Decl::Function
-                                    ||D->getKind() == Decl::FunctionTemplate
-                                    ||D->getKind() == Decl::OMPDeclareTarget
-                                    ||D->getKind() == Decl::Namespace
-                                    ||OpenMPRuntime->isEntryDeclaration(D)))
     return;
 
   switch (D->getKind()) {
@@ -3468,12 +3462,15 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
   case Decl::Namespace:
     EmitNamespace(cast<NamespaceDecl>(D));
     break;
+
+  case Decl::FunctionTemplate:
+    EmitFunctionTemplate(cast<FunctionTemplateDecl>(D));
+    break;
     // No code generation needed.
   case Decl::UsingShadow:
   case Decl::ClassTemplate:
   case Decl::VarTemplate:
   case Decl::VarTemplatePartialSpecialization:
-  case Decl::FunctionTemplate:
   case Decl::TypeAliasTemplate:
   case Decl::Block:
   case Decl::Empty:
@@ -4091,6 +4088,19 @@ bool CodeGenModule::OpenMPSupportStackTy::getTargetDeclare(){
                                     E = OpenMPStack.rend();
        I != E; ++I) {
     if (I->TargetDeclare) {
+      return true;
+    }
+  }
+  return false;
+}
+void CodeGenModule::OpenMPSupportStackTy::setTarget(bool Flag){
+  OpenMPStack.back().Target = Flag;
+}
+bool CodeGenModule::OpenMPSupportStackTy::getTarget(){
+  for (OMPStackTy::reverse_iterator I = OpenMPStack.rbegin(),
+                                    E = OpenMPStack.rend();
+       I != E; ++I) {
+    if (I->Target) {
       return true;
     }
   }

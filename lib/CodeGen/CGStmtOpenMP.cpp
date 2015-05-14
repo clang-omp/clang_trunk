@@ -737,10 +737,6 @@ public:
   }
 
   ~OpenMPRegionRAII() {
-
-    if (isTargetRegion)
-      CGF.CGM.getOpenMPRuntime().clearTargetCapturedGlobal();
-
     assert( MappingDecls.size() == MappingDeclVals.size()
          && "Inconsistent sizes for map information");
 
@@ -836,13 +832,9 @@ bool CodeGenFunction::ShouldIgnoreOpenMPCapture(const OMPExecutableDirective &S,
 
 
 void CodeGenFunction::EmitOMPBarrier(SourceLocation L, unsigned Flags) {
-	// replace this with appropriate overridable call to OpenMPRuntime object
-  if (CGM.getTarget().getTriple().getArch() == llvm::Triple::nvptx
-      || CGM.getTarget().getTriple().getArch() == llvm::Triple::nvptx64) {
-    CGM.getOpenMPRuntime().EmitNativeBarrier(*this);
-  } else {
-    EmitOMPCallWithLocAndTidHelper(OPENMPRTL_FUNC(barrier), L, Flags);
-  }
+  // specialized as part of the runtime, as specific devices may
+  // require specialized support
+  CGM.getOpenMPRuntime().EmitOMPBarrier(L, Flags, *this);
 }
 
 void CodeGenFunction::EmitOMPCancelBarrier(SourceLocation L, unsigned Flags,
@@ -914,11 +906,9 @@ void CodeGenFunction::EmitOMPDirectiveWithParallelNoMicrotask(
     if (*I && !IsAllowedClause((*I)->getClauseKind(), SKinds))
       EmitInitOMPClause(*(*I), S);
 
-  //bool InNestedParallelRegion = false;
   if (isTargetMode)
-  {
-    CGM.getOpenMPRuntime().StartParallelRegionInTarget(*this);
-  }
+    CGM.getOpenMPRuntime().StartParallelRegionInTarget(*this, DKind,
+        SKinds, S);
 
   // CodeGen for clauses (task init).
   for (ArrayRef<OMPClause *>::iterator I = S.clauses().begin(), E =
@@ -934,11 +924,6 @@ void CodeGenFunction::EmitOMPDirectiveWithParallelNoMicrotask(
           && (!IsAllowedClause((*I)->getClauseKind(), SKinds)
               || (*I)->getClauseKind() == OMPC_firstprivate))
         EmitPreOMPClause(*(*I), S);
-
-   	// in nvptx backend, exclude threads in excess (only when in non-nested
-   	// parallelism)
-   	if (isTargetMode)
-   	  CGM.getOpenMPRuntime().SelectActiveThreads(*this);
 
     switch (DKind) {
     case OMPD_parallel:
@@ -978,7 +963,8 @@ void CodeGenFunction::EmitOMPDirectiveWithParallelNoMicrotask(
     EmitOMPCancelBarrier(S.getLocEnd(), KMP_IDENT_BARRIER_IMPL);
   }
 
-  EmitFirstprivateInsert(*this, S.getLocStart());
+  if(CGM.getOpenMPRuntime().RequireFirstprivateSynchronization())
+    EmitFirstprivateInsert(*this, S.getLocStart());
 
   // CodeGen for clauses (task finalize).
   for (ArrayRef<OMPClause *>::iterator I = S.clauses().begin(), E =
@@ -1461,9 +1447,27 @@ CodeGenFunction::EmitOMPDirectiveWithLoop(OpenMPDirectiveKind DKind,
           EmitRuntimeCall(OPENMPRTL_FUNC(dispatch_init_8), RealArgs);
         else
           EmitRuntimeCall(OPENMPRTL_FUNC(dispatch_init_8u), RealArgs);
-        llvm::Value *RealArgsNext[] = {Loc, GTid, PLast, PLB, PUB, PSt};
-        OMPLoopBB = createBasicBlock("omp.loop.begin");
-        EmitBlock(OMPLoopBB);
+
+        // a dominance issue is exposed by the control loop in nvptx
+        // solve by postponing into the loop first basic block the generation
+        // of the arguments for dispatch* functions
+        bool IsNvptxTarget = CGM.getLangOpts().OpenMPTargetMode &&
+            (CGM.getTarget().getTriple().getArch() == llvm::Triple::nvptx
+            || CGM.getTarget().getTriple().getArch() == llvm::Triple::nvptx64);
+        if (IsNvptxTarget) {
+          OMPLoopBB = createBasicBlock("omp.loop.begin");
+          EmitBlock(OMPLoopBB);
+        }
+
+        llvm::Value *GTid2 = OPENMPRTL_THREADNUM(S.getLocStart(), *this);
+        llvm::Value *RealArgsNext[] = {Loc, IsNvptxTarget? GTid2 : GTid, PLast,
+            PLB, PUB, PSt};
+
+        if (!IsNvptxTarget) {
+          OMPLoopBB = createBasicBlock("omp.loop.begin");
+          EmitBlock(OMPLoopBB);
+        }
+
         llvm::Value *CallRes;
         if (TypeSize == 32 && isSigned)
           CallRes =
@@ -1568,9 +1572,19 @@ CodeGenFunction::EmitOMPDirectiveWithLoop(OpenMPDirectiveKind DKind,
             BreakContinue(getJumpDestInCurrentScope(EndBB),
                           getJumpDestInCurrentScope(ContBlock)));
         if (HasSimd) {
-          RunCleanupsScope Scope(*this);
-          BodyFunction = EmitSimdFunction(SimdWrapper);
-          EmitSIMDForHelperCall(BodyFunction, CapStruct, Private, false);
+          if (CGM.getLangOpts().OpenMPTargetMode
+              && (CGM.getTarget().getTriple().getArch() == llvm::Triple::nvptx
+                  || CGM.getTarget().getTriple().getArch()
+                      == llvm::Triple::nvptx64)) {
+            InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
+            RunCleanupsScope ExecutedScope(*this);
+            CGPragmaOmpSimd Wrapper(&S);
+            EmitPragmaSimdNVPTX(Wrapper);
+          } else {
+            RunCleanupsScope Scope(*this);
+            BodyFunction = EmitSimdFunction(SimdWrapper);
+            EmitSIMDForHelperCall(BodyFunction, CapStruct, Private, false);
+          }
         } else {
           RunCleanupsScope Scope(*this);
           if (IsInnerLoopGen || !IsComplexParallelLoop) {
@@ -1756,6 +1770,9 @@ void CodeGenFunction::EmitOMPDirectiveWithTeamsNoMicrotask(
   CGM.OpenMPSupport.setOrdered(false);
   CGM.OpenMPSupport.setNoWait(true);
   CGM.OpenMPSupport.setScheduleChunkSize(KMP_SCH_DEFAULT, 0);
+
+  if(CGM.getLangOpts().OpenMPTargetMode)
+    CGM.getOpenMPRuntime().StartTeamsRegion();
 
   // CodeGen for clauses (task init).
   for (ArrayRef<OMPClause *>::iterator I = S.clauses().begin(), 
@@ -2151,10 +2168,13 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
 
   // Determine whether this directive was processed before
   const RecordDecl *RD = CS->getCapturedRecordDecl();
-  llvm::Function *Fn =
-      CGM.getOpenMPRuntime().getEntryForDirectiveWithTarget(RD);
+  llvm::Function *Fn = nullptr;
+
+  if (auto C = CGM.getOpenMPRuntime().getEntryForDeclaration(RD))
+    Fn = cast<llvm::Function>(C);
 
   CGM.OpenMPSupport.startOpenMPRegion(true);
+  CGM.OpenMPSupport.setTarget(true);
 
   // Array of fields that should be effectivelly captured
   SmallVector<FieldDecl*, 4> EffectiveFields;
@@ -2183,9 +2203,15 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
       CGM.getOpenMPRuntime().StartNewTargetRegion();
 
     // Create the target function
-    IdentifierInfo *Id = &getContext().Idents.get(
-        CGM.getOpenMPRuntime().GetOffloadEntryMangledName(
-            (isTargetMode) ? CGM.getTarget().getTriple() : llvm::Triple()));
+    std::string TargetRegionName;
+
+    if (isTargetMode)
+      TargetRegionName = CGM.getOpenMPRuntime().
+          GetOffloadEntryMangledNameForTargetRegion();
+    else
+      TargetRegionName = CGM.getOpenMPRuntime().GetOffloadEntryMangledName();
+
+    IdentifierInfo *Id = &getContext().Idents.get(TargetRegionName);
 
     SmallVector<QualType, 4> FnArgTypes;
     FunctionArgList FnArgs;
@@ -2250,16 +2276,13 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
     // Register the new function in the runtime to assure order of the
     // entry points. We use the record declaration as the declaration associated
     // with the entry.
-    CGM.getOpenMPRuntime().registerEntryDeclaration(RD);
-    CGM.getOpenMPRuntime().CreateHostPtrForCurrentTargetRegion(RD, Fn);
+    CGM.getOpenMPRuntime().registerTargetRegion(RD,Fn,CurFn);
 
     // PostProcess the function definition for the target and set the function
     // attributes based on the enclosing function
     // but force target functions to external linkage
     CGM.getOpenMPRuntime().PostProcessTargetFunction(CurFuncDecl, Fn, FI);
 
-    if (isTargetMode)
-      Fn->setLinkage(llvm::GlobalValue::ExternalLinkage);
     CGF.OpenMPRoot = OpenMPRoot ? OpenMPRoot : this;
 
     // Start target region
@@ -2310,14 +2333,12 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
         break;
       }
 
-      if (isTargetMode) {
-
+      if (isTargetMode)
         // at the end of the target region, set next label as the finishing case
         // note that we need to understand if we are in a sequential or parallel
-        // region
+        // region to possibly excluded non-master threads
         CGM.getOpenMPRuntime().GenerateFinishLabelSetting(CS->getLocStart(), CGF,
-            false); //FIXME change false to prevIsParallel?
-      }
+            false);
 
       CGF.FinishFunction();
     }
@@ -3685,6 +3706,8 @@ void CodeGenFunction::EmitFinalOMPClause(const OMPClause &C,
   case OMPC_linear:
   case OMPC_aligned:
   case OMPC_safelen:
+  case OMPC_to:
+  case OMPC_from:
     break;
   case OMPC_if:
     EmitFinalOMPIfClause(cast<OMPIfClause>(C), S);
@@ -4123,7 +4146,9 @@ void CodeGenFunction::EmitAfterInitOMPIfClause(const OMPIfClause &C,
           && (CGM.getTarget().getTriple().getArch() == llvm::Triple::nvptx
               || CGM.getTarget().getTriple().getArch() == llvm::Triple::nvptx64)
           && isParallelDirective(&S))
-        CGM.getOpenMPRuntime().GenerateNextLabel(*this, true, false);
+        // after the else branch, we go back into then which is parallel:
+        // previous regions is parallel (true), target also (true)
+        CGM.getOpenMPRuntime().GenerateNextLabel(*this, true, true);
 
       RunCleanupsScope ElseScope(*this);
       EmitStmt(cast<CapturedStmt>(S.getAssociatedStmt())->getCapturedStmt());
@@ -4222,8 +4247,9 @@ void CodeGenFunction::EmitFinalOMPIfClause(const OMPIfClause &,
   case Stmt::OMPTargetUpdateDirectiveClass: {
     // These directives don't do anything in the if-false branch, therefore we
     // only need to continue the codegen in this basic block
-    EmitBranch(CGM.OpenMPSupport.takeIfDest());
-    EmitBlock(CGM.OpenMPSupport.takeIfDest());
+    llvm::BasicBlock * IfDest = CGM.OpenMPSupport.takeIfDest();
+    EmitBranch(IfDest);
+    EmitBlock(IfDest);
   }
     break;
   case Stmt::OMPTargetDataDirectiveClass:
@@ -6201,9 +6227,6 @@ CodeGenFunction::EmitCloseOMPReductionClause(const OMPReductionClause &C,
        I != E; ++I, ++Par1I, ++Par2I, ++OpI) {
     // Get element type.
     const VarDecl *VD = cast<VarDecl>(cast<DeclRefExpr>(*I)->getDecl());
-    if (VD->hasLocalStorage() &&
-        (!CapturedStmtInfo || !CapturedStmtInfo->lookup(VD)))
-      continue;
     const VarDecl *Par1 = cast<VarDecl>(cast<DeclRefExpr>(*Par1I)->getDecl());
     const VarDecl *Par2 = cast<VarDecl>(cast<DeclRefExpr>(*Par2I)->getDecl());
     llvm::Value *Addr1 = CGF.Builder.CreateConstGEP2_32(
@@ -6623,7 +6646,22 @@ void CodeGenFunction::EmitOMPSimdDirective(const OMPSimdDirective &S) {
   InlinedOpenMPRegion Region(*this, S.getAssociatedStmt());
   RunCleanupsScope ExecutedScope(*this);
   CGPragmaOmpSimd Wrapper(&S);
-  EmitPragmaSimd(Wrapper);
+
+  // only one lane is allowed if there is a reduction clause, as reduction
+  // is not yet implemented for simd: bail out NVPTX special handling
+  // if that is the case and remain sequential
+  bool SpecializeForNVPTX = CGM.getLangOpts().OpenMPTargetMode
+      && (CGM.getTarget().getTriple().getArch() == llvm::Triple::nvptx
+          || CGM.getTarget().getTriple().getArch() == llvm::Triple::nvptx64);
+  for (ArrayRef<OMPClause *>::iterator I = S.clauses().begin(),
+      E = S.clauses().end(); I != E; ++I)
+     if (*I && (*I)->getClauseKind() == OMPC_reduction)
+       SpecializeForNVPTX = SpecializeForNVPTX && false;
+
+  if (SpecializeForNVPTX)
+    EmitPragmaSimdNVPTX(Wrapper);
+  else
+    EmitPragmaSimd(Wrapper);
 }
 
 // Generate the instructions for '#pragma omp for simd' directive.
@@ -6827,8 +6865,8 @@ void CodeGenFunction::EmitOMPTargetDataDirective(
 void CodeGenFunction::EmitOMPTargetUpdateDirective(
     const OMPTargetUpdateDirective &S) {
 
-  // We create a new region for this so we can reuse whatever is in the stack for
-  // the map clause.
+  // We create a new region for this so we can reuse whatever is in the stack
+  // for the map clause.
   CGM.OpenMPSupport.startOpenMPRegion(false);
 
   // Codegen target clauses init, this currently include
@@ -6968,6 +7006,15 @@ void CodeGenFunction::EmitOMPTargetUpdateDirective(
   llvm::Value *Args[] = { DeviceID, MapClauseNumElems, MapClauseBasePointers,
       MapClausePointers, MapClauseSizes, MapClauseTypes };
   EmitRuntimeCall(OPENMPRTL_FUNC(target_data_update), Args);
+
+  // Codegen target clauses final, this currently include
+  // - if clause
+  for (ArrayRef<OMPClause *>::iterator I = S.clauses().begin(), E =
+      S.clauses().end(); I != E; ++I)
+    if (*I
+        && isAllowedClauseForDirective(S.getDirectiveKind(),
+            (*I)->getClauseKind()))
+      EmitFinalOMPClause(*(*I), S);
 
   CGM.OpenMPSupport.endOpenMPRegion();
 }

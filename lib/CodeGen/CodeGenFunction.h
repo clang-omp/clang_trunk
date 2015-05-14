@@ -2192,6 +2192,7 @@ public:
   llvm::Value *GenerateCapturedStmtArgument(const CapturedStmt &S);
 
   void EmitPragmaSimd(CGPragmaSimdWrapper &W);
+  void EmitPragmaSimdNVPTX(CGPragmaSimdWrapper &W);
   llvm::Function *EmitSimdFunction(CGPragmaSimdWrapper &W);
 
   void EmitSIMDForHelperCall(llvm::Function *BodyFunc,

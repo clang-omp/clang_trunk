@@ -112,6 +112,10 @@ public:
   /// unit.
   std::string OMPModuleUniqueID;
 
+  /// \brief Path to the corresponding host resulting output file for the
+  /// current OpenMP target compilation.
+  std::string OMPHostOutputFile;
+
   /// \brief Triples of the OpenMP targets that the host code
   /// codegen should take into account in order to generate
   /// accurate offloading translation tables

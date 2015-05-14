@@ -1912,14 +1912,13 @@ static void emitOMPOfloadingKernelTarget(CodeGenFunction &CGF,
 
   // Create the function that will call the the destructor ( void omptgt_() )
   std::string CallerName = CGM.getOpenMPRuntime().
-                GetOffloadEntryMangledName(CGM.getTarget().getTriple());
+                GetOffloadEntryMangledNameForDtor(addr->getName());
   llvm::FunctionType *CallerTy = llvm::FunctionType::get(CGM.VoidTy, false);
   llvm::Function *Caller = llvm::Function::Create(CallerTy,
       llvm::GlobalValue::InternalLinkage, CallerName, &CGM.getModule());
 
   // This only increments the counter of the target regions.
-  CGM.getOpenMPRuntime().CreateHostPtrForCurrentTargetRegion(nullptr,
-                                                             nullptr);
+  CGM.getOpenMPRuntime().registerDtorRegion(Caller, addr);
   CGM.getOpenMPRuntime().PostProcessTargetFunction(Caller);
 
   // Call the desructor from the caller function
@@ -1945,7 +1944,7 @@ static llvm::Constant* emitOMPOfloadingKernelHost(CodeGenFunction &CGFC,
       llvm::GlobalValue::InternalLinkage, "__omptgt__dtor_caller",
       &CGM.getModule());
 
-  CGM.getOpenMPRuntime().CreateHostPtrForCurrentTargetRegion(nullptr, Caller);
+  CGM.getOpenMPRuntime().registerDtorRegion(Caller, addr);
 
   // Call the destructor from the caller function
   {

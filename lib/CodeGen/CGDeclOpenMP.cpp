@@ -253,9 +253,6 @@ void CodeGenModule::EmitOMPDeclareTarget(const OMPDeclareTargetDecl *D) {
           VD->getTemplateSpecializationKind() != TSK_Undeclared)
         continue;
 
-    // Inform the runtime this declaration is in a declare target region so it
-    // knows how to order the entries in the module
-    getOpenMPRuntime().registerEntryDeclaration(*I);
     EmitTopLevelDecl(*I);
   }
 

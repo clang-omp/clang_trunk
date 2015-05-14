@@ -1234,6 +1234,7 @@ public:
       bool NewTask;
       bool Untied;
       bool TargetDeclare;
+      bool Target;
       bool HasLastPrivate;
       bool Distribute;
       llvm::DenseMap<const ValueDecl *, FieldDecl *> TaskFields;
@@ -1369,6 +1370,8 @@ public:
     bool getUntied();
     void setTargetDeclare(bool Flag);
     bool getTargetDeclare();
+    void setTarget(bool Flag);
+    bool getTarget();
     void setDistribute(bool Flag);
     bool getDistribute();
     bool getParentUntied();
@@ -1498,6 +1501,7 @@ private:
   // C++ related functions.
 
   void EmitNamespace(const NamespaceDecl *D);
+  void EmitFunctionTemplate(const FunctionTemplateDecl *D);
   void EmitLinkageSpec(const LinkageSpecDecl *D);
   void CompleteDIClassType(const CXXMethodDecl* D);
 

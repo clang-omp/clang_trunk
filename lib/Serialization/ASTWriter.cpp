@@ -1282,6 +1282,7 @@ void ASTWriter::WriteControlBlock(Preprocessor &PP, ASTContext &Context,
 
   // OpenMP offloading options
   AddString(Context.getLangOpts().OMPModuleUniqueID, Record);
+  AddString(Context.getLangOpts().OMPHostOutputFile, Record);
 
   Record.push_back(Context.getLangOpts().OMPTargetTriples.size());
   for( auto &T : Context.getLangOpts().OMPTargetTriples)

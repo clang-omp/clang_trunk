@@ -2486,6 +2486,167 @@ void CodeGenFunction::EmitPragmaSimd(CodeGenFunction::CGPragmaSimdWrapper &W) {
   if (W.isOmp())
     CGM.OpenMPSupport.endOpenMPRegion();
 }
+void CodeGenFunction::EmitPragmaSimdNVPTX(CodeGenFunction::CGPragmaSimdWrapper &W) {
+  ArrayRef<OMPClause *> clauses = isa<OMPExecutableDirective>(W.getStmt()) ?
+      cast<OMPExecutableDirective>(W.getStmt())->clauses() : nullptr;
+  CGM.getOpenMPRuntime().EnterSimdRegion(*this, clauses);
+
+  if (W.isOmp()) {
+    // Start a region for loop index and loops' counters
+    // (there will be another one region inside __simd_helper routine).
+    CGM.OpenMPSupport.startOpenMPRegion(false);
+    CGM.OpenMPSupport.setNoWait(false);
+    CGM.OpenMPSupport.setMergeable(true);
+    CGM.OpenMPSupport.setOrdered(false);
+  }
+  RunCleanupsScope SIMDForScope(*this);
+
+  // Emit 'safelen' clause and decide if we want to separate last iteration.
+  bool SeparateLastIter = W.emitSafelen(this);
+
+  // Update debug info.
+  CGDebugInfo *DI = getDebugInfo();
+  if (DI)
+    DI->EmitLexicalBlockStart(Builder, W.getForLoc());
+
+  // Emit the for-loop.
+  llvm::Value *LoopIndex = 0;
+  llvm::Value *LoopCount = 0;
+
+  // Emit the loop control variable and cache its initial value and the
+  // stride value.
+  // Also emit loop index and loop count, depending on stmt.
+
+  W.emitInit(*this, LoopIndex, LoopCount);
+
+  // Only run the SIMD loop if the loop condition is true
+  llvm::BasicBlock *ContBlock = createBasicBlock("if.end");
+  llvm::BasicBlock *ThenBlock = createBasicBlock("if.then");
+
+  // The following condition is zero trip test to skip last iteration if
+  // the loopcount is zero.
+  // In the 'omp simd' we may have more than one loop counter due to
+  // 'collapse', so we check loopcount instead of loop counter.
+  if (!W.isOmp()) {
+    EmitBranchOnBoolExpr(W.getCond(), ThenBlock, ContBlock,
+      getProfileCount(W.getAssociatedStmt()->getCapturedStmt()));
+    EmitBlock(ThenBlock);
+  }
+  else {
+    llvm::Value *BoolCondVal = Builder.CreateICmpSLT(
+      llvm::ConstantInt::get(LoopCount->getType(), 0), LoopCount);
+    Builder.CreateCondBr(BoolCondVal, ThenBlock, ContBlock);
+    EmitBlock(ThenBlock);
+  }
+
+  // Initialize the captured struct.
+  LValue CapStruct = InitCapturedStruct(*W.getAssociatedStmt());
+
+  {
+    JumpDest LoopExit = getJumpDestInCurrentScope("for.end");
+    RunCleanupsScope ForScope(*this);
+
+    // NVPTX intercept
+    CGM.getOpenMPRuntime().EmitSimdInitialization(LoopIndex, LoopCount, *this);
+
+    if (SeparateLastIter)
+      // Lastprivate or linear variable present, remove last iteration.
+      LoopCount = Builder.CreateSub(
+          LoopCount, llvm::ConstantInt::get(LoopCount->getType(), 1));
+
+    // Start the loop with a block that tests the condition.
+    // If there's an increment, the continue scope will be overwritten
+    // later.
+    JumpDest Continue = getJumpDestInCurrentScope("for.cond");
+    llvm::BasicBlock *CondBlock = Continue.getBlock();
+    LoopStack.Push(CondBlock);
+
+    EmitBlock(CondBlock);
+
+    llvm::Value *BoolCondVal = 0;
+    {
+      // If the for statement has a condition scope, emit the local variable
+      // declaration.
+      llvm::BasicBlock *ExitBlock = LoopExit.getBlock();
+
+      // If there are any cleanups between here and the loop-exit scope,
+      // create a block to stage a loop exit along.
+      if (ForScope.requiresCleanups())
+        ExitBlock = createBasicBlock("for.cond.cleanup");
+
+      // As long as the condition is true, iterate the loop.
+      llvm::BasicBlock *ForBody = createBasicBlock("for.body");
+
+      // Use LoopCount and LoopIndex for iteration.
+      BoolCondVal = Builder.CreateICmpULT(Builder.CreateLoad(LoopIndex),
+                                          LoopCount);
+
+      // C99 6.8.5p2/p4: The first substatement is executed if the expression
+      // compares unequal to 0.  The condition must be a scalar type.
+      Builder.CreateCondBr(BoolCondVal, ForBody, ExitBlock);
+
+      if (ExitBlock != LoopExit.getBlock()) {
+        EmitBlock(ExitBlock);
+        EmitBranchThroughCleanup(LoopExit);
+      }
+
+      EmitBlock(ForBody);
+    }
+
+    Continue = getJumpDestInCurrentScope("for.inc");
+
+    // Store the blocks to use for break and continue.
+    BreakContinueStack.push_back(BreakContinue(LoopExit, Continue));
+
+    W.emitIncrement(*this, LoopIndex);
+
+    // Emit the call to the loop body.
+    llvm::Function *BodyFunction = EmitSimdFunction(W);
+    EmitSIMDForHelperCall(BodyFunction, CapStruct, LoopIndex, false);
+
+    // Emit the increment block.
+    EmitBlock(Continue.getBlock());
+
+    {
+      // NVPTX intercept: FIXME do we need the scope parentheses?
+      CGM.getOpenMPRuntime().EmitSimdIncrement(LoopIndex, LoopCount, *this);
+    }
+
+    BreakContinueStack.pop_back();
+
+    EmitBranch(CondBlock);
+
+    ForScope.ForceCleanup();
+
+    if (DI)
+      DI->EmitLexicalBlockEnd(Builder, W.getSourceRange().getEnd());
+
+    LoopStack.Pop();
+
+    // Emit the fall-through block.
+    EmitBlock(LoopExit.getBlock(), true);
+
+    CGM.getOpenMPRuntime().ExitSimdRegion(*this, LoopIndex, LoopCount);
+
+    // Increment again, for last iteration.
+    W.emitIncrement(*this, LoopIndex);
+
+    if (SeparateLastIter) {
+      // This helper call makes updates to linear or lastprivate variables.
+      // In the case of openmp, only for lastprivate ones.
+      EmitSIMDForHelperCall(BodyFunction, CapStruct, LoopIndex, true);
+    }
+
+    W.emitLinearFinal(*this);
+  }
+
+  EmitBlock(ContBlock, true);
+
+  if (W.isOmp())
+    CGM.OpenMPSupport.endOpenMPRegion();
+
+}
+
 void CodeGenFunction::EmitSIMDForHelperBody(const Stmt *S) {
   assert(CapturedStmtInfo && "Should be only called inside a CapturedStmt");
   CGSIMDForStmtInfo *Info = cast<CGSIMDForStmtInfo>(CapturedStmtInfo);

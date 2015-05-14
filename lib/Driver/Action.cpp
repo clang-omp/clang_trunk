@@ -101,6 +101,9 @@ CompileJobAction::CompileJobAction(std::unique_ptr<Action> Input,
                                    types::ID OutputType)
     : JobAction(CompileJobClass, std::move(Input), OutputType) {}
 
+CompileJobAction::CompileJobAction(ActionList &Inputs, types::ID OutputType)
+    : JobAction(CompileJobClass, Inputs, OutputType) {}
+
 void BackendJobAction::anchor() {}
 
 BackendJobAction::BackendJobAction(std::unique_ptr<Action> Input,

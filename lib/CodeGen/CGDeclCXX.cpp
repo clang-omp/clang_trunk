@@ -626,15 +626,14 @@ CodeGenFunction::GenerateCXXGlobalInitFunc(llvm::Function *Fn,
         // constructors
 
         std::string NewName = CGM.getOpenMPRuntime().
-            GetOffloadEntryMangledName(CGM.getTarget().getTriple());
+            GetOffloadEntryMangledNameForCtor();
 
         Fn->setName(NewName);
-        CGM.getOpenMPRuntime().CreateHostPtrForCurrentTargetRegion(nullptr,
-                                                                   nullptr);
+        CGM.getOpenMPRuntime().registerCtorRegion(Fn);
         CGM.getOpenMPRuntime().PostProcessTargetFunction(Fn);
       }
       else{
-        CGM.getOpenMPRuntime().CreateHostPtrForCurrentTargetRegion(nullptr, Fn);
+        CGM.getOpenMPRuntime().registerCtorRegion(Fn);
 
         llvm::SmallVector<llvm::Value*, 10> TgtArgs;
 
