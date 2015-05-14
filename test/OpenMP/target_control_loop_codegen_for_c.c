@@ -47,9 +47,9 @@ int foo() {
 // CK1-NEXT: %[[FINID:[a-zA-Z0-9_\.]+]] = alloca i1
 // CK1-NEXT: store i1 false, i1* %[[FINID]]
 // CK1-NEXT: %[[SIMLNNM:[a-zA-Z0-9_\.]+]] = alloca i32
-// CK1-NEXT: %[[TID1:[a-zA-Z0-9_\.]+]] = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
-// CK1-NEXT: %[[SMDNLNS:[a-zA-Z0-9_\.]+]] = load i32, i32 addrspace(3)* @__omptgt__SimdNumLanes
-// CK1-NEXT: %[[SMDNLNSM1:[a-zA-Z0-9_\.]+]] = sub i32 %[[SMDNLNS]], 1
+// CK1-DAG: %[[TID1:[a-zA-Z0-9_\.]+]] = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
+// CK1-DAG: %[[SMDNLNS:[a-zA-Z0-9_\.]+]] = load i32, i32 addrspace(3)* @__omptgt__SimdNumLanes
+// CK1-DAG: %[[SMDNLNSM1:[a-zA-Z0-9_\.]+]] = sub i32 %[[SMDNLNS]], 1
 // CK1-NEXT: %[[MYLNNM:[a-zA-Z0-9_\.]+]] = and i32 %[[TID1]], %[[SMDNLNSM1]]
 // CK1-NEXT: store i32 %[[MYLNNM]], i32* %SimdLaneNum
 // CK1-NEXT: br label %[[STRTCTL:[a-zA-Z0-9_\.]+]]
@@ -147,9 +147,9 @@ int foo() {
 // CK2-NEXT: %[[FINID:[a-zA-Z0-9_\.]+]] = alloca i1
 // CK2-NEXT: store i1 false, i1* %[[FINID]]
 // CK2-NEXT: %[[SIMLNNM:[a-zA-Z0-9_\.]+]] = alloca i32
-// CK2-NEXT: %[[TID1:[a-zA-Z0-9_\.]+]] = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
-// CK2-NEXT: %[[SMDNLNS:[a-zA-Z0-9_\.]+]] = load i32, i32 addrspace(3)* @__omptgt__SimdNumLanes
-// CK2-NEXT: %[[SMDNLNSM1:[a-zA-Z0-9_\.]+]] = sub i32 %[[SMDNLNS]], 1
+// CK2-DAG: %[[TID1:[a-zA-Z0-9_\.]+]] = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
+// CK2-DAG: %[[SMDNLNS:[a-zA-Z0-9_\.]+]] = load i32, i32 addrspace(3)* @__omptgt__SimdNumLanes
+// CK2-DAG: %[[SMDNLNSM1:[a-zA-Z0-9_\.]+]] = sub i32 %[[SMDNLNS]], 1
 // CK2-NEXT: %[[MYLNNM:[a-zA-Z0-9_\.]+]] = and i32 %[[TID1]], %[[SMDNLNSM1]]
 // CK2-NEXT: store i32 %[[MYLNNM]], i32* %SimdLaneNum
 // CK2-NEXT: br label %[[STRTCTL:[a-zA-Z0-9_\.]+]]
@@ -269,9 +269,9 @@ int foo() {
 // CK3-NEXT: %[[FINID:[a-zA-Z0-9_\.]+]] = alloca i1
 // CK3-NEXT: store i1 false, i1* %[[FINID]]
 // CK3-NEXT: %[[SIMDLNNM:[a-zA-Z0-9_\.]+]] = alloca i32
-// CK3-NEXT: %[[TID1:[a-zA-Z0-9_\.]+]] = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
-// CK3-NEXT: %[[SMDNLNS:[a-zA-Z0-9_\.]+]] = load i32, i32 addrspace(3)* @__omptgt__SimdNumLanes
-// CK3-NEXT: %[[SMDNLNSM1:[a-zA-Z0-9_\.]+]] = sub i32 %[[SMDNLNS]], 1
+// CK3-DAG: %[[TID1:[a-zA-Z0-9_\.]+]] = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
+// CK3-DAG: %[[SMDNLNS:[a-zA-Z0-9_\.]+]] = load i32, i32 addrspace(3)* @__omptgt__SimdNumLanes
+// CK3-DAG: %[[SMDNLNSM1:[a-zA-Z0-9_\.]+]] = sub i32 %[[SMDNLNS]], 1
 // CK3-NEXT: %[[MYLNNM:[a-zA-Z0-9_\.]+]] = and i32 %[[TID1]], %[[SMDNLNSM1]]
 // CK3-NEXT: store i32 %[[MYLNNM]], i32* %SimdLaneNum
 // CK3-NEXT: br label %[[STRTCTL:[a-zA-Z0-9_\.]+]]
@@ -342,9 +342,9 @@ int foo() {
 // CK3-NEXT: br label %[[SYNC]]
 
 // CK3: [[ISNOTEXCL]]:
-// CK3-NEXT: %[[TIDVAL3:[a-zA-Z0-9_\.]+]] = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
-// CK3-NEXT: %[[SMDNUMLNSVAL1:[a-zA-Z0-9_\.]+]] = load i32, i32 addrspace(3)* @__omptgt__SimdNumLanes
-// CK3-NEXT: %[[SMDNUMLNSVALMIN1:[a-zA-Z0-9_\.]+]] = sub i32 %[[SMDNUMLNSVAL1]], 1
+// CK3-DAG: %[[TIDVAL3:[a-zA-Z0-9_\.]+]] = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
+// CK3-DAG: %[[SMDNUMLNSVAL1:[a-zA-Z0-9_\.]+]] = load i32, i32 addrspace(3)* @__omptgt__SimdNumLanes
+// CK3-DAG: %[[SMDNUMLNSVALMIN1:[a-zA-Z0-9_\.]+]] = sub i32 %[[SMDNUMLNSVAL1]], 1
 // CK3-NEXT: %[[ANDTIDSMDNLNSMIN1:[a-zA-Z0-9_\.]+]] = and i32 %[[TIDVAL3]], %[[SMDNUMLNSVALMIN1]]
 // CK3-NEXT: store i32 %[[ANDTIDSMDNLNSMIN1]], i32* %[[SIMDLNNM]]
 // CK3-NEXT: %[[SMDNUMLNSVAL2:[a-zA-Z0-9_\.]+]] = load i32, i32 addrspace(3)* @__omptgt__SimdNumLanes
