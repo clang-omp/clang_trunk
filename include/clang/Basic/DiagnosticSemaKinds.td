@@ -4155,8 +4155,11 @@ def err_typecheck_negative_array_size : Error<"array size is negative">;
 def warn_typecheck_negative_array_new_size : Warning<"array size is negative">,
   // FIXME PR11644: ", will throw std::bad_array_new_length at runtime"
   InGroup<BadArrayNewLength>;
-def warn_typecheck_function_qualifiers : Warning<
-  "qualifier on function type %0 has unspecified behavior">;
+def warn_typecheck_function_qualifiers_ignored : Warning<
+  "'%0' qualifier on function type %1 has no effect">,
+  InGroup<IgnoredQualifiers>;
+def warn_typecheck_function_qualifiers_unspecified : Warning<
+  "'%0' qualifier on function type %1 has unspecified behavior">;
 def warn_typecheck_reference_qualifiers : Warning<
   "'%0' qualifier on reference type %1 has no effect">,
   InGroup<IgnoredQualifiers>;
@@ -5507,12 +5510,7 @@ def err_delete_explicit_conversion : Error<
   "conversion function">;
 def note_delete_conversion : Note<"conversion to pointer type %0">;
 def warn_delete_array_type : Warning<
-  "'delete' applied to a pointer-to-array type %0 treated as 'delete[]'">;
-def warn_mismatched_delete_new : Warning<
-  "'delete%select{|[]}0' applied to a pointer that was allocated with "
-  "'new%select{[]|}0'; did you mean 'delete%select{[]|}0'?">,
-  InGroup<DiagGroup<"mismatched-new-delete">>;
-def note_allocated_here : Note<"allocated with 'new%select{[]|}0' here">;
+  "'delete' applied to a pointer-to-array type %0 treated as delete[]">;
 def err_no_suitable_delete_member_function_found : Error<
   "no suitable member %0 in %1">;
 def err_ambiguous_suitable_delete_member_function_found : Error<
