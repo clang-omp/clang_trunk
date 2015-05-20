@@ -597,8 +597,7 @@ struct OMPPragmaHandler : public PragmaHandler {
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
                     Token &PragmaTok) override {
 
-    // The tokens after pragma omp need to be expanded in the directive all
-    // tokens following the omp token have to be replaced
+    // The tokens after pragma omp need to be expanded.
     //
     //  OpenMP [2.1, Directive format]
     //  Preprocessing tokens following the #pragma omp are subject to macro
