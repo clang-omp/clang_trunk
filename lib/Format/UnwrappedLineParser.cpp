@@ -302,7 +302,7 @@ void UnwrappedLineParser::parseLevel(bool HasOpeningBrace) {
   } while (!eof());
 }
 
-void UnwrappedLineParser::calculateBraceTypes() {
+void UnwrappedLineParser::calculateBraceTypes(bool ExpectClassBody) {
   // We'll parse forward through the tokens until we hit
   // a closing brace or eof - note that getNextToken() will
   // parse macros, so this will magically work inside macro
@@ -325,6 +325,7 @@ void UnwrappedLineParser::calculateBraceTypes() {
 
     switch (Tok->Tok.getKind()) {
     case tok::l_brace:
+      Tok->BlockKind = BK_Unknown;
       LBraceStack.push_back(Tok);
       break;
     case tok::r_brace:
@@ -348,9 +349,11 @@ void UnwrappedLineParser::calculateBraceTypes() {
             //
             // We exclude + and - as they can be ObjC visibility modifiers.
             ProbablyBracedList =
-                NextTok->isOneOf(tok::comma, tok::semi, tok::period, tok::colon,
+                NextTok->isOneOf(tok::comma, tok::period, tok::colon,
                                  tok::r_paren, tok::r_square, tok::l_brace,
                                  tok::l_paren, tok::ellipsis) ||
+                (NextTok->is(tok::semi) &&
+                 (!ExpectClassBody || LBraceStack.size() != 1)) ||
                 (NextTok->isBinaryOperator() && !NextIsObjCMethod);
           }
           if (ProbablyBracedList) {
@@ -1104,9 +1107,8 @@ void UnwrappedLineParser::parseParens() {
       tryToParseLambda();
       break;
     case tok::l_brace:
-      if (!tryToParseBracedList()) {
+      if (!tryToParseBracedList())
         parseChildBlock();
-      }
       break;
     case tok::at:
       nextToken();
@@ -1146,9 +1148,8 @@ void UnwrappedLineParser::parseSquare() {
       parseSquare();
       break;
     case tok::l_brace: {
-      if (!tryToParseBracedList()) {
+      if (!tryToParseBracedList())
         parseChildBlock();
-      }
       break;
     }
     case tok::at:
@@ -1571,8 +1572,13 @@ void UnwrappedLineParser::parseRecord() {
   // and thus rule out the record production in case there is no template
   // (this would still leave us with an ambiguity between template function
   // and class declarations).
-  if (FormatTok->Tok.is(tok::colon) || FormatTok->Tok.is(tok::less)) {
-    while (!eof() && FormatTok->Tok.isNot(tok::l_brace)) {
+  if (FormatTok->isOneOf(tok::colon, tok::less)) {
+    while (!eof()) {
+      if (FormatTok->is(tok::l_brace)) {
+        calculateBraceTypes(/*ExpectClassBody=*/true);
+        if (!tryToParseBracedList())
+          break;
+      }
       if (FormatTok->Tok.is(tok::semi))
         return;
       nextToken();

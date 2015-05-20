@@ -918,6 +918,15 @@ private:
     } else if (Current.is(tok::r_paren)) {
       if (rParenEndsCast(Current))
         Current.Type = TT_CastRParen;
+      if (Current.MatchingParen && Current.Next &&
+          !Current.Next->isBinaryOperator() &&
+          !Current.Next->isOneOf(tok::semi, tok::colon))
+        if (FormatToken *BeforeParen = Current.MatchingParen->Previous)
+          if (BeforeParen->is(tok::identifier) &&
+              BeforeParen->TokenText == BeforeParen->TokenText.upper() &&
+              (!BeforeParen->Previous ||
+               BeforeParen->Previous->ClosesTemplateDeclaration))
+            Current.Type = TT_FunctionAnnotationRParen;
     } else if (Current.is(tok::at) && Current.Next) {
       if (Current.Next->isStringLiteral()) {
         Current.Type = TT_ObjCStringLiteral;

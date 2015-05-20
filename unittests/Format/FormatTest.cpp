@@ -4040,6 +4040,18 @@ TEST_F(FormatTest, BreaksFunctionDeclarationsWithTrailingTokens) {
       "    aaaaaaaaaaaaaaaaaaaaaaaaa;");
 }
 
+TEST_F(FormatTest, FunctionAnnotations) {
+  verifyFormat("DEPRECATED(\"Use NewClass::NewFunction instead.\")\n"
+               "string OldFunction(const string &parameter) {}");
+  verifyFormat("template <typename T>\n"
+               "DEPRECATED(\"Use NewClass::NewFunction instead.\")\n"
+               "string OldFunction(const string &parameter) {}");
+
+  // Not function annotations.
+  verifyFormat("ASSERT(\"aaaaa\") << aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "                << bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+}
+
 TEST_F(FormatTest, BreaksDesireably) {
   verifyFormat("if (aaaaaaaaaaaaaaaaaaa(aaaaaaaaaaaaaaa) ||\n"
                "    aaaaaaaaaaaaaaaaaaa(aaaaaaaaaaaaaaa) ||\n"
@@ -5249,6 +5261,7 @@ TEST_F(FormatTest, UnderstandsTemplateParameters) {
   verifyFormat("struct A<std::enable_if<sizeof(T2) < sizeof(int32)>::type>;");
   verifyFormat("struct A<std::enable_if<sizeof(T2) ? sizeof(int32) : "
                "sizeof(char)>::type>;");
+  verifyFormat("template <class T> struct S<std::is_arithmetic<T>{}> {};");
 
   // Not template parameters.
   verifyFormat("return a < b && c > d;");
@@ -6178,6 +6191,14 @@ TEST_F(FormatTest, LayoutCxx11BraceInitializers) {
                "    {\n"
                "        aaaa,\n"
                "    },\n"
+               "};");
+  verifyFormat("class C : public D {\n"
+               "  SomeClass SC{2};\n"
+               "};");
+  verifyFormat("class C : public A {\n"
+               "  class D : public B {\n"
+               "    void f() { int i{2}; }\n"
+               "  };\n"
                "};");
 
   // In combination with BinPackParameters = false.
