@@ -529,7 +529,7 @@ void CodeGenModule::EmitOMPRegisterLib() {
     CodeGenFunction CGF(*this);
     CGF.StartFunction(GlobalDecl(), CGF.getContext().VoidTy, Fn,
         CGF.getTypes().arrangeNullaryFunction(), FunctionArgList());
-    CGF.Builder.CreateCall(TRD_F);
+    CGF.Builder.CreateCall(TRD_F, {});
     CGF.FinishFunction();
   }
 

@@ -1965,7 +1965,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
       llvm::BasicBlock *OnlyMasterSetNext = llvm::BasicBlock::Create(
           CGM.getLLVMContext(), ".master.only.next.label", CGF.CurFn);
 
-      llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num());
+      llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num(), {});
       llvm::Value *AmINotMaster =
           Bld.CreateICmpNE(callThreadNum, Bld.getInt32(MASTER_ID), "NotMaster");
 
@@ -2071,7 +2071,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
         CGM.getLLVMContext(), ".nonmaster.init.", CGF.CurFn);
 
     llvm::Value *IsTeamMaster1 =
-        Bld.CreateICmpEQ(Bld.CreateCall(Get_thread_num()),
+        Bld.CreateICmpEQ(Bld.CreateCall(Get_thread_num(), {}),
                          Bld.getInt32(MASTER_ID), "IsTeamMaster");
 
     Bld.CreateCondBr(IsTeamMaster1, MasterInit, NonMasterInit);
@@ -2079,11 +2079,11 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
     Bld.SetInsertPoint(MasterInit);
 
     // use all cuda threads as lanes - parallel regions will change this
-    Bld.CreateStore(Bld.CreateCall(Get_num_threads()), SimdNumLanes);
+    Bld.CreateStore(Bld.CreateCall(Get_num_threads(), {}), SimdNumLanes);
     Bld.CreateBr(NonMasterInit);
 
     Bld.SetInsertPoint(NonMasterInit);
-    Bld.CreateCall(Get_syncthreads());
+    Bld.CreateCall(Get_syncthreads(), {});
 
     // finished boolean controlling the while: create and init to false
     FinishedVar =
@@ -2096,7 +2096,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
     // #parallel
     SimdLaneNum =
         Bld.CreateAlloca(Bld.getInt32Ty(), Bld.getInt32(1), "SimdLaneNum");
-    Bld.CreateStore(Bld.CreateAnd(Bld.CreateCall(Get_thread_num()),
+    Bld.CreateStore(Bld.CreateAnd(Bld.CreateCall(Get_thread_num(), {}),
                                   Bld.CreateSub(Bld.CreateLoad(SimdNumLanes),
                                                 Bld.getInt32(1))),
                     SimdLaneNum);
@@ -2169,7 +2169,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
     // Bld.CreateBr(EndTarget); // go to exit directly
 
     Bld.SetInsertPoint(SynchronizeAndNextState);
-    Bld.CreateCall(Get_syncthreads());
+    Bld.CreateCall(Get_syncthreads(), {});
 
     SmallVector<llvm::Value *, 2> GEPIdxs;
     GEPIdxs.push_back(Bld.getInt32(0));
@@ -2187,7 +2187,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
     // check if we are master, possibly break
     Bld.SetInsertPoint(FirstSequentialCheck);
 
-    llvm::Value *CallThreadNum = Bld.CreateCall(Get_thread_num());
+    llvm::Value *CallThreadNum = Bld.CreateCall(Get_thread_num(), {});
     llvm::Value *AmITeamMaster =
         Bld.CreateICmpEQ(CallThreadNum, Bld.getInt32(MASTER_ID), "AmIMaster");
 
@@ -2214,7 +2214,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
     // Master selects the next labels for everyone
     // only need to exclude others if we are in a parallel region
     if (prevIsParallel) {
-      llvm::Value *ThreadIdFinished = Bld.CreateCall(Get_thread_num());
+      llvm::Value *ThreadIdFinished = Bld.CreateCall(Get_thread_num(), {});
       llvm::Value *NonMasterNeedToBreak = Bld.CreateICmpNE(
           ThreadIdFinished, Bld.getInt32(MASTER_ID), "NeedToBreak");
 
@@ -2288,7 +2288,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
       llvm::BasicBlock *OnlyMasterSetNext = llvm::BasicBlock::Create(
           CGM.getLLVMContext(), ".master.only.next.label", CGF.CurFn);
 
-      llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num());
+      llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num(), {});
       llvm::Value *AmINotMaster =
           Bld.CreateICmpNE(callThreadNum, Bld.getInt32(MASTER_ID), "NotMaster");
 
@@ -2314,7 +2314,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
       llvm::BasicBlock *OnlyMasterInSequential = llvm::BasicBlock::Create(
 
           CGM.getLLVMContext(), ".master.only.seq.region", CGF.CurFn);
-       llvm::Value * callThreadNum = Bld.CreateCall(Get_thread_num());
+       llvm::Value * callThreadNum = Bld.CreateCall(Get_thread_num(), {});
        llvm::Value *AmINotMaster = Bld.CreateICmpNE(
            callThreadNum, Bld.getInt32(MASTER_ID), "NotMaster");
 
@@ -2344,7 +2344,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
       llvm::BasicBlock *OnlyMasterSetNext = llvm::BasicBlock::Create(
           CGM.getLLVMContext(), ".master.only.next.label", CGF.CurFn);
 
-      llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num());
+      llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num(), {});
       llvm::Value *AmINotMaster =
           Bld.CreateICmpNE(callThreadNum, Bld.getInt32(MASTER_ID), "NotMaster");
 
@@ -2415,7 +2415,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
      llvm::BasicBlock *OnlyMasterSetNext = llvm::BasicBlock::Create(
          CGM.getLLVMContext(), ".master.only.next.label", CGF.CurFn);
 
-     llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num());
+     llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num(), {});
      llvm::Value *AmINotMaster =
          Bld.CreateICmpNE(callThreadNum, Bld.getInt32(MASTER_ID), "NotMaster");
 
@@ -2452,7 +2452,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
                                              ".seq.reg.code", CGF.CurFn);
 
        Bld.CreateCondBr(
-           Bld.CreateICmpNE(Bld.CreateCall(Get_thread_num()), Bld.getInt32(0)),
+           Bld.CreateICmpNE(Bld.CreateCall(Get_thread_num(), {}), Bld.getInt32(0)),
            SynchronizeAndNextState, NextRegion);
      }
 
@@ -2473,7 +2473,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
     llvm::BasicBlock *fallThroughMaster = llvm::BasicBlock::Create(
         CGM.getLLVMContext(), ".fall.through.master", CGF.CurFn);
 
-    llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num());
+    llvm::Value *callThreadNum = Bld.CreateCall(Get_thread_num(), {});
     llvm::Value *amIMasterCond =
         Bld.CreateICmpEQ(callThreadNum, Bld.getInt32(MASTER_ID), "amIMaster");
 
@@ -2487,7 +2487,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
     Bld.SetInsertPoint(fallThroughMaster);
 
-    Bld.CreateCall(Get_syncthreads());
+    Bld.CreateCall(Get_syncthreads(), {});
    }
 
    // \brief scan entire parallel region looking for #for directive.
@@ -2742,8 +2742,8 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
      CGBuilderTy &Bld = CGF.Builder;
 
        // call omp_get_num_threads
-     llvm::Value * NumThreads = Bld.CreateCall(Get_omp_get_num_threads());
-       llvm::Value * callThreadNum = Bld.CreateCall(Get_thread_num());
+     llvm::Value * NumThreads = Bld.CreateCall(Get_omp_get_num_threads(), {});
+       llvm::Value * callThreadNum = Bld.CreateCall(Get_thread_num(), {});
 
        llvm::BasicBlock * IfInExcess = llvm::BasicBlock::Create(
            CGM.getLLVMContext(), ".if.in.excess", CGF.CurFn);
@@ -2812,7 +2812,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
        int NumLanes = CalculateNumberOfLanes(DKind, SKinds, S);
        Bld.CreateStore(Bld.getInt32(NumLanes), SimdNumLanes);
 
-       llvm::Value *PrepareParallelArgs[] = {Bld.CreateCall(Get_num_threads()),
+       llvm::Value *PrepareParallelArgs[] = {Bld.CreateCall(Get_num_threads(), {}),
                                              Bld.CreateLoad(SimdNumLanes)};
 
        llvm::Value *PrepareParallel = CGF.EmitRuntimeCall(
@@ -2824,7 +2824,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
        // check if thread does not act either as a lane or as a thread (called
        // excluded from parallel region)
-       llvm::Value *MyThreadId = Bld.CreateCall(Get_thread_num());
+       llvm::Value *MyThreadId = Bld.CreateCall(Get_thread_num(), {});
        llvm::Value *AmINotInParallel =
            Bld.CreateICmpSGE(MyThreadId, Bld.CreateLoad(CudaThreadsInParallel));
 
@@ -2850,7 +2850,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
        // calculate my simd lane num to exclude cuda threads that will
        // only act as simd lanes and not parallel threads
-       Bld.CreateStore(Bld.CreateAnd(Bld.CreateCall(Get_thread_num()),
+       Bld.CreateStore(Bld.CreateAnd(Bld.CreateCall(Get_thread_num(), {}),
                                      Bld.CreateSub(Bld.CreateLoad(SimdNumLanes),
                                                    Bld.getInt32(1))),
                        SimdLaneNum);
@@ -2929,7 +2929,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
 
 
        //  OPENMPRTL_LOC(S.getLocStart(), CGF);
-     llvm::Value *GTid = Builder.CreateCall(Get_thread_num());
+     llvm::Value *GTid = Builder.CreateCall(Get_thread_num(), {});
      llvm::Value *RealArgs[] = { Loc, GTid, Lck };
 
      llvm::BasicBlock * preLoopBlock = Builder.GetInsertBlock();
@@ -2977,7 +2977,7 @@ class CGOpenMPRuntime_NVPTX: public CGOpenMPRuntime {
    void EmitNativeBarrier(CodeGenFunction &CGF) {
      CGBuilderTy &Bld = CGF.Builder;
 
-     Bld.CreateCall(Get_syncthreads());
+     Bld.CreateCall(Get_syncthreads(), {});
    }
 
    // #pragma omp simd specialization for NVPTX
@@ -3283,9 +3283,9 @@ public:
     //FIXME: Not sure this is what we want, I am computing global thread ID
     //as blockID*BlockSize * threadID
 
-    llvm::Value *BId = CGF.Builder.CreateCall(Get_team_num(), "blockid");
-    llvm::Value *BSz = CGF.Builder.CreateCall(Get_num_threads(), "blocksize");
-    llvm::Value *TId = CGF.Builder.CreateCall(Get_thread_num(), "threadid");
+    llvm::Value *BId = CGF.Builder.CreateCall(Get_team_num(), {}, "blockid");
+    llvm::Value *BSz = CGF.Builder.CreateCall(Get_num_threads(), {}, "blocksize");
+    llvm::Value *TId = CGF.Builder.CreateCall(Get_thread_num(), {}, "threadid");
 
     return CGF.Builder.CreateAdd(CGF.Builder.CreateMul(BId, BSz), TId, "gid");
   }
@@ -3401,7 +3401,7 @@ public:
               llvm::TypeBuilder<__kmpc_unset_num_threads, false>::get(
               		CGM.getLLVMContext()),
   					"__kmpc_unset_num_threads"));
-      Bld.CreateCall(UnsetFn);
+      Bld.CreateCall(UnsetFn, {});
 
 	  Bld.CreateRetVoid();
     }
