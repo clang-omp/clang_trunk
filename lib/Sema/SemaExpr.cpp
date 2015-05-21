@@ -6560,6 +6560,8 @@ ExprResult Sema::ActOnConditionalOp(SourceLocation QuestionLoc,
   DiagnoseConditionalPrecedence(*this, QuestionLoc, Cond.get(), LHS.get(),
                                 RHS.get());
 
+  CheckBoolLikeConversion(Cond.get(), QuestionLoc);
+
   if (!commonExpr)
     return new (Context)
         ConditionalOperator(Cond.get(), QuestionLoc, LHS.get(), ColonLoc,
