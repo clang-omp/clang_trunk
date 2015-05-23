@@ -808,42 +808,15 @@ static void getARMFPUFeatures(const Driver &D, const Arg *A,
   }
 }
 
-// FIXME: Move to ARMTargetParser.
 static int getARMSubArchVersionNumber(const llvm::Triple &Triple) {
-  switch (Triple.getSubArch()) {
-  case llvm::Triple::ARMSubArch_v8_1a:
-  case llvm::Triple::ARMSubArch_v8:
-    return 8;
-  case llvm::Triple::ARMSubArch_v7:
-  case llvm::Triple::ARMSubArch_v7em:
-  case llvm::Triple::ARMSubArch_v7m:
-  case llvm::Triple::ARMSubArch_v7s:
-    return 7;
-  case llvm::Triple::ARMSubArch_v6:
-  case llvm::Triple::ARMSubArch_v6m:
-  case llvm::Triple::ARMSubArch_v6k:
-  case llvm::Triple::ARMSubArch_v6t2:
-    return 6;
-  case llvm::Triple::ARMSubArch_v5:
-  case llvm::Triple::ARMSubArch_v5te:
-    return 5;
-  case llvm::Triple::ARMSubArch_v4t:
-    return 4;
-  default:
-    return 0;
-  }
+  llvm::StringRef Arch = Triple.getArchName();
+  return llvm::ARMTargetParser::parseArchVersion(Arch);
 }
 
-// FIXME: Move to ARMTargetParser.
 static bool isARMMProfile(const llvm::Triple &Triple) {
-  switch (Triple.getSubArch()) {
-  case llvm::Triple::ARMSubArch_v7em:
-  case llvm::Triple::ARMSubArch_v7m:
-  case llvm::Triple::ARMSubArch_v6m:
-    return true;
-  default:
-    return false;
-  }
+  llvm::StringRef Arch = Triple.getArchName();
+  unsigned Profile = llvm::ARMTargetParser::parseArchProfile(Arch);
+  return Profile == llvm::ARM::PK_M;
 }
 
 // Select the float ABI as determined by -msoft-float, -mhard-float, and
@@ -3453,10 +3426,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       Args.hasArg(options::OPT_dA))
     CmdArgs.push_back("-masm-verbose");
 
-  bool UsingIntegratedAssembler =
-      Args.hasFlag(options::OPT_fintegrated_as, options::OPT_fno_integrated_as,
-                   IsIntegratedAssemblerDefault);
-  if (!UsingIntegratedAssembler)
+  if (!Args.hasFlag(options::OPT_fintegrated_as, options::OPT_fno_integrated_as,
+                    IsIntegratedAssemblerDefault))
     CmdArgs.push_back("-no-integrated-as");
 
   if (Args.hasArg(options::OPT_fdebug_pass_structure)) {
@@ -3699,8 +3670,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   if (!Args.hasFlag(options::OPT_funique_section_names,
-                    options::OPT_fno_unique_section_names,
-                    !UsingIntegratedAssembler))
+                    options::OPT_fno_unique_section_names, true))
     CmdArgs.push_back("-fno-unique-section-names");
 
   Args.AddAllArgs(CmdArgs, options::OPT_finstrument_functions);
