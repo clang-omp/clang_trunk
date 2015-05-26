@@ -108,3 +108,8 @@
 // RUN:   not %clang_cc1 "-fopenmp" "-omptargets=powerpc64-ibm-linux-gnu,nvptx64-nvidia-cuda" "-triple" "powerpc64-ibm-linux-gnu" "-omp-host-output-file-path" "abcd.efgh" %s 2>&1 \
 // RUN:   | FileCheck -check-prefix=CHK-HOSTFILE-NOEXIST %s
 // CHK-HOSTFILE-NOEXIST: error: The provided  host compiler output 'abcd.efgh' is required to generate code for OpenMP target regions and cannot be found.
+
+/// Check error if libdevice is not found
+// RUN:   not %clang -fopenmp -target powerpc64-linux -omptargets=nvptx64-nvidia-cuda %s -lm 2>&1 \
+// RUN:   | FileCheck -check-prefix=CHK-LIBDEVICE %s
+// CHK-LIBDEVICE: error: CUDA math library (libdevice) is required and cannot be found.

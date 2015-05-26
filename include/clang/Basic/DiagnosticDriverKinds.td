@@ -132,6 +132,8 @@ def err_drv_omp_target_toolchain_not_available : Error<
 def warn_drv_target_file_found : Warning<
   "OpenMP target file '%0' is being implicitly used in the '%1' toolchain.">, 
   InGroup<OpenMPOffloading>;
+def err_drv_nvptx_libdevice_not_found : Error<
+  "CUDA math library (libdevice) is required and cannot be found.">;
 
 def warn_O4_is_O3 : Warning<"-O4 is equivalent to -O3">, InGroup<Deprecated>;
 def warn_drv_optimization_value : Warning<"optimization level '%0' is not supported; using '%1%2' instead">,

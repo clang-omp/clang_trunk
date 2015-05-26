@@ -9311,7 +9311,8 @@ void NVPTX::Link::ConstructJob(Compilation &C, const JobAction &JA,
       }
     }
 
-    assert(FoundLibDevice && "Could not find libdevice in specified paths!");
+    if (!FoundLibDevice)
+      C.getDriver().Diag(diag::err_drv_nvptx_libdevice_not_found);
 
     // Optimize NVIDIA math library with -nvvm-reflect (for correctness).
     ArgStringList OptCmdArgs;
