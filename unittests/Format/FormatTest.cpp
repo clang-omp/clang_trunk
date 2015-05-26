@@ -3303,6 +3303,15 @@ TEST_F(FormatTest, FormatNestedBlocksInMacros) {
             format("#define   MACRO()   Debug(aaa,  /* force line break */ \\\n"
                    "          {  int   i;  int  j;   })",
                    getGoogleStyle()));
+
+  EXPECT_EQ("#define A                                       \\\n"
+            "  [] {                                          \\\n"
+            "    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx(        \\\n"
+            "        xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx); \\\n"
+            "  }",
+            format("#define A [] { xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx( \\\n"
+                   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx); }",
+                   getGoogleStyle()));
 }
 
 TEST_F(FormatTest, IndividualStatementsOfNestedBlocks) {
@@ -6210,9 +6219,9 @@ TEST_F(FormatTest, LayoutCxx11BraceInitializers) {
                "  };\n"
                "};");
 
-  // In combination with BinPackParameters = false.
+  // In combination with BinPackArguments = false.
   FormatStyle NoBinPacking = getLLVMStyle();
-  NoBinPacking.BinPackParameters = false;
+  NoBinPacking.BinPackArguments = false;
   verifyFormat("const Aaaaaa aaaaa = {aaaaa,\n"
                "                      bbbbb,\n"
                "                      ccccc,\n"
