@@ -27,6 +27,7 @@
 #include "llvm/ADT/Triple.h"
 #include "llvm/MC/MCSectionMachO.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/TargetParser.h"
 #include <algorithm>
 #include <memory>
 using namespace clang;
@@ -4191,8 +4192,15 @@ public:
     return false;
   }
 
+  // FIXME: This should be based on Arch attributes, not CPU names.
   void getDefaultFeatures(llvm::StringMap<bool> &Features) const override {
     StringRef ArchName = getTriple().getArchName();
+    unsigned ArchKind =
+                llvm::ARMTargetParser::parseArch(
+                llvm::ARMTargetParser::getCanonicalArchName(ArchName));
+    bool IsV8 = (ArchKind == llvm::ARM::AK_ARMV8A ||
+                 ArchKind == llvm::ARM::AK_ARMV8_1A);
+
     if (CPU == "arm1136jf-s" || CPU == "arm1176jzf-s" || CPU == "mpcore")
       Features["vfp2"] = true;
     else if (CPU == "cortex-a8" || CPU == "cortex-a9") {
@@ -4217,17 +4225,7 @@ public:
       Features["hwdiv-arm"] = true;
       Features["crc"] = true;
       Features["crypto"] = true;
-    } else if (CPU == "cortex-r5" || CPU == "cortex-r7" ||
-               // Enable the hwdiv extension for all v8a AArch32 cores by
-               // default.
-               // FIXME: Use ARMTargetParser. This would require Triple::arm/thumb
-               // to be recogniseable universally.
-               ArchName == "armv8.1a"  || ArchName == "thumbv8.1a" || //v8.1a
-               ArchName == "armebv8.1a" || ArchName == "thumbebv8.1a" ||
-               ArchName == "armv8a" || ArchName == "armv8" ||           //v8a
-               ArchName == "armebv8a" || ArchName == "armebv8" ||
-               ArchName == "thumbv8a" || ArchName == "thumbv8" ||
-               ArchName == "thumbebv8a" || ArchName == "thumbebv8") {
+    } else if (CPU == "cortex-r5" || CPU == "cortex-r7" || IsV8) {
       Features["hwdiv"] = true;
       Features["hwdiv-arm"] = true;
     } else if (CPU == "cortex-m3" || CPU == "cortex-m4" || CPU == "cortex-m7" ||
@@ -4359,16 +4357,21 @@ public:
       }
     }
 
-    // FIXME: Use ARMTargetParser
-    return llvm::StringSwitch<const char *>(Name)
-        .Cases("cortex-a5", "cortex-a7", "cortex-a8", "A")
-        .Cases("cortex-a9", "cortex-a12", "cortex-a15", "cortex-a17", "krait",
-               "A")
-        .Cases("cortex-a53", "cortex-a57", "cortex-a72", "A")
-        .Cases("cortex-m3", "cortex-m4", "cortex-m0", "cortex-m0plus", "M")
-        .Cases("cortex-m1", "cortex-m7", "sc000", "sc300", "M")
-        .Cases("cortex-r4",  "cortex-r4f", "cortex-r5", "cortex-r7", "R")
-        .Default("");
+    unsigned CPUArch = llvm::ARMTargetParser::parseCPUArch(Name);
+    if (CPUArch == llvm::ARM::AK_INVALID)
+      return "";
+
+    StringRef ArchName = llvm::ARMTargetParser::getArchName(CPUArch);
+    switch(llvm::ARMTargetParser::parseArchProfile(ArchName)) {
+      case llvm::ARM::PK_A:
+        return "A";
+      case llvm::ARM::PK_R:
+        return "R";
+      case llvm::ARM::PK_M:
+        return "M";
+      default:
+        return "";
+    }
   }
   bool setCPU(const std::string &Name) override {
     if (!getCPUDefineSuffix(Name))
