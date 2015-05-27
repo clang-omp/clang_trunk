@@ -2502,17 +2502,13 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
       }
       break;
     default:
-      // TCE is an OSless target
-      if (Target.getArchName() == "tce") {
+      // Of these targets, Hexagon is the only one that might have
+      // an OS of Linux, in which case it got handled above already.
+      if (Target.getArchName() == "tce")
         TC = new toolchains::TCEToolChain(*this, Target, Args);
-        break;
-      }
-      // If Hexagon is configured as an OSless target
-      if (Target.getArch() == llvm::Triple::hexagon) {
+      else if (Target.getArch() == llvm::Triple::hexagon)
         TC = new toolchains::Hexagon_TC(*this, Target, Args);
-        break;
-      }
-      if (Target.getArch() == llvm::Triple::xcore) {
+      else if (Target.getArch() == llvm::Triple::xcore)
         TC = new toolchains::XCore(*this, Target, Args);
         break;
       }
