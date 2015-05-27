@@ -1522,8 +1522,12 @@ public:
     GK_SM20,
     GK_SM21,
     GK_SM30,
+    GK_SM32,
     GK_SM35,
     GK_SM37,
+    GK_SM50,
+    GK_SM52,
+    GK_SM53
   } GPU;
 
   public:
@@ -1613,10 +1617,13 @@ public:
                 .Case("sm_20", GK_SM20)
                 .Case("sm_21", GK_SM21)
                 .Case("sm_30", GK_SM30)
+                .Case("sm_32", GK_SM32)
                 .Case("sm_35", GK_SM35)
                 .Case("sm_37", GK_SM37)
+                .Case("sm_50", GK_SM50)
+                .Case("sm_52", GK_SM52)
+                .Case("sm_53", GK_SM53)
                 .Default(GK_NONE);
-
       return GPU != GK_NONE;
     }
   };

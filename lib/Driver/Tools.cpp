@@ -1470,11 +1470,21 @@ static const char *getNVPTXTargetGPU(const ArgList &Args,
       .Case("nvptxsm_20", "sm_20")
       .Case("nvptxsm_21", "sm_21")
       .Case("nvptxsm_30", "sm_30")
+      .Case("nvptxsm_32", "sm_32")
       .Case("nvptxsm_35", "sm_35")
+      .Case("nvptxsm_37", "sm_37")
+      .Case("nvptxsm_50", "sm_50")
+      .Case("nvptxsm_52", "sm_52")
+      .Case("nvptxsm_53", "sm_53")
       .Case("nvptx64sm_20", "sm_20")
       .Case("nvptx64sm_21", "sm_21")
       .Case("nvptx64sm_30", "sm_30")
+      .Case("nvptx64sm_32", "sm_32")
       .Case("nvptx64sm_35", "sm_35")
+      .Case("nvptx64sm_37", "sm_37")
+      .Case("nvptx64sm_50", "sm_50")
+      .Case("nvptx64sm_52", "sm_52")
+      .Case("nvptx64sm_53", "sm_53")
       .Default("sm_20");
 }
 
