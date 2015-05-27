@@ -2510,25 +2510,18 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
         TC = new toolchains::Hexagon_TC(*this, Target, Args);
       else if (Target.getArch() == llvm::Triple::xcore)
         TC = new toolchains::XCore(*this, Target, Args);
-        break;
-      }
-      if (Target.getArch() == llvm::Triple::nvptx ||
-          Target.getArch() == llvm::Triple::nvptx64 ) {
+      else if (Target.getArch() == llvm::Triple::nvptx ||
+               Target.getArch() == llvm::Triple::nvptx64)
         TC = new toolchains::NVPTX_TC(*this, Target, Args,
                                        IsOpenMPTargetToolchain);
-        break;
-      }
-      if (Target.isOSBinFormatELF()) {
+      else if (Target.isOSBinFormatELF())
         TC = new toolchains::Generic_ELF(*this, Target, Args,
                                           IsOpenMPTargetToolchain);
-        break;
-      }
-      if (Target.isOSBinFormatMachO()) {
+      else if (Target.isOSBinFormatMachO())
         TC = new toolchains::MachO(*this, Target, Args);
-        break;
-      }
-      TC = new toolchains::Generic_GCC(*this, Target, Args,
-                                        IsOpenMPTargetToolchain);
+      else
+        TC = new toolchains::Generic_GCC(*this, Target, Args,
+                                          IsOpenMPTargetToolchain);
       break;
     }
   }
