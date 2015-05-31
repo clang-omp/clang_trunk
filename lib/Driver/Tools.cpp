@@ -2511,6 +2511,54 @@ static void addProfileRT(const ToolChain &TC, const ArgList &Args,
   CmdArgs.push_back(Args.MakeArgString(getCompilerRT(TC, "profile")));
 }
 
+namespace {
+enum OpenMPRuntimeKind {
+  /// An unknown OpenMP runtime. We can't generate effective OpenMP code
+  /// without knowing what runtime to target.
+  OMPRT_Unknown,
+
+  /// The LLVM OpenMP runtime. When completed and integrated, this will become
+  /// the default for Clang.
+  OMPRT_OMP,
+
+  /// The GNU OpenMP runtime. Clang doesn't support generating OpenMP code for
+  /// this runtime but can swallow the pragmas, and find and link against the
+  /// runtime library itself.
+  OMPRT_GOMP,
+
+  /// The legacy name for the LLVM OpenMP runtim from when it was the Intel
+  /// OpenMP runtime. We support this mode for users with existing dependencies
+  /// on this runtime library name.
+  OMPRT_IOMP5
+};
+}
+
+/// Compute the desired OpenMP runtime from the flag provided.
+static OpenMPRuntimeKind getOpenMPRuntime(const ToolChain &TC, const ArgList &Args) {
+  StringRef RuntimeName(/*CLANG_DEFAULT_OPENMP_RUNTIME*/ "libiomp5");
+
+  const Arg *A = Args.getLastArg(options::OPT_fopenmp_EQ);
+  if (A)
+    RuntimeName = A->getValue();
+
+  auto RT = llvm::StringSwitch<OpenMPRuntimeKind>(RuntimeName)
+      .Case("libomp", OMPRT_OMP)
+      .Case("libgomp", OMPRT_GOMP)
+      .Case("libiomp5", OMPRT_IOMP5)
+      .Default(OMPRT_Unknown);
+
+  if (RT == OMPRT_Unknown) {
+    if (A)
+      TC.getDriver().Diag(diag::err_drv_unsupported_option_argument)
+        << A->getOption().getName() << A->getValue();
+    else
+      // FIXME: We could use a nicer diagnostic here.
+      TC.getDriver().Diag(diag::err_drv_unsupported_opt) << "-fopenmp";
+  }
+
+  return RT;
+}
+
 static void addSanitizerRuntime(const ToolChain &TC, const ArgList &Args,
                                 ArgStringList &CmdArgs, StringRef Sanitizer,
                                 bool IsShared) {
@@ -4072,6 +4120,25 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     Args.AddLastArg(CmdArgs, options::OPT_faltivec);
   Args.AddLastArg(CmdArgs, options::OPT_fdiagnostics_show_template_tree);
   Args.AddLastArg(CmdArgs, options::OPT_fno_elide_type);
+
+  // Forward flags for OpenMP
+  if (Args.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
+                   options::OPT_fno_openmp, false))
+    switch (getOpenMPRuntime(getToolChain(), Args)) {
+    case OMPRT_OMP:
+    case OMPRT_IOMP5:
+      // Clang can generate useful OpenMP code for these two runtime libraries.
+      CmdArgs.push_back("-fopenmp");
+      break;
+    default:
+      // By default, if Clang doesn't know how to generate useful OpenMP code
+      // for a specific runtime library, we just don't pass the '-fopenmp' flag
+      // down to the actual compilation.
+      // FIXME: It would be better to have a mode which *only* omits IR
+      // generation based on the OpenMP support so that we get consistent
+      // semantic analysis, etc.
+      break;
+    }
 
   const SanitizerArgs &Sanitize = getToolChain().getSanitizerArgs();
   Sanitize.addArgs(Args, CmdArgs);
@@ -6524,12 +6591,6 @@ void darwin::Link::AddLinkArgs(Compilation &C,
   Args.AddLastArg(CmdArgs, options::OPT_Mach);
 }
 
-enum LibOpenMP {
-  LibUnknown,
-  LibGOMP,
-  LibIOMP5
-};
-
 void darwin::Link::ConstructJob(Compilation &C, const JobAction &JA,
                                 const InputInfo &Output,
                                 const InputInfoList &Inputs,
@@ -6587,9 +6648,22 @@ void darwin::Link::ConstructJob(Compilation &C, const JobAction &JA,
 
   Args.AddAllArgs(CmdArgs, options::OPT_L);
 
-  if (Args.hasArg(options::OPT_fopenmp)){
-    // This is more complicated in gcc...
-    CmdArgs.push_back("-liomp5");
+  if (Args.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
+                   options::OPT_fno_openmp, false)) {
+    switch (getOpenMPRuntime(getToolChain(), Args)) {
+    case OMPRT_OMP:
+      CmdArgs.push_back("-lomp");
+      break;
+    case OMPRT_GOMP:
+      CmdArgs.push_back("-lgomp");
+      break;
+    case OMPRT_IOMP5:
+      CmdArgs.push_back("-liomp5");
+      break;
+    case OMPRT_Unknown:
+      // Already diagnosed.
+      break;
+    }
 
     if (Args.hasArg(options::OPT_omptargets_EQ))
       CmdArgs.push_back("-lomptarget");
@@ -8367,15 +8441,42 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
       if (NeedsSanitizerDeps)
         linkSanitizerRuntimeDeps(ToolChain, CmdArgs);
 
-      if (OpenMP) {
-        CmdArgs.push_back("-liomp5");
+      bool WantPthread = Args.hasArg(options::OPT_pthread) ||
+                         Args.hasArg(options::OPT_pthreads);
 
-        if (OpenMPRTIsBitcode)
-          CmdArgs.push_back("-ldl");
+      if (Args.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
+                       options::OPT_fno_openmp, false)) {
+        // OpenMP runtimes implies pthreads when using the GNU toolchain.
+        // FIXME: Does this really make sense for all GNU toolchains?
+        WantPthread = true;
 
-        if (Args.hasArg(options::OPT_omptargets_EQ))
-          CmdArgs.push_back("-lomptarget");
+        // Also link the particular OpenMP runtimes.
+        switch (getOpenMPRuntime(ToolChain, Args)) {
+        case OMPRT_OMP:
+          CmdArgs.push_back("-lomp");
+          break;
+        case OMPRT_GOMP:
+          CmdArgs.push_back("-lgomp");
+
+          // FIXME: Exclude this for platforms with libgomp that don't require
+          // librt. Most modern Linux platforms require it, but some may not.
+          CmdArgs.push_back("-lrt");
+          break;
+        case OMPRT_IOMP5:
+          CmdArgs.push_back("-liomp5");
+
+          if (OpenMPRTIsBitcode)
+            CmdArgs.push_back("-ldl");
+
+          if (Args.hasArg(options::OPT_omptargets_EQ))
+            CmdArgs.push_back("-lomptarget");
+          break;
+        case OMPRT_Unknown:
+          // Already diagnosed.
+          break;
+        }
       }
+
       AddRunTimeLibs(ToolChain, D, CmdArgs, Args);
 
       if ((Args.hasArg(options::OPT_pthread) ||
