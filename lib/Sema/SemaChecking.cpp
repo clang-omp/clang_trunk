@@ -1622,6 +1622,10 @@ ExprResult Sema::SemaAtomicOpsOverloaded(ExprResult TheCallResult,
     return ExprError();
   }
 
+  // atomic_fetch_or takes a pointer to a volatile 'A'.  We shouldn't let the
+  // volatile-ness of the pointee-type inject itself into the result or the
+  // other operands.
+  ValType.removeLocalVolatile();
   QualType ResultType = ValType;
   if (Form == Copy || Form == GNUXchg || Form == Init)
     ResultType = Context.VoidTy;

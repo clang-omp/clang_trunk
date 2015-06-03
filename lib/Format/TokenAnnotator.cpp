@@ -276,9 +276,13 @@ private:
       if (StartsObjCMethodExpr) {
         Left->Type = TT_ObjCMethodExpr;
       } else if (Style.Language == FormatStyle::LK_JavaScript && Parent &&
+                 Contexts.back().ContextKind == tok::l_brace &&
                  Parent->isOneOf(tok::l_brace, tok::comma)) {
         Left->Type = TT_JsComputedPropertyName;
-      } else if (Parent && Parent->isOneOf(tok::at, tok::equal, tok::comma)) {
+      } else if (Parent &&
+                 Parent->isOneOf(tok::at, tok::equal, tok::comma, tok::l_paren,
+                                 tok::l_square, tok::question, tok::colon,
+                                 tok::kw_return)) {
         Left->Type = TT_ArrayInitializerLSquare;
       } else {
         BindingIncrease = 10;
@@ -444,7 +448,8 @@ private:
              !Line.First->isOneOf(tok::kw_enum, tok::kw_case)) ||
             Contexts.back().ContextKind == tok::l_paren ||  // function params
             Contexts.back().ContextKind == tok::l_square || // array type
-            Line.MustBeDeclaration) { // method/property declaration
+            (Contexts.size() == 1 &&
+             Line.MustBeDeclaration)) { // method/property declaration
           Tok->Type = TT_JsTypeColon;
           break;
         }
@@ -1874,7 +1879,7 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
         Left.isOneOf(Keywords.kw_returns, Keywords.kw_option))
       return true;
   } else if (Style.Language == FormatStyle::LK_JavaScript) {
-    if (Left.is(Keywords.kw_var))
+    if (Left.isOneOf(Keywords.kw_var, TT_JsFatArrow))
       return true;
     if (Right.isOneOf(TT_JsTypeColon, TT_JsTypeOptionalQuestion))
       return false;
@@ -1954,10 +1959,9 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
     return Style.SpaceAfterCStyleCast ||
            Right.isOneOf(TT_BinaryOperator, TT_SelectorName);
 
-  if (Left.is(tok::greater) && Right.is(tok::greater)) {
+  if (Left.is(tok::greater) && Right.is(tok::greater))
     return Right.is(TT_TemplateCloser) && Left.is(TT_TemplateCloser) &&
            (Style.Standard != FormatStyle::LS_Cpp11 || Style.SpacesInAngles);
-  }
   if (Right.isOneOf(tok::arrow, tok::period, tok::arrowstar, tok::periodstar) ||
       Left.isOneOf(tok::arrow, tok::period, tok::arrowstar, tok::periodstar))
     return false;

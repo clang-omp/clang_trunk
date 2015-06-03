@@ -252,6 +252,27 @@ TEST_F(FormatTestJS, ArrayLiterals) {
                "  new SomeThingAAAAAAAAAAAA(),\n"
                "  new SomeThingBBBBBBBBB()\n"
                "];");
+  verifyFormat("return [\n"
+               "  aaaaaaaaaaaaaaaaaaaaaaaaaaa,\n"
+               "  bbbbbbbbbbbbbbbbbbbbbbbbbbb,\n"
+               "  ccccccccccccccccccccccccccc\n"
+               "];");
+  verifyFormat("var someVariable = SomeFuntion([\n"
+               "  aaaaaaaaaaaaaaaaaaaaaaaaaaa,\n"
+               "  bbbbbbbbbbbbbbbbbbbbbbbbbbb,\n"
+               "  ccccccccccccccccccccccccccc\n"
+               "]);");
+  verifyFormat("var someVariable = SomeFuntion([\n"
+               "  [aaaaaaaaaaaaaaaaaaaaaa, bbbbbbbbbbbbbbbbbbbbbb],\n"
+               "]);",
+               getGoogleJSStyleWithColumns(51));
+  verifyFormat("var someVariable = SomeFuntion(aaaa, [\n"
+               "  aaaaaaaaaaaaaaaaaaaaaaaaaaa,\n"
+               "  bbbbbbbbbbbbbbbbbbbbbbbbbbb,\n"
+               "  ccccccccccccccccccccccccccc\n"
+               "]);");
+
+  verifyFormat("someFunction([], {a: a});");
 }
 
 TEST_F(FormatTestJS, FunctionLiterals) {
@@ -463,6 +484,7 @@ TEST_F(FormatTestJS, ArrowFunctions) {
                "  return a;\n"
                "};");
   verifyFormat("var x = (a) => a;");
+  verifyFormat("return () => [];");
 
   // FIXME: This is bad, we should be wrapping before "() => {".
   verifyFormat("someFunction(() => {\n"
@@ -609,6 +631,15 @@ TEST_F(FormatTestJS, ClassDeclarations) {
   verifyFormat("class C {\n  static x(): string { return 'asd'; }\n}");
   verifyFormat("class C extends P implements I {}");
   verifyFormat("class C extends p.P implements i.I {}");
+
+  // ':' is not a type declaration here.
+  verifyFormat("class X {\n"
+               "  subs = {\n"
+               "    'b': {\n"
+               "      'c': 1,\n"
+               "    },\n"
+               "  };\n"
+               "}");
 }
 
 TEST_F(FormatTestJS, InterfaceDeclarations) {
