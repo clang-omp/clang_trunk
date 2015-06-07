@@ -893,8 +893,8 @@ DerivedArgList *MachO::TranslateArgs(const DerivedArgList &Args,
   return DAL;
 }
 
-void MachO::AddLinkRuntimeLibArgs(const llvm::opt::ArgList &Args,
-                                  llvm::opt::ArgStringList &CmdArgs) const {
+void MachO::AddLinkRuntimeLibArgs(const ArgList &Args,
+                                  ArgStringList &CmdArgs) const {
   // Embedded targets are simple at the moment, not supporting sanitizers and
   // with different libraries for each member of the product { static, PIC } x
   // { hard-float, soft-float }
@@ -1016,8 +1016,8 @@ bool MachO::SupportsProfiling() const {
   return getArch() == llvm::Triple::x86 || getArch() == llvm::Triple::x86_64;
 }
 
-void Darwin::addMinVersionArgs(const llvm::opt::ArgList &Args,
-                               llvm::opt::ArgStringList &CmdArgs) const {
+void Darwin::addMinVersionArgs(const ArgList &Args,
+                               ArgStringList &CmdArgs) const {
   VersionTuple TargetVersion = getTargetVersion();
 
   if (isTargetIOSSimulator())
@@ -1032,8 +1032,8 @@ void Darwin::addMinVersionArgs(const llvm::opt::ArgList &Args,
   CmdArgs.push_back(Args.MakeArgString(TargetVersion.getAsString()));
 }
 
-void Darwin::addStartObjectFileArgs(const llvm::opt::ArgList &Args,
-                                    llvm::opt::ArgStringList &CmdArgs) const {
+void Darwin::addStartObjectFileArgs(const ArgList &Args,
+                                    ArgStringList &CmdArgs) const {
   // Derived from startfile spec.
   if (Args.hasArg(options::OPT_dynamiclib)) {
     // Derived from darwin_dylib1 spec.
@@ -1605,7 +1605,7 @@ static Multilib makeMultilib(StringRef commonSuffix) {
 }
 
 static bool findMIPSMultilibs(const llvm::Triple &TargetTriple, StringRef Path,
-                              const llvm::opt::ArgList &Args,
+                              const ArgList &Args,
                               DetectedMultilibs &Result,
                               bool isOpenMPTarget) {
   // Some MIPS toolchains put libraries and object files compiled
@@ -3196,6 +3196,14 @@ static std::string getMultiarchTriple(const llvm::Triple &TargetTriple,
     if (llvm::sys::fs::exists(SysRoot + "/lib/powerpc64le-linux-gnu"))
       return "powerpc64le-linux-gnu";
     return TargetTriple.str();
+  case llvm::Triple::sparc:
+    if (llvm::sys::fs::exists(SysRoot + "/lib/sparc-linux-gnu"))
+      return "sparc-linux-gnu";
+    return TargetTriple.str();
+  case llvm::Triple::sparcv9:
+    if (llvm::sys::fs::exists(SysRoot + "/lib/sparc64-linux-gnu"))
+      return "sparc64-linux-gnu";
+    return TargetTriple.str();
   }
 }
 
@@ -3549,6 +3557,12 @@ void Linux::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   const StringRef PPC64LEMultiarchIncludeDirs[] = {
     "/usr/include/powerpc64le-linux-gnu"
   };
+  const StringRef SparcMultiarchIncludeDirs[] = {
+    "/usr/include/sparc-linux-gnu"
+  };
+  const StringRef Sparc64MultiarchIncludeDirs[] = {
+    "/usr/include/sparc64-linux-gnu"
+  };
   ArrayRef<StringRef> MultiarchIncludeDirs;
   if (getTriple().getArch() == llvm::Triple::x86_64) {
     MultiarchIncludeDirs = X86_64MultiarchIncludeDirs;
@@ -3576,6 +3590,10 @@ void Linux::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
     MultiarchIncludeDirs = PPC64MultiarchIncludeDirs;
   } else if (getTriple().getArch() == llvm::Triple::ppc64le) {
     MultiarchIncludeDirs = PPC64LEMultiarchIncludeDirs;
+  } else if (getTriple().getArch() == llvm::Triple::sparc) {
+    MultiarchIncludeDirs = SparcMultiarchIncludeDirs;
+  } else if (getTriple().getArch() == llvm::Triple::sparcv9) {
+    MultiarchIncludeDirs = Sparc64MultiarchIncludeDirs;
   }
   for (StringRef Dir : MultiarchIncludeDirs) {
     if (llvm::sys::fs::exists(SysRoot + Dir)) {
@@ -3787,8 +3805,8 @@ void XCore::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   }
 }
 
-void XCore::addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                                     llvm::opt::ArgStringList &CC1Args) const {
+void XCore::addClangTargetOptions(const ArgList &DriverArgs,
+                                  ArgStringList &CC1Args) const {
   CC1Args.push_back("-nostdsysteminc");
 }
 
