@@ -762,7 +762,7 @@ public:
 };
 }
 
-} // end namespace toolchains
+} // end namespace tools
 } // end namespace driver
 } // end namespace clang
 
