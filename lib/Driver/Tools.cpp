@@ -3153,7 +3153,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     switch (getToolChain().getArch()) {
     case llvm::Triple::mips64:
     case llvm::Triple::mips64el:
-    case llvm::Triple::sparc:
     case llvm::Triple::sparcel:
     case llvm::Triple::x86:
     case llvm::Triple::x86_64:
@@ -3161,6 +3160,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       break;
 
     case llvm::Triple::ppc:
+    case llvm::Triple::sparc:
     case llvm::Triple::sparcv9:
       IsPICLevelTwo = true; // "-fPIE"
       break;
