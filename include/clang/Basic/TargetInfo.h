@@ -363,6 +363,10 @@ public:
     return *LongDoubleFormat;
   }
 
+  /// \brief Return true if the 'long double' type should be mangled like
+  /// __float128.
+  virtual bool useFloat128ManglingForLongDouble() const { return false; }
+
   /// \brief Return the value for the C99 FLT_EVAL_METHOD macro.
   virtual unsigned getFloatEvalMethod() const { return 0; }
 
@@ -795,11 +799,6 @@ public:
   /// \brief Whether the target supports thread-local storage.
   bool isTLSSupported() const {
     return TLSSupported;
-  }
-
-  /// \brief Whether the target supports SEH __try.
-  bool isSEHTrySupported() const {
-    return getTriple().isOSWindows();
   }
 
   /// \brief Return true if {|} are normal characters in the asm string.
