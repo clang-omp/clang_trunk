@@ -184,6 +184,8 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::AtomicExprClass:
   case Expr::CEANIndexExprClass:
   case Expr::CXXFoldExprClass:
+  case Expr::NoInitExprClass:
+  case Expr::DesignatedInitUpdateExprClass:
     return Cl::CL_PRValue;
 
     // Next come the complicated cases.
