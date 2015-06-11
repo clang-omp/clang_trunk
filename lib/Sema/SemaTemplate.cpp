@@ -1310,15 +1310,11 @@ bool Sema::CheckTemplateParameterList(TemplateParameterList *NewParams,
       // Merge default arguments for template type parameters.
       TemplateTypeParmDecl *OldTypeParm
           = OldParams? cast<TemplateTypeParmDecl>(*OldParam) : nullptr;
-      // FIXME: There might be a visible declaration of this template parameter.
-      if (OldTypeParm && !LookupResult::isVisible(*this, OldTypeParm))
-        OldTypeParm = nullptr;
-
       if (NewTypeParm->isParameterPack()) {
         assert(!NewTypeParm->hasDefaultArgument() &&
                "Parameter packs can't have a default argument!");
         SawParameterPack = true;
-      } else if (OldTypeParm && OldTypeParm->hasDefaultArgument() &&
+      } else if (OldTypeParm && hasVisibleDefaultArgument(OldTypeParm) &&
                  NewTypeParm->hasDefaultArgument()) {
         OldDefaultLoc = OldTypeParm->getDefaultArgumentLoc();
         NewDefaultLoc = NewTypeParm->getDefaultArgumentLoc();
@@ -1357,14 +1353,12 @@ bool Sema::CheckTemplateParameterList(TemplateParameterList *NewParams,
       // Merge default arguments for non-type template parameters
       NonTypeTemplateParmDecl *OldNonTypeParm
         = OldParams? cast<NonTypeTemplateParmDecl>(*OldParam) : nullptr;
-      if (OldNonTypeParm && !LookupResult::isVisible(*this, OldNonTypeParm))
-        OldNonTypeParm = nullptr;
       if (NewNonTypeParm->isParameterPack()) {
         assert(!NewNonTypeParm->hasDefaultArgument() &&
                "Parameter packs can't have a default argument!");
         if (!NewNonTypeParm->isPackExpansion())
           SawParameterPack = true;
-      } else if (OldNonTypeParm && OldNonTypeParm->hasDefaultArgument() &&
+      } else if (OldNonTypeParm && hasVisibleDefaultArgument(OldNonTypeParm) &&
                  NewNonTypeParm->hasDefaultArgument()) {
         OldDefaultLoc = OldNonTypeParm->getDefaultArgumentLoc();
         NewDefaultLoc = NewNonTypeParm->getDefaultArgumentLoc();
@@ -1401,15 +1395,14 @@ bool Sema::CheckTemplateParameterList(TemplateParameterList *NewParams,
       // Merge default arguments for template template parameters
       TemplateTemplateParmDecl *OldTemplateParm
         = OldParams? cast<TemplateTemplateParmDecl>(*OldParam) : nullptr;
-      if (OldTemplateParm && !LookupResult::isVisible(*this, OldTemplateParm))
-        OldTemplateParm = nullptr;
       if (NewTemplateParm->isParameterPack()) {
         assert(!NewTemplateParm->hasDefaultArgument() &&
                "Parameter packs can't have a default argument!");
         if (!NewTemplateParm->isPackExpansion())
           SawParameterPack = true;
-      } else if (OldTemplateParm && OldTemplateParm->hasDefaultArgument() &&
-          NewTemplateParm->hasDefaultArgument()) {
+      } else if (OldTemplateParm &&
+                 hasVisibleDefaultArgument(OldTemplateParm) &&
+                 NewTemplateParm->hasDefaultArgument()) {
         OldDefaultLoc = OldTemplateParm->getDefaultArgument().getLocation();
         NewDefaultLoc = NewTemplateParm->getDefaultArgument().getLocation();
         SawDefaultArgument = true;
@@ -3306,7 +3299,7 @@ Sema::SubstDefaultTemplateArgumentIfAvailable(TemplateDecl *Template,
   HasDefaultArg = false;
 
   if (TemplateTypeParmDecl *TypeParm = dyn_cast<TemplateTypeParmDecl>(Param)) {
-    if (!TypeParm->hasDefaultArgument())
+    if (!hasVisibleDefaultArgument(TypeParm))
       return TemplateArgumentLoc();
 
     HasDefaultArg = true;
@@ -3323,7 +3316,7 @@ Sema::SubstDefaultTemplateArgumentIfAvailable(TemplateDecl *Template,
 
   if (NonTypeTemplateParmDecl *NonTypeParm
         = dyn_cast<NonTypeTemplateParmDecl>(Param)) {
-    if (!NonTypeParm->hasDefaultArgument())
+    if (!hasVisibleDefaultArgument(NonTypeParm))
       return TemplateArgumentLoc();
 
     HasDefaultArg = true;
@@ -3341,7 +3334,7 @@ Sema::SubstDefaultTemplateArgumentIfAvailable(TemplateDecl *Template,
 
   TemplateTemplateParmDecl *TempTempParm
     = cast<TemplateTemplateParmDecl>(Param);
-  if (!TempTempParm->hasDefaultArgument())
+  if (!hasVisibleDefaultArgument(TempTempParm))
     return TemplateArgumentLoc();
 
   HasDefaultArg = true;
@@ -3806,7 +3799,7 @@ bool Sema::CheckTemplateArgumentList(TemplateDecl *Template,
     // (when the template parameter was part of a nested template) into
     // the default argument.
     if (TemplateTypeParmDecl *TTP = dyn_cast<TemplateTypeParmDecl>(*Param)) {
-      if (!TTP->hasDefaultArgument())
+      if (!hasVisibleDefaultArgument(TTP))
         return diagnoseArityMismatch(*this, Template, TemplateLoc, NewArgs);
 
       TypeSourceInfo *ArgType = SubstDefaultTemplateArgument(*this,
@@ -3822,7 +3815,7 @@ bool Sema::CheckTemplateArgumentList(TemplateDecl *Template,
                                 ArgType);
     } else if (NonTypeTemplateParmDecl *NTTP
                  = dyn_cast<NonTypeTemplateParmDecl>(*Param)) {
-      if (!NTTP->hasDefaultArgument())
+      if (!hasVisibleDefaultArgument(NTTP))
         return diagnoseArityMismatch(*this, Template, TemplateLoc, NewArgs);
 
       ExprResult E = SubstDefaultTemplateArgument(*this, Template,
@@ -3839,7 +3832,7 @@ bool Sema::CheckTemplateArgumentList(TemplateDecl *Template,
       TemplateTemplateParmDecl *TempParm
         = cast<TemplateTemplateParmDecl>(*Param);
 
-      if (!TempParm->hasDefaultArgument())
+      if (!hasVisibleDefaultArgument(TempParm))
         return diagnoseArityMismatch(*this, Template, TemplateLoc, NewArgs);
 
       NestedNameSpecifierLoc QualifierLoc;
