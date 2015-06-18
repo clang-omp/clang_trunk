@@ -60,6 +60,18 @@ inline bool DeclAttrsMatchCUDAMode(const LangOptions &LangOpts, Decl *D) {
   return isDeviceSideDecl == LangOpts.CUDAIsDevice;
 }
 
+// Helper function to check whether D's attributes match current language.
+
+inline bool DeclAttrsMatchLanguage(const LangOptions &LangOpts,
+                                   Decl *D) {
+  // In OpenMP target mode we don't care about understanding language specific
+  // atributes
+  if (LangOpts.OpenMPTargetMode)
+    return false;
+
+  return DeclAttrsMatchCUDAMode(LangOpts,D);
+}
+
 // Directly mark a variable odr-used. Given a choice, prefer to use 
 // MarkVariableReferenced since it does additional checks and then 
 // calls MarkVarDeclODRUsed.
