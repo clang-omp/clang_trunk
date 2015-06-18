@@ -14,7 +14,7 @@ int bar (int a, float b){
 
   // Make sure we generate a target region instead of just crashing because ASM
   // constraints are not understood by the target
-  // CHECK: define void @__omptgt__0_30dab54_31_(
+  // CHECK: define void @__omptgt__0_{{[0-9a-f]+_[0-9a-f]+}}_(
   // CHECK-DAG: float*
   // CHECK-DAG: i32*
   // CHECK: {
