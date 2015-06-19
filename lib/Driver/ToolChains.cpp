@@ -60,12 +60,6 @@ Darwin::Darwin(const Driver & D, const llvm::Triple & Triple,
   llvm::raw_string_ostream(MacosxVersionMin)
     << Major << '.' << Minor << '.' << Micro;
 
-  // FIXME: DarwinVersion is only used to find GCC's libexec directory.
-  // It should be removed when we stop supporting that.
-  DarwinVersion[0] = Minor + 4;
-  DarwinVersion[1] = Micro;
-  DarwinVersion[2] = 0;
-
   // Compute the initial iOS version from the triple
   Triple.getiOSVersion(Major, Minor, Micro);
   llvm::raw_string_ostream(iOSVersionMin)
@@ -515,13 +509,17 @@ void Darwin::AddDeploymentTarget(DerivedArgList &Args) const {
       }
     }
 
-    // If no OSX or iOS target has been specified and we're compiling for armv7,
-    // go ahead as assume we're targeting iOS.
-    StringRef MachOArchName = getMachOArchName(Args);
-    if (OSXTarget.empty() && iOSTarget.empty() &&
-        (MachOArchName == "armv7" || MachOArchName == "armv7s" ||
-         MachOArchName == "arm64"))
+    // If no OSX or iOS target has been specified, try to guess platform
+    // from arch name.
+    if (OSXTarget.empty() && iOSTarget.empty()) {
+      StringRef MachOArchName = getMachOArchName(Args);
+      if (MachOArchName == "armv7" || MachOArchName == "armv7s" ||
+          MachOArchName == "arm64")
         iOSTarget = iOSVersionMin;
+      else if (MachOArchName != "armv6m" && MachOArchName != "armv7m" &&
+               MachOArchName != "armv7em")
+        OSXTarget = MacosxVersionMin;
+    }
 
     // Allow conflicts among OSX and iOS for historical reasons, but choose the
     // default platform.
@@ -542,12 +540,6 @@ void Darwin::AddDeploymentTarget(DerivedArgList &Args) const {
       const Option O = Opts.getOption(options::OPT_miphoneos_version_min_EQ);
       iOSVersion = Args.MakeJoinedArg(nullptr, O, iOSTarget);
       Args.append(iOSVersion);
-    } else if (MachOArchName != "armv6m" && MachOArchName != "armv7m" &&
-               MachOArchName != "armv7em") {
-      // Otherwise, assume we are targeting OS X.
-      const Option O = Opts.getOption(options::OPT_mmacosx_version_min_EQ);
-      OSXVersion = Args.MakeJoinedArg(nullptr, O, MacosxVersionMin);
-      Args.append(OSXVersion);
     }
   }
 
