@@ -136,17 +136,12 @@ _writegsbase_u64(unsigned long long __V)
 
 #include <rtmintrin.h>
 
-/* FIXME: check __HLE__ as well when HLE is supported. */
-static __inline__ int __attribute__((__always_inline__, __nodebug__, __target__("rtm")))
-_xtest(void)
-{
-  return __builtin_ia32_xtest();
-}
+#include <xtestintrin.h>
 
 #include <shaintrin.h>
 
-/* Some intrinsics inside adxintrin.h are available only if __ADX__ defined,
- * whereas others are also available if __ADX__ undefined */
+/* Some intrinsics inside adxintrin.h are available only on processors with ADX,
+ * whereas others are also available at all times. */
 #include <adxintrin.h>
 
 #endif /* __IMMINTRIN_H */

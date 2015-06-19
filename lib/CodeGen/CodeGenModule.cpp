@@ -4276,3 +4276,17 @@ void CodeGenModule::OpenMPSupportStackTy::setOffloadingHostFunctionCall(llvm::Ca
 llvm::CallInst* CodeGenModule::OpenMPSupportStackTy::getOffloadingHostFunctionCall(){
   return OpenMPStack.back().OffloadingHostFunctionCall;
 }
+
+llvm::MDTuple *CodeGenModule::CreateVTableBitSetEntry(
+    llvm::GlobalVariable *VTable, CharUnits Offset, const CXXRecordDecl *RD) {
+  std::string OutName;
+  llvm::raw_string_ostream Out(OutName);
+  getCXXABI().getMangleContext().mangleCXXVTableBitSet(RD, Out);
+
+  llvm::Metadata *BitsetOps[] = {
+      llvm::MDString::get(getLLVMContext(), Out.str()),
+      llvm::ConstantAsMetadata::get(VTable),
+      llvm::ConstantAsMetadata::get(
+          llvm::ConstantInt::get(Int64Ty, Offset.getQuantity()))};
+  return llvm::MDTuple::get(getLLVMContext(), BitsetOps);
+}
