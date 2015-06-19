@@ -46,6 +46,7 @@ namespace G {
 
 template<typename T = int, int N = 3, template<typename> class K = F> int H(int a = 1);
 template<typename T = int, int N = 3, template<typename> class K = F> using I = decltype(H<T, N, K>());
+template<typename T = int, int N = 3, template<typename> class K = F> struct J {};
 
 namespace NS {
   struct A {};
@@ -53,4 +54,10 @@ namespace NS {
   template<typename T> struct B<T*> : B<char> {};
   template<> struct B<int> : B<int*> {};
   inline void f() {}
+}
+
+namespace StaticInline {
+  struct X {};
+  static inline void f(X);
+  static inline void g(X x) { f(x); }
 }

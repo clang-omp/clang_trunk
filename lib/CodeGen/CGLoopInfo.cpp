@@ -87,7 +87,8 @@ LoopInfo::LoopInfo(llvm::BasicBlock *Header, const LoopAttributes &Attrs)
 LoopInfo::LoopInfo(llvm::MDNode *LoopID, const LoopAttributes &Attrs)
   : LoopID(LoopID), Header(0), Attrs(Attrs) { }
 
-void LoopInfoStack::push(BasicBlock *Header, ArrayRef<const Attr *> Attrs) {
+void LoopInfoStack::push(BasicBlock *Header,
+                         ArrayRef<const clang::Attr *> Attrs) {
   for (const auto *Attr : Attrs) {
     const LoopHintAttr *LH = dyn_cast<LoopHintAttr>(Attr);
 
