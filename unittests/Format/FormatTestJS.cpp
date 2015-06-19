@@ -688,6 +688,22 @@ TEST_F(FormatTestJS, InterfaceDeclarations) {
                "var y;");
 }
 
+TEST_F(FormatTestJS, EnumDeclarations) {
+  verifyFormat("enum Foo {\n"
+               "  A = 1,\n"
+               "  B\n"
+               "}");
+  verifyFormat("export /* somecomment*/ enum Foo {\n"
+               "  A = 1,\n"
+               "  B\n"
+               "}");
+  verifyFormat("enum Foo {\n"
+               "  A = 1,  // comment\n"
+               "  B\n"
+               "}\n"
+               "var x = 1;");
+}
+
 TEST_F(FormatTestJS, MetadataAnnotations) {
   verifyFormat("@A\nclass C {\n}");
   verifyFormat("@A({arg: 'value'})\nclass C {\n}");
