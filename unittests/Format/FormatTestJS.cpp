@@ -278,6 +278,13 @@ TEST_F(FormatTestJS, ArrayLiterals) {
                "  bbbbbbbbbbbbbbbbbbbbbbbbbbb,\n"
                "  ccccccccccccccccccccccccccc\n"
                "]);");
+  verifyFormat("var someVariable = SomeFuntion(aaaa,\n"
+               "                               [\n"
+               "                                 aaaaaaaaaaaaaaaaaaaaaaaaaaa,\n"
+               "                                 bbbbbbbbbbbbbbbbbbbbbbbbbbb,\n"
+               "                                 ccccccccccccccccccccccccccc\n"
+               "                               ],\n"
+               "                               aaaa);");
 
   verifyFormat("someFunction([], {a: a});");
 }
@@ -809,6 +816,11 @@ TEST_F(FormatTestJS, TemplateStrings) {
             "var y;",
             format("var x =\n `/*a`;\n"
                    "var y;"));
+  // Unterminated string literals in a template string.
+  verifyFormat("var x = `'`;  // comment with matching quote '\n"
+               "var y;");
+  verifyFormat("var x = `\"`;  // comment with matching quote \"\n"
+               "var y;");
   // Backticks in a comment - not a template string.
   EXPECT_EQ("var x = 1  // `/*a`;\n"
             "    ;",
