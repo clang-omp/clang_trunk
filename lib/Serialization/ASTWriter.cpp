@@ -5759,9 +5759,6 @@ void ASTWriter::DeclarationMarkedUsed(const Decl *D) {
 void ASTWriter::RedefinedHiddenDefinition(const NamedDecl *D, Module *M) {
   assert(!WritingAST && "Already writing the AST!");
   assert(D->isHidden() && "expected a hidden declaration");
-  if (!D->isFromASTFile())
-    return;
-
   DeclUpdates[D].push_back(DeclUpdate(UPD_DECL_EXPORTED, M));
 }
 
