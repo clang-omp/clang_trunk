@@ -1720,7 +1720,8 @@ class R600TargetInfo : public TargetInfo {
     GK_NORTHERN_ISLANDS,
     GK_CAYMAN,
     GK_SOUTHERN_ISLANDS,
-    GK_SEA_ISLANDS
+    GK_SEA_ISLANDS,
+    GK_VOLCANIC_ISLANDS
   } GPU;
 
   bool hasFP64:1;
@@ -1839,6 +1840,9 @@ public:
       .Case("kaveri",   GK_SEA_ISLANDS)
       .Case("hawaii",   GK_SEA_ISLANDS)
       .Case("mullins",  GK_SEA_ISLANDS)
+      .Case("tonga",    GK_VOLCANIC_ISLANDS)
+      .Case("iceland",  GK_VOLCANIC_ISLANDS)
+      .Case("carrizo",  GK_VOLCANIC_ISLANDS)
       .Default(GK_NONE);
 
     if (GPU == GK_NONE) {
@@ -1868,6 +1872,7 @@ public:
       break;
     case GK_SOUTHERN_ISLANDS:
     case GK_SEA_ISLANDS:
+    case GK_VOLCANIC_ISLANDS:
       DescriptionString = DescriptionStringSI;
       hasFP64 = true;
       hasFMAF = true;

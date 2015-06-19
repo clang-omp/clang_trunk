@@ -2514,6 +2514,8 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
                Target.getArch() == llvm::Triple::nvptx64)
         TC = new toolchains::NVPTX_TC(*this, Target, Args,
                                        IsOpenMPTargetToolchain);
+      else if (Target.getArch() == llvm::Triple::shave)
+        TC = new toolchains::SHAVEToolChain(*this, Target, Args);
       else if (Target.isOSBinFormatELF())
         TC = new toolchains::Generic_ELF(*this, Target, Args,
                                           IsOpenMPTargetToolchain);

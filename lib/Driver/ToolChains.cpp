@@ -49,22 +49,8 @@ MachO::MachO(const Driver &D, const llvm::Triple &Triple,
 }
 
 /// Darwin - Darwin tool chain for i386 and x86_64.
-Darwin::Darwin(const Driver & D, const llvm::Triple & Triple,
-               const ArgList & Args)
-  : MachO(D, Triple, Args), TargetInitialized(false) {
-  // Compute the initial Darwin version from the triple
-  unsigned Major, Minor, Micro;
-  if (!Triple.getMacOSXVersion(Major, Minor, Micro))
-    getDriver().Diag(diag::err_drv_invalid_darwin_version) <<
-      Triple.getOSName();
-  llvm::raw_string_ostream(MacosxVersionMin)
-    << Major << '.' << Minor << '.' << Micro;
-
-  // Compute the initial iOS version from the triple
-  Triple.getiOSVersion(Major, Minor, Micro);
-  llvm::raw_string_ostream(iOSVersionMin)
-    << Major << '.' << Minor << '.' << Micro;
-}
+Darwin::Darwin(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
+    : MachO(D, Triple, Args), TargetInitialized(false) {}
 
 types::ID MachO::LookupTypeForExtension(const char *Ext) const {
   types::ID Ty = types::lookupTypeForExtension(Ext);
@@ -489,8 +475,8 @@ void Darwin::AddDeploymentTarget(DerivedArgList &Args) const {
   } else if (!OSXVersion && !iOSVersion) {
     // If no deployment target was specified on the command line, check for
     // environment defines.
-    StringRef OSXTarget;
-    StringRef iOSTarget;
+    std::string OSXTarget;
+    std::string iOSTarget;
     if (char *env = ::getenv("MACOSX_DEPLOYMENT_TARGET"))
       OSXTarget = env;
     if (char *env = ::getenv("IPHONEOS_DEPLOYMENT_TARGET"))
@@ -510,15 +496,24 @@ void Darwin::AddDeploymentTarget(DerivedArgList &Args) const {
     }
 
     // If no OSX or iOS target has been specified, try to guess platform
-    // from arch name.
+    // from arch name and compute the version from the triple.
     if (OSXTarget.empty() && iOSTarget.empty()) {
       StringRef MachOArchName = getMachOArchName(Args);
+      unsigned Major, Minor, Micro;
       if (MachOArchName == "armv7" || MachOArchName == "armv7s" ||
-          MachOArchName == "arm64")
-        iOSTarget = iOSVersionMin;
-      else if (MachOArchName != "armv6m" && MachOArchName != "armv7m" &&
-               MachOArchName != "armv7em")
-        OSXTarget = MacosxVersionMin;
+          MachOArchName == "arm64") {
+        getTriple().getiOSVersion(Major, Minor, Micro);
+        llvm::raw_string_ostream(iOSTarget) << Major << '.' << Minor << '.'
+                                            << Micro;
+      } else if (MachOArchName != "armv6m" && MachOArchName != "armv7m" &&
+                 MachOArchName != "armv7em") {
+        if (!getTriple().getMacOSXVersion(Major, Minor, Micro)) {
+          getDriver().Diag(diag::err_drv_invalid_darwin_version)
+              << getTriple().getOSName();
+        }
+        llvm::raw_string_ostream(OSXTarget) << Major << '.' << Minor << '.'
+                                            << Micro;
+      }
     }
 
     // Allow conflicts among OSX and iOS for historical reasons, but choose the
@@ -3868,3 +3863,47 @@ NVPTX_TC::TranslateArgs(const llvm::opt::DerivedArgList &Args,
   // We do not need any translation for this target
   return 0;
 }
+
+// SHAVEToolChain does not call Clang's C compiler.
+// We override SelectTool to avoid testing ShouldUseClangCompiler().
+Tool *SHAVEToolChain::SelectTool(const JobAction &JA) const {
+  switch (JA.getKind()) {
+  case Action::CompileJobClass:
+    if (!Compiler)
+      Compiler.reset(new tools::SHAVE::Compile(*this));
+    return Compiler.get();
+  case Action::AssembleJobClass:
+    if (!Assembler)
+      Assembler.reset(new tools::SHAVE::Assemble(*this));
+    return Assembler.get();
+  default:
+    return ToolChain::getTool(JA.getKind());
+  }
+}
+
+SHAVEToolChain::SHAVEToolChain(const Driver &D, const llvm::Triple &Triple,
+                     const ArgList &Args)
+    : Generic_GCC(D, Triple, Args) {}
+
+SHAVEToolChain::~SHAVEToolChain() {}
+
+/// Following are methods necessary to avoid having moviClang be an abstract
+/// class.
+
+Tool *SHAVEToolChain::getTool(Action::ActionClass AC) const {
+  // SelectTool() must find a tool using the method in the superclass.
+  // There's nothing we can do if that fails.
+  llvm_unreachable("SHAVEToolChain can't getTool");
+}
+
+Tool *SHAVEToolChain::buildLinker() const {
+  // SHAVEToolChain executables can not be linked except by the vendor tools.
+  llvm_unreachable("SHAVEToolChain can't buildLinker");
+}
+
+Tool *SHAVEToolChain::buildAssembler() const {
+  // This one you'd think should be reachable since we expose an
+  // assembler to the driver, except not the way it expects.
+  llvm_unreachable("SHAVEToolChain can't buildAssembler");
+}
+
