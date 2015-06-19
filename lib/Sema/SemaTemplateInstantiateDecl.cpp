@@ -1943,7 +1943,7 @@ Decl *TemplateDeclInstantiator::VisitTemplateTypeParmDecl(
                                  D->isParameterPack());
   Inst->setAccess(AS_public);
 
-  if (D->hasDefaultArgument()) {
+  if (D->hasDefaultArgument() && !D->defaultArgumentWasInherited()) {
     TypeSourceInfo *InstantiatedDefaultArg =
         SemaRef.SubstType(D->getDefaultArgumentInfo(), TemplateArgs,
                           D->getDefaultArgumentLoc(), D->getDeclName());
@@ -2099,7 +2099,7 @@ Decl *TemplateDeclInstantiator::VisitNonTypeTemplateParmDecl(
   if (Invalid)
     Param->setInvalidDecl();
 
-  if (D->hasDefaultArgument()) {
+  if (D->hasDefaultArgument() && !D->defaultArgumentWasInherited()) {
     ExprResult Value = SemaRef.SubstExpr(D->getDefaultArgument(), TemplateArgs);
     if (!Value.isInvalid())
       Param->setDefaultArgument(Value.get());
@@ -2226,7 +2226,7 @@ TemplateDeclInstantiator::VisitTemplateTemplateParmDecl(
                                              D->getPosition(),
                                              D->isParameterPack(),
                                              D->getIdentifier(), InstParams);
-  if (D->hasDefaultArgument()) {
+  if (D->hasDefaultArgument() && !D->defaultArgumentWasInherited()) {
     NestedNameSpecifierLoc QualifierLoc =
         D->getDefaultArgument().getTemplateQualifierLoc();
     QualifierLoc =

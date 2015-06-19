@@ -5705,6 +5705,10 @@ public:
       return "vector";
     return "";
   }
+
+  bool useFloat128ManglingForLongDouble() const override {
+    return true;
+  }
 };
 
 const Builtin::Info SystemZTargetInfo::BuiltinInfo[] = {
