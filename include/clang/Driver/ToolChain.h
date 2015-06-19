@@ -173,7 +173,10 @@ public:
                 bool &isSuccess) const;
 
   /// Choose a tool to use to handle the action \p JA.
-  Tool *SelectTool(const JobAction &JA) const;
+  ///
+  /// This can be overridden when a particular ToolChain needs to use
+  /// a C compiler other than Clang.
+  virtual Tool *SelectTool(const JobAction &JA) const;
 
   // Helper methods
 
