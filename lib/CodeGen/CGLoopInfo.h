@@ -91,8 +91,13 @@ public:
 
   /// \brief Begin a new structured loop. The set of staged attributes will be
   /// applied to the loop and then cleared.
-  void push(llvm::BasicBlock *Header,
+  void Push(llvm::BasicBlock *Header,
             llvm::ArrayRef<const Attr *> Attrs = llvm::None);
+
+  void push(llvm::BasicBlock *Header,
+            llvm::ArrayRef<const Attr *> Attrs = llvm::None) {
+    Push(Header, Attrs);
+  }
 
   /// Extend the code region as part of a parallel loop which might be inside
   /// another llvm function.

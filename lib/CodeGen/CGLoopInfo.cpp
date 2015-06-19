@@ -87,7 +87,7 @@ LoopInfo::LoopInfo(llvm::BasicBlock *Header, const LoopAttributes &Attrs)
 LoopInfo::LoopInfo(llvm::MDNode *LoopID, const LoopAttributes &Attrs)
   : LoopID(LoopID), Header(0), Attrs(Attrs) { }
 
-void LoopInfoStack::push(BasicBlock *Header,
+void LoopInfoStack::Push(BasicBlock *Header,
                          ArrayRef<const clang::Attr *> Attrs) {
   for (const auto *Attr : Attrs) {
     const LoopHintAttr *LH = dyn_cast<LoopHintAttr>(Attr);
@@ -103,7 +103,7 @@ void LoopInfoStack::push(BasicBlock *Header,
     case LoopHintAttr::Interleave:
       if (State == LoopHintAttr::AssumeSafety) {
         // Apply "llvm.mem.parallel_loop_access" metadata to load/stores.
-        setParallel(true);
+        SetParallel(true);
       }
       break;
     case LoopHintAttr::VectorizeWidth:

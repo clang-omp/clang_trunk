@@ -1876,9 +1876,9 @@ void Driver::BuildJobsForAction(Compilation &C,
     // already appended to it.
     if (Input.getOption().matches(options::OPT_INPUT)) {
       const char *Name = Input.getValue();
-      Result = InputInfo(Name, A->getType(), Name);
+      Result = InputInfo(Name, A, Name, !IA->getOffloadingDevice());
     } else {
-      Result = InputInfo(&Input, A->getType(), "");
+      Result = InputInfo(&Input, A, "", !IA->getOffloadingDevice());
     }
     return;
   }

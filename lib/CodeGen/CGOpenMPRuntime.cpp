@@ -111,9 +111,7 @@ CGOpenMPRuntime::CGOpenMPRuntime(CodeGenModule &CGM)
   if (ME.getError())
     return;
 
-  llvm::Module *M = ME.get();
-  llvm::NamedMDNode *MD = M->getNamedMetadata("openmp.offloading.info");
-
+  llvm::NamedMDNode *MD = ME.get()->getNamedMetadata("openmp.offloading.info");
   if (!MD)
     return;
 
