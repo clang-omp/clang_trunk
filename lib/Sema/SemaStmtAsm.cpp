@@ -125,7 +125,7 @@ StmtResult Sema::ActOnGCCAsmStmt(SourceLocation AsmLoc, bool IsSimple,
   assert(AsmString->isAscii());
 
   bool ValidateConstraints =
-      DeclAttrsMatchCUDAMode(getLangOpts(), getCurFunctionDecl());
+      DeclAttrsMatchLanguage(getLangOpts(), getCurFunctionDecl());
 
   for (unsigned i = 0; i != NumOutputs; i++) {
     StringLiteral *Literal = Constraints[i];
