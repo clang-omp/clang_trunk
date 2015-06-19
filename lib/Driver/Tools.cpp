@@ -4405,9 +4405,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back("-fblocks-runtime-optional");
   }
 
-  // -fmodules enables modules (off by default).
+  // -fmodules enables the use of precompiled modules (off by default).
   // Users can pass -fno-cxx-modules to turn off modules support for
-  // C++/Objective-C++ programs, which is a little less mature.
+  // C++/Objective-C++ programs.
   bool HaveModules = false;
   if (Args.hasFlag(options::OPT_fmodules, options::OPT_fno_modules, false)) {
     bool AllowedInCXX = Args.hasFlag(options::OPT_fcxx_modules, 
@@ -4419,11 +4419,11 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
-  // -fmodule-maps enables module map processing (off by default) for header
-  // checking.  It is implied by -fmodules.
-  if (Args.hasFlag(options::OPT_fmodule_maps, options::OPT_fno_module_maps,
-                   false)) {
-    CmdArgs.push_back("-fmodule-maps");
+  // -fmodule-maps enables implicit reading of module map files. By default,
+  // this is enabled if we are using precompiled modules.
+  if (Args.hasFlag(options::OPT_fimplicit_module_maps,
+                   options::OPT_fno_implicit_module_maps, HaveModules)) {
+    CmdArgs.push_back("-fimplicit-module-maps");
   }
 
   // -fmodules-decluse checks that modules used are declared so (off by
