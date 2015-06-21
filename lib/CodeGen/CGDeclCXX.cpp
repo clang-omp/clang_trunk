@@ -448,6 +448,7 @@ CodeGenModule::EmitCXXGlobalInitFunc() {
       if (!(OpenMPRuntime && LangOpts.OpenMPTargetMode))
         AddGlobalCtor(Fn, Priority);
     }
+    PrioritizedCXXGlobalInits.clear();
   }
 
   SmallString<128> FileName;
@@ -479,7 +480,6 @@ CodeGenModule::EmitCXXGlobalInitFunc() {
     AddGlobalCtor(Fn);
 
   CXXGlobalInits.clear();
-  PrioritizedCXXGlobalInits.clear();
 }
 
 void CodeGenModule::EmitCXXGlobalDtorFunc() {
