@@ -2581,6 +2581,7 @@ IdentifierInfo *Sema::getNullabilityKeyword(NullabilityKind nullability) {
       Ident___null_unspecified = PP.getIdentifierInfo("__null_unspecified");
     return Ident___null_unspecified;
   }
+  llvm_unreachable("Unknown nullability kind.");
 }
 
 /// Retrieve the identifier "NSError".
@@ -2614,6 +2615,8 @@ namespace {
     SingleLevelPointer,
     // Multi-level pointer (of any pointer kind).
     MultiLevelPointer,
+    // CFFooRef*
+    MaybePointerToCFRef,
     // CFErrorRef*
     CFErrorRefPointer,
     // NSError**
@@ -2754,6 +2757,9 @@ static PointerDeclaratorKind classifyPointerDeclarator(Sema &S,
   case 1:
     return PointerDeclaratorKind::SingleLevelPointer;
 
+  case 2:
+    return PointerDeclaratorKind::MaybePointerToCFRef;
+
   default:
     return PointerDeclaratorKind::MultiLevelPointer;
   }
@@ -2786,9 +2792,12 @@ static FileID getNullabilityCompletenessCheckFileID(Sema &S,
   // We don't want to perform completeness checks on the main file or in
   // system headers.
   const SrcMgr::FileInfo &fileInfo = sloc.getFile();
-  if (fileInfo.getIncludeLoc().isInvalid() ||
-      fileInfo.getFileCharacteristic() != SrcMgr::C_User)
+  if (fileInfo.getIncludeLoc().isInvalid())
     return FileID();
+  if (fileInfo.getFileCharacteristic() != SrcMgr::C_User &&
+      S.Diags.getSuppressSystemWarnings()) {
+    return FileID();
+  }
 
   return file;
 }
@@ -2894,6 +2903,8 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
   // Determine whether we should infer __nonnull on pointer types.
   Optional<NullabilityKind> inferNullability;
   bool inferNullabilityCS = false;
+  bool inferNullabilityInnerOnly = false;
+  bool inferNullabilityInnerOnlyComplete = false;
 
   // Are we in an assume-nonnull region?
   bool inAssumeNonNullRegion = false;
@@ -2911,7 +2922,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
       if (!fileNullability.SawTypeNullability) {
         if (fileNullability.PointerLoc.isValid()) {
           S.Diag(fileNullability.PointerLoc, diag::warn_nullability_missing)
-              << fileNullability.PointerKind;
+            << static_cast<unsigned>(fileNullability.PointerKind);
         }
 
         fileNullability.SawTypeNullability = true;
@@ -3007,6 +3018,31 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
         if (isFunctionOrMethod && inAssumeNonNullRegion)
           inferNullability = NullabilityKind::Nullable;
         break;
+
+      case PointerDeclaratorKind::MaybePointerToCFRef:
+        if (isFunctionOrMethod) {
+          // On pointer-to-pointer parameters marked cf_returns_retained or
+          // cf_returns_not_retained, if the outer pointer is explicit then
+          // infer the inner pointer as __nullable.
+          auto hasCFReturnsAttr = [](const AttributeList *NextAttr) -> bool {
+            while (NextAttr) {
+              if (NextAttr->getKind() == AttributeList::AT_CFReturnsRetained ||
+                  NextAttr->getKind() == AttributeList::AT_CFReturnsNotRetained)
+                return true;
+              NextAttr = NextAttr->getNext();
+            }
+            return false;
+          };
+          if (const auto *InnermostChunk = D.getInnermostNonParenChunk()) {
+            if (hasCFReturnsAttr(D.getAttributes()) ||
+                hasCFReturnsAttr(InnermostChunk->getAttrs()) ||
+                hasCFReturnsAttr(D.getDeclSpec().getAttributes().getList())) {
+              inferNullability = NullabilityKind::Nullable;
+              inferNullabilityInnerOnly = true;
+            }
+          }
+        }
+        break;
       }
       break;
 
@@ -3047,9 +3083,10 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
       return nullptr;
 
     // If we're supposed to infer nullability, do so now.
-    if (inferNullability) {
-      auto syntax = inferNullabilityCS ? AttributeList::AS_ContextSensitiveKeyword
-                                       : AttributeList::AS_Keyword;
+    if (inferNullability && !inferNullabilityInnerOnlyComplete) {
+      AttributeList::Syntax syntax
+        = inferNullabilityCS ? AttributeList::AS_ContextSensitiveKeyword
+                             : AttributeList::AS_Keyword;
       AttributeList *nullabilityAttr = state.getDeclarator().getAttributePool()
                                          .create(
                                            S.getNullabilityKeyword(
@@ -3059,6 +3096,9 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
                                            nullptr, 0, syntax);
 
       spliceAttrIntoList(*nullabilityAttr, attrs);
+
+      if (inferNullabilityInnerOnly)
+        inferNullabilityInnerOnlyComplete = true;
       return nullabilityAttr;
     }
 
@@ -5029,7 +5069,7 @@ bool Sema::checkNullabilityTypeSpecifier(QualType &type,
       // annotation, complain about it.
       if (fileNullability.PointerLoc.isValid()) {
         Diag(fileNullability.PointerLoc, diag::warn_nullability_missing)
-          << fileNullability.PointerKind;
+          << static_cast<unsigned>(fileNullability.PointerKind);
       }
 
       fileNullability.SawTypeNullability = true;
@@ -5933,10 +5973,18 @@ bool Sema::hasVisibleDefinition(NamedDecl *D, NamedDecl **Suggested) {
   }
   assert(D && "missing definition for pattern of instantiated definition");
 
-  // FIXME: If we merged any other decl into D, and that declaration is visible,
-  // then we should consider a definition to be visible.
   *Suggested = D;
-  return LookupResult::isVisible(*this, D);
+  if (LookupResult::isVisible(*this, D))
+    return true;
+
+  // The external source may have additional definitions of this type that are
+  // visible, so complete the redeclaration chain now and ask again.
+  if (auto *Source = Context.getExternalSource()) {
+    Source->CompleteRedeclChain(D);
+    return LookupResult::isVisible(*this, D);
+  }
+
+  return false;
 }
 
 /// Locks in the inheritance model for the given class and all of its bases.

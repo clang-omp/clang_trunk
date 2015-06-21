@@ -2668,9 +2668,6 @@ void Parser::ParseBlockId(SourceLocation CaretLoc) {
   Declarator DeclaratorInfo(DS, Declarator::BlockLiteralContext);
   ParseDeclarator(DeclaratorInfo);
 
-  // We do this for: ^ __attribute__((noreturn)) {, as DS has the attributes.
-  DeclaratorInfo.takeAttributes(DS.getAttributes(), SourceLocation());
-
   MaybeParseGNUAttributes(DeclaratorInfo);
 
   // Inform sema that we are starting a block.
