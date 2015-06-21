@@ -6330,7 +6330,7 @@ void cloudabi::Link::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_Z_Flag);
   Args.AddAllArgs(CmdArgs, options::OPT_r);
 
-  if (D.IsUsingLTO(ToolChain, Args))
+  if (D.IsUsingLTO(Args))
     AddGoldPlugin(ToolChain, Args, CmdArgs, JA.getOffloadingDevice());
 
   AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs, JA.getOffloadingDevice());
@@ -6481,8 +6481,7 @@ void darwin::Link::AddLinkArgs(Compilation &C,
   // If we are using LTO, then automatically create a temporary file path for
   // the linker to use, so that it's lifetime will extend past a possible
   // dsymutil step.
-  if (Version[0] >= 116 && D.IsUsingLTO(getToolChain(), Args) &&
-      NeedsTempPath(Inputs)) {
+  if (Version[0] >= 116 && D.IsUsingLTO(Args) && NeedsTempPath(Inputs)) {
     const char *TmpPath = C.getArgs().MakeArgString(
       D.GetTemporaryPath("cc", types::getTypeTempSuffix(types::TY_Object)));
     C.addTempFile(TmpPath);
@@ -7567,7 +7566,7 @@ void freebsd::Link::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_Z_Flag);
   Args.AddAllArgs(CmdArgs, options::OPT_r);
 
-  if (D.IsUsingLTO(getToolChain(), Args))
+  if (D.IsUsingLTO(Args))
     AddGoldPlugin(ToolChain, Args, CmdArgs, JA.getOffloadingDevice());
 
   bool NeedsSanitizerDeps = addSanitizerRuntimes(ToolChain, Args, CmdArgs);
@@ -8440,7 +8439,7 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
   bool OpenMP = Args.hasArg(options::OPT_fopenmp);
   bool OpenMPTarget = OpenMP && Args.hasArg(options::OPT_omptargets_EQ);
   bool OpenMPRTIsBitcode = false;
-  if (D.IsUsingLTO(getToolChain(), Args)) {
+  if (D.IsUsingLTO(Args)) {
     if (!OpenMPTarget)
       AddGoldPlugin(ToolChain, Args, CmdArgs, JA.getOffloadingDevice());
     else {
