@@ -108,7 +108,7 @@ void Driver::ParseDriverMode(ArrayRef<const char *> Args) {
   }
 }
 
-InputArgList *Driver::ParseArgStrings(ArrayRef<const char *> ArgStrings) {
+InputArgList Driver::ParseArgStrings(ArrayRef<const char *> ArgStrings) {
   llvm::PrettyStackTraceString CrashInfo("Command line argument parsing");
 
   unsigned IncludedFlagsBitmask;
@@ -117,19 +117,19 @@ InputArgList *Driver::ParseArgStrings(ArrayRef<const char *> ArgStrings) {
     getIncludeExcludeOptionFlagMasks();
 
   unsigned MissingArgIndex, MissingArgCount;
-  InputArgList *Args =
+  InputArgList Args =
       getOpts().ParseArgs(ArgStrings, MissingArgIndex, MissingArgCount,
                           IncludedFlagsBitmask, ExcludedFlagsBitmask);
 
   // Check for missing argument error.
   if (MissingArgCount)
     Diag(clang::diag::err_drv_missing_argument)
-      << Args->getArgString(MissingArgIndex) << MissingArgCount;
+        << Args.getArgString(MissingArgIndex) << MissingArgCount;
 
   // Check for unsupported options.
-  for (const Arg *A : *Args) {
+  for (const Arg *A : Args) {
     if (A->getOption().hasFlag(options::Unsupported)) {
-      Diag(clang::diag::err_drv_unsupported_opt) << A->getAsString(*Args);
+      Diag(clang::diag::err_drv_unsupported_opt) << A->getAsString(Args);
       continue;
     }
 
@@ -138,13 +138,12 @@ InputArgList *Driver::ParseArgStrings(ArrayRef<const char *> ArgStrings) {
          && A->containsValue(""))
          || (A->getOption().matches(options::OPT_omptargets_EQ)
          && !A->getNumValues()) ) {
-      Diag(clang::diag::warn_drv_empty_joined_argument) <<
-        A->getAsString(*Args);
+      Diag(clang::diag::warn_drv_empty_joined_argument) << A->getAsString(Args);
     }
   }
 
-  for (const Arg *A : Args->filtered(options::OPT_UNKNOWN))
-    Diags.Report(diag::err_drv_unknown_argument) << A->getAsString(*Args);
+  for (const Arg *A : Args.filtered(options::OPT_UNKNOWN))
+    Diags.Report(diag::err_drv_unknown_argument) << A->getAsString(Args);
 
   return Args;
 }
@@ -316,13 +315,13 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
   // FIXME: This stuff needs to go into the Compilation, not the driver.
   bool CCCPrintActions;
 
-  InputArgList *Args = ParseArgStrings(ArgList.slice(1));
+  InputArgList Args = ParseArgStrings(ArgList.slice(1));
 
   // -no-canonical-prefixes is used very early in main.
-  Args->ClaimAllArgs(options::OPT_no_canonical_prefixes);
+  Args.ClaimAllArgs(options::OPT_no_canonical_prefixes);
 
   // Ignore -pipe.
-  Args->ClaimAllArgs(options::OPT_pipe);
+  Args.ClaimAllArgs(options::OPT_pipe);
 
   // Extract -ccc args.
   //
@@ -330,12 +329,12 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
   // should be outside in the client; the parts that aren't should have proper
   // options, either by introducing new ones or by overloading gcc ones like -V
   // or -b.
-  CCCPrintActions = Args->hasArg(options::OPT_ccc_print_phases);
-  CCCPrintBindings = Args->hasArg(options::OPT_ccc_print_bindings);
-  if (const Arg *A = Args->getLastArg(options::OPT_ccc_gcc_name))
+  CCCPrintActions = Args.hasArg(options::OPT_ccc_print_phases);
+  CCCPrintBindings = Args.hasArg(options::OPT_ccc_print_bindings);
+  if (const Arg *A = Args.getLastArg(options::OPT_ccc_gcc_name))
     CCCGenericGCCName = A->getValue();
-  CCCUsePCH = Args->hasFlag(options::OPT_ccc_pch_is_pch,
-                            options::OPT_ccc_pch_is_pth);
+  CCCUsePCH =
+      Args.hasFlag(options::OPT_ccc_pch_is_pch, options::OPT_ccc_pch_is_pth);
   // FIXME: DefaultTargetTriple is used by the target-prefixed calls to as/ld
   // and getToolChain is const.
   if (IsCLMode()) {
@@ -345,44 +344,47 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
     T.setEnvironment(llvm::Triple::MSVC);
     DefaultTargetTriple = T.str();
   }
-  if (const Arg *A = Args->getLastArg(options::OPT_target))
+  if (const Arg *A = Args.getLastArg(options::OPT_target))
     DefaultTargetTriple = A->getValue();
-  if (const Arg *A = Args->getLastArg(options::OPT_ccc_install_dir))
+  if (const Arg *A = Args.getLastArg(options::OPT_ccc_install_dir))
     Dir = InstalledDir = A->getValue();
-  for (const Arg *A : Args->filtered(options::OPT_B)) {
+  for (const Arg *A : Args.filtered(options::OPT_B)) {
     A->claim();
     PrefixDirs.push_back(A->getValue(0));
   }
-  if (const Arg *A = Args->getLastArg(options::OPT__sysroot_EQ))
+  if (const Arg *A = Args.getLastArg(options::OPT__sysroot_EQ))
     SysRoot = A->getValue();
-  if (const Arg *A = Args->getLastArg(options::OPT__dyld_prefix_EQ))
+  if (const Arg *A = Args.getLastArg(options::OPT__dyld_prefix_EQ))
     DyldPrefix = A->getValue();
-  if (Args->hasArg(options::OPT_nostdlib))
+  if (Args.hasArg(options::OPT_nostdlib))
     UseStdLib = false;
 
-  if (const Arg *A = Args->getLastArg(options::OPT_resource_dir))
+  if (const Arg *A = Args.getLastArg(options::OPT_resource_dir))
     ResourceDir = A->getValue();
 
-  if (const Arg *A = Args->getLastArg(options::OPT_save_temps_EQ)) {
+  if (const Arg *A = Args.getLastArg(options::OPT_save_temps_EQ)) {
     SaveTemps = llvm::StringSwitch<SaveTempsMode>(A->getValue())
                     .Case("cwd", SaveTempsCwd)
                     .Case("obj", SaveTempsObj)
                     .Default(SaveTempsCwd);
   }
 
+  std::unique_ptr<llvm::opt::InputArgList> UArgs =
+      llvm::make_unique<InputArgList>(std::move(Args));
+
   // Perform the default argument translations.
-  DerivedArgList *TranslatedArgs = TranslateInputArgs(*Args);
+  DerivedArgList *TranslatedArgs = TranslateInputArgs(*UArgs);
 
   // Owned by the host.
-  HostToolChain = &getToolChain(*Args);
+  HostToolChain = &getToolChain(*UArgs);
 
   // Get the toolchains for the OpenMP targets if any
   OpenMPTargetToolChains.clear();
 
-  if (Args->hasArg(options::OPT_fopenmp)){
+  if (UArgs->hasArg(options::OPT_fopenmp)){
 
     // check if there is any openmp target we care generating code to
-    Arg *Tgts = Args->getLastArg(options::OPT_omptargets_EQ);
+    Arg *Tgts = UArgs->getLastArg(options::OPT_omptargets_EQ);
 
     // If omptargets was specified use only the required targets
     if ( Tgts && Tgts->getNumValues() ){
@@ -403,7 +405,8 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
   }
 
   // The compilation takes ownership of Args.
-  Compilation *C = new Compilation(*this, *HostToolChain, Args, TranslatedArgs);
+  Compilation *C = new Compilation(*this, *HostToolChain, UArgs.release(),
+                                   TranslatedArgs);
 
   if (!HandleImmediateArgs(*C))
     return C;
