@@ -1301,7 +1301,7 @@ public:
            x.data[1] == y.data[1];
   }
 };
-} // namespace llvm
+}
 
 extern "C" {
 CXCursorSet clang_createCXCursorSet() {
@@ -1377,7 +1377,7 @@ namespace {
       }
     }
   };
-} // namespace
+}
 
 void *cxcursor::createOverridenCXCursorsPool() {
   return new OverridenCursorsPool();

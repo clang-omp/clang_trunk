@@ -2421,7 +2421,7 @@ private:
   /// in-class initializer.
   MismatchResult analyzeInClassInitializer();
 };
-} // namespace
+}
 
 MismatchingNewDeleteDetector::MismatchResult
 MismatchingNewDeleteDetector::analyzeDeleteExpr(const CXXDeleteExpr *DE) {
@@ -6568,7 +6568,7 @@ public:
     return CacheEntry = ExprError();
   }
 };
-} // namespace
+}
 
 ExprResult
 Sema::CorrectDelayedTyposInExpr(Expr *E, VarDecl *InitDecl,

@@ -103,7 +103,7 @@ namespace clang {
     void Visit##Type(Type *);
 #include "clang/AST/StmtNodes.inc"
   };
-} // namespace clang
+}
 
 void ASTStmtReader::
 ReadTemplateKWAndArgsInfo(ASTTemplateKWAndArgsInfo &Args,

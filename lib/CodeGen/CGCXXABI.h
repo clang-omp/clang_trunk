@@ -546,7 +546,7 @@ CGCXXABI *CreateItaniumCXXABI(CodeGenModule &CGM);
 /// Creates a Microsoft-family ABI.
 CGCXXABI *CreateMicrosoftCXXABI(CodeGenModule &CGM);
 
-} // namespace CodeGen
-} // namespace clang
+}
+}
 
 #endif

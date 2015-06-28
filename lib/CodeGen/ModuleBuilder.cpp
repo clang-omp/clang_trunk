@@ -262,7 +262,7 @@ namespace {
       Builder->AddDependentLib(Lib);
     }
   };
-} // namespace
+}
 
 void CodeGenerator::anchor() { }
 

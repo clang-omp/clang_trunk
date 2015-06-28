@@ -201,7 +201,7 @@ namespace sema {
   class LambdaScopeInfo;
   class PossiblyUnreachableDiag;
   class TemplateDeductionInfo;
-} // namespace sema
+}
 
 namespace threadSafety {
   class BeforeSet;

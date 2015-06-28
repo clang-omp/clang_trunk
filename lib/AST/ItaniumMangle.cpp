@@ -411,7 +411,7 @@ private:
   void mangleFunctionParam(const ParmVarDecl *parm);
 };
 
-} // namespace
+}
 
 bool ItaniumMangleContextImpl::shouldMangleCXXName(const NamedDecl *D) {
   const FunctionDecl *FD = dyn_cast<FunctionDecl>(D);

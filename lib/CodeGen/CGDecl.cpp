@@ -532,7 +532,7 @@ namespace {
       CGF.EmitLifetimeEnd(Size, Addr);
     }
   };
-} // namespace
+}
 
 /// EmitAutoVarWithLifetime - Does the setup required for an automatic
 /// variable with lifetime.
@@ -1596,7 +1596,7 @@ namespace {
                               ElementType, Destroyer);
     }
   };
-} // namespace
+}
 
 /// pushIrregularPartialArrayCleanup - Push an EH cleanup to destroy
 /// already-constructed elements of the given array.  The cleanup
@@ -1661,7 +1661,7 @@ namespace {
       CGF.EmitARCRelease(Param, Precise);
     }
   };
-} // namespace
+}
 
 /// Emit an alloca (or GlobalValue depending on target)
 /// for the specified parameter and set up LocalDeclMap.

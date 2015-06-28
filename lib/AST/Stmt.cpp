@@ -161,7 +161,7 @@ static inline bad implements_getLocEnd(getLocEnd_t Stmt::*) { return bad(); }
   (void) is_good(implements_getLocStart(&type::getLocStart))
 #define ASSERT_IMPLEMENTS_getLocEnd(type)                                      \
   (void) is_good(implements_getLocEnd(&type::getLocEnd))
-} // namespace
+}
 
 /// Check whether the various Stmt classes implement their member
 /// functions.
@@ -211,7 +211,7 @@ namespace {
     return SourceRange(static_cast<const S*>(stmt)->getLocStart(),
                        static_cast<const S*>(stmt)->getLocEnd());
   }
-} // namespace
+}
 
 SourceRange Stmt::getSourceRange() const {
   switch (getStmtClass()) {

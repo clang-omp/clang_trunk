@@ -488,7 +488,7 @@ namespace {
                  const CXXRecordDecl *InVirtualSubobject,
                  CXXFinalOverriderMap &Overriders);
   };
-} // namespace
+}
 
 void FinalOverriderCollector::Collect(const CXXRecordDecl *RD, 
                                       bool VirtualBase,

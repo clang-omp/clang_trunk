@@ -1138,7 +1138,7 @@ ExprResult doComplexIntegralCast(Sema &S, Expr *op, QualType toType) {
   return S.ImpCastExprToType(op, S.Context.getComplexType(toType),
                              CK_IntegralComplexCast);
 }
-} // namespace
+}
 
 /// \brief Handle integer arithmetic conversions.  Helper function of
 /// UsualArithmeticConversions()
@@ -4289,7 +4289,7 @@ public:
 private:
   const IdentifierInfo *const FunctionName;
 };
-} // namespace
+}
 
 static TypoCorrection TryTypoCorrectionForCall(Sema &S, Expr *Fn,
                                                FunctionDecl *FDecl,
@@ -12006,7 +12006,7 @@ namespace {
       return E;
     }
   };
-} // namespace
+}
 
 ExprResult Sema::TransformToPotentiallyEvaluated(Expr *E) {
   assert(isUnevaluatedContext() &&
@@ -13372,7 +13372,7 @@ namespace {
     bool TraverseTemplateArgument(const TemplateArgument &Arg);
     bool TraverseRecordType(RecordType *T);
   };
-} // namespace
+}
 
 bool MarkReferencedDecls::TraverseTemplateArgument(
     const TemplateArgument &Arg) {
@@ -13471,7 +13471,7 @@ namespace {
         S.UpdateMarkingForLValueToRValue(E->getSubExpr());
     }
   };
-} // namespace
+}
 
 /// \brief Mark any declarations that appear within this expression or any
 /// potentially-evaluated subexpressions as "referenced".
@@ -13767,7 +13767,7 @@ namespace {
       return resolveDecl(E, E->getDecl());
     }
   };
-} // namespace
+}
 
 /// Given a function expression of unknown-any type, try to rebuild it
 /// to have a function type.
@@ -13858,7 +13858,7 @@ namespace {
       return resolveDecl(E, E->getDecl());
     }
   };
-} // namespace
+}
 
 /// Rebuilds a call expression which yielded __unknown_anytype.
 ExprResult RebuildUnknownAnyExpr::VisitCallExpr(CallExpr *E) {
