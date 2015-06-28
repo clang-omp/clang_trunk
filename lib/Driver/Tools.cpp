@@ -5444,9 +5444,9 @@ void Clang::AddClangCLArgs(const ArgList &Args, ArgStringList &CmdArgs) const {
   }
 }
 
-visualstudio::Compile *Clang::getCLFallback() const {
+visualstudio::Compiler *Clang::getCLFallback() const {
   if (!CLFallback)
-    CLFallback.reset(new visualstudio::Compile(getToolChain()));
+    CLFallback.reset(new visualstudio::Compiler(getToolChain()));
   return CLFallback.get();
 }
 
@@ -5746,15 +5746,15 @@ void gcc::Common::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void gcc::Preprocess::RenderExtraToolArgs(const JobAction &JA,
-                                          ArgStringList &CmdArgs,
-                                          const ArgList &Args) const {
+void gcc::Preprocessor::RenderExtraToolArgs(const JobAction &JA,
+                                            ArgStringList &CmdArgs,
+                                            const ArgList &Args) const {
   CmdArgs.push_back("-E");
 }
 
-void gcc::Compile::RenderExtraToolArgs(const JobAction &JA,
-                                       ArgStringList &CmdArgs,
-                                       const ArgList &Args) const {
+void gcc::Compiler::RenderExtraToolArgs(const JobAction &JA,
+                                        ArgStringList &CmdArgs,
+                                        const ArgList &Args) const {
   const Driver &D = getToolChain().getDriver();
 
   switch (JA.getType()) {
@@ -5776,9 +5776,9 @@ void gcc::Compile::RenderExtraToolArgs(const JobAction &JA,
   }
 }
 
-void gcc::Link::RenderExtraToolArgs(const JobAction &JA,
-                                    ArgStringList &CmdArgs,
-                                    const ArgList &Args) const {
+void gcc::Linker::RenderExtraToolArgs(const JobAction &JA,
+                                      ArgStringList &CmdArgs,
+                                      const ArgList &Args) const {
   // The types are (hopefully) good enough.
 
   if (!Args.hasArg(options::OPT_nostdlib))
@@ -5791,15 +5791,13 @@ void gcc::Link::RenderExtraToolArgs(const JobAction &JA,
 }
 
 // Hexagon tools start.
-void hexagon::Assemble::RenderExtraToolArgs(const JobAction &JA,
-                                        ArgStringList &CmdArgs) const {
-
-}
-void hexagon::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
-                               const InputInfo &Output,
-                               const InputInfoList &Inputs,
-                               const ArgList &Args,
-                               const char *LinkingOutput) const {
+void hexagon::Assembler::RenderExtraToolArgs(const JobAction &JA,
+                                             ArgStringList &CmdArgs) const {}
+void hexagon::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
+                                      const InputInfo &Output,
+                                      const InputInfoList &Inputs,
+                                      const ArgList &Args,
+                                      const char *LinkingOutput) const {
   claimNoWarnArgs(Args);
 
   const Driver &D = getToolChain().getDriver();
@@ -5858,8 +5856,8 @@ void hexagon::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void hexagon::Link::RenderExtraToolArgs(const JobAction &JA,
-                                    ArgStringList &CmdArgs) const {
+void hexagon::Linker::RenderExtraToolArgs(const JobAction &JA,
+                                          ArgStringList &CmdArgs) const {
   // The types are (hopefully) good enough.
 }
 
@@ -6017,11 +6015,11 @@ static void constructHexagonLinkArgs(Compilation &C, const JobAction &JA,
   }
 }
 
-void hexagon::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                               const InputInfo &Output,
-                               const InputInfoList &Inputs,
-                               const ArgList &Args,
-                               const char *LinkingOutput) const {
+void hexagon::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                   const InputInfo &Output,
+                                   const InputInfoList &Inputs,
+                                   const ArgList &Args,
+                                   const char *LinkingOutput) const {
 
   const toolchains::Hexagon_TC& ToolChain =
     static_cast<const toolchains::Hexagon_TC&>(getToolChain());
@@ -6284,11 +6282,11 @@ const char *Clang::getDependencyFileName(const ArgList &Args,
   return Args.MakeArgString(Res + ".d");
 }
 
-void cloudabi::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                  const InputInfo &Output,
-                                  const InputInfoList &Inputs,
-                                  const ArgList &Args,
-                                  const char *LinkingOutput) const {
+void cloudabi::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                    const InputInfo &Output,
+                                    const InputInfoList &Inputs,
+                                    const ArgList &Args,
+                                    const char *LinkingOutput) const {
   const ToolChain &ToolChain = getToolChain();
   const Driver &D = ToolChain.getDriver();
   ArgStringList CmdArgs;
@@ -6354,11 +6352,11 @@ void cloudabi::Link::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void darwin::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
-                                    const InputInfo &Output,
-                                    const InputInfoList &Inputs,
-                                    const ArgList &Args,
-                                    const char *LinkingOutput) const {
+void darwin::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
+                                     const InputInfo &Output,
+                                     const InputInfoList &Inputs,
+                                     const ArgList &Args,
+                                     const char *LinkingOutput) const {
   ArgStringList CmdArgs;
 
   assert(Inputs.size() == 1 && "Unexpected number of inputs.");
@@ -6439,7 +6437,7 @@ void darwin::MachOTool::AddMachOArch(const ArgList &Args,
     CmdArgs.push_back("-force_cpusubtype_ALL");
 }
 
-bool darwin::Link::NeedsTempPath(const InputInfoList &Inputs) const {
+bool darwin::Linker::NeedsTempPath(const InputInfoList &Inputs) const {
   // We only need to generate a temp path for LTO if we aren't compiling object
   // files. When compiling source files, we run 'dsymutil' after linking. We
   // don't run 'dsymutil' when compiling object files.
@@ -6450,10 +6448,9 @@ bool darwin::Link::NeedsTempPath(const InputInfoList &Inputs) const {
   return false;
 }
 
-void darwin::Link::AddLinkArgs(Compilation &C,
-                               const ArgList &Args,
-                               ArgStringList &CmdArgs,
-                               const InputInfoList &Inputs) const {
+void darwin::Linker::AddLinkArgs(Compilation &C, const ArgList &Args,
+                                 ArgStringList &CmdArgs,
+                                 const InputInfoList &Inputs) const {
   const Driver &D = getToolChain().getDriver();
   const toolchains::MachO &MachOTC = getMachOToolChain();
 
@@ -6630,11 +6627,11 @@ void darwin::Link::AddLinkArgs(Compilation &C,
   Args.AddLastArg(CmdArgs, options::OPT_Mach);
 }
 
-void darwin::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                const InputInfo &Output,
-                                const InputInfoList &Inputs,
-                                const ArgList &Args,
-                                const char *LinkingOutput) const {
+void darwin::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                  const InputInfo &Output,
+                                  const InputInfoList &Inputs,
+                                  const ArgList &Args,
+                                  const char *LinkingOutput) const {
   assert(Output.getType() == types::TY_Image && "Invalid linker output type.");
 
   // If the number of arguments surpasses the system limits, we will encode the
@@ -6870,7 +6867,7 @@ void darwin::VerifyDebug::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void solaris::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
+void solaris::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
                                       const InputInfo &Output,
                                       const InputInfoList &Inputs,
                                       const ArgList &Args,
@@ -6891,11 +6888,11 @@ void solaris::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void solaris::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                  const InputInfo &Output,
-                                  const InputInfoList &Inputs,
-                                  const ArgList &Args,
-                                  const char *LinkingOutput) const {
+void solaris::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                   const InputInfo &Output,
+                                   const InputInfoList &Inputs,
+                                   const ArgList &Args,
+                                   const char *LinkingOutput) const {
   // FIXME: Find a real GCC, don't hard-code versions here
   std::string GCCLibPath = "/usr/gcc/4.5/lib/gcc/";
   const llvm::Triple &T = getToolChain().getTriple();
@@ -6999,11 +6996,11 @@ void solaris::Link::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void openbsd::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
-                                     const InputInfo &Output,
-                                     const InputInfoList &Inputs,
-                                     const ArgList &Args,
-                                     const char *LinkingOutput) const {
+void openbsd::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
+                                      const InputInfo &Output,
+                                      const InputInfoList &Inputs,
+                                      const ArgList &Args,
+                                      const char *LinkingOutput) const {
   claimNoWarnArgs(Args);
   ArgStringList CmdArgs;
   bool NeedsKPIC = false;
@@ -7105,11 +7102,11 @@ void openbsd::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void openbsd::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                 const InputInfo &Output,
-                                 const InputInfoList &Inputs,
-                                 const ArgList &Args,
-                                 const char *LinkingOutput) const {
+void openbsd::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                   const InputInfo &Output,
+                                   const InputInfoList &Inputs,
+                                   const ArgList &Args,
+                                   const char *LinkingOutput) const {
   const Driver &D = getToolChain().getDriver();
   ArgStringList CmdArgs;
 
@@ -7240,11 +7237,11 @@ void openbsd::Link::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void bitrig::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
-                                    const InputInfo &Output,
-                                    const InputInfoList &Inputs,
-                                    const ArgList &Args,
-                                    const char *LinkingOutput) const {
+void bitrig::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
+                                     const InputInfo &Output,
+                                     const InputInfoList &Inputs,
+                                     const ArgList &Args,
+                                     const char *LinkingOutput) const {
   claimNoWarnArgs(Args);
   ArgStringList CmdArgs;
 
@@ -7261,11 +7258,11 @@ void bitrig::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void bitrig::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                const InputInfo &Output,
-                                const InputInfoList &Inputs,
-                                const ArgList &Args,
-                                const char *LinkingOutput) const {
+void bitrig::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                  const InputInfo &Output,
+                                  const InputInfoList &Inputs,
+                                  const ArgList &Args,
+                                  const char *LinkingOutput) const {
   const Driver &D = getToolChain().getDriver();
   ArgStringList CmdArgs;
 
@@ -7380,11 +7377,11 @@ void bitrig::Link::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void freebsd::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
-                                     const InputInfo &Output,
-                                     const InputInfoList &Inputs,
-                                     const ArgList &Args,
-                                     const char *LinkingOutput) const {
+void freebsd::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
+                                      const InputInfo &Output,
+                                      const InputInfoList &Inputs,
+                                      const ArgList &Args,
+                                      const char *LinkingOutput) const {
   claimNoWarnArgs(Args);
   ArgStringList CmdArgs;
 
@@ -7463,11 +7460,11 @@ void freebsd::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void freebsd::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                 const InputInfo &Output,
-                                 const InputInfoList &Inputs,
-                                 const ArgList &Args,
-                                 const char *LinkingOutput) const {
+void freebsd::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                   const InputInfo &Output,
+                                   const InputInfoList &Inputs,
+                                   const ArgList &Args,
+                                   const char *LinkingOutput) const {
   const toolchains::FreeBSD &ToolChain =
       static_cast<const toolchains::FreeBSD &>(getToolChain());
   const Driver &D = ToolChain.getDriver();
@@ -7650,7 +7647,7 @@ void freebsd::Link::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void netbsd::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
+void netbsd::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
                                      const InputInfo &Output,
                                      const InputInfoList &Inputs,
                                      const ArgList &Args,
@@ -7726,11 +7723,11 @@ void netbsd::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void netbsd::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                 const InputInfo &Output,
-                                 const InputInfoList &Inputs,
-                                 const ArgList &Args,
-                                 const char *LinkingOutput) const {
+void netbsd::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                  const InputInfo &Output,
+                                  const InputInfoList &Inputs,
+                                  const ArgList &Args,
+                                  const char *LinkingOutput) const {
   const Driver &D = getToolChain().getDriver();
   ArgStringList CmdArgs;
 
@@ -7939,11 +7936,11 @@ void netbsd::Link::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void gnutools::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
-                                      const InputInfo &Output,
-                                      const InputInfoList &Inputs,
-                                      const ArgList &Args,
-                                      const char *LinkingOutput) const {
+void gnutools::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
+                                       const InputInfo &Output,
+                                       const InputInfoList &Inputs,
+                                       const ArgList &Args,
+                                       const char *LinkingOutput) const {
   claimNoWarnArgs(Args);
 
   ArgStringList CmdArgs;
@@ -8320,11 +8317,11 @@ static const char *getLDMOption(const llvm::Triple &T, const ArgList &Args) {
   }
 }
 
-void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                  const InputInfo &Output,
-                                  const InputInfoList &Inputs,
-                                  const ArgList &Args,
-                                  const char *LinkingOutput) const {
+void gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                    const InputInfo &Output,
+                                    const InputInfoList &Inputs,
+                                    const ArgList &Args,
+                                    const char *LinkingOutput) const {
   const toolchains::Linux &ToolChain =
       static_cast<const toolchains::Linux &>(getToolChain());
   const Driver &D = ToolChain.getDriver();
@@ -8560,11 +8557,11 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
 // for the various SFI requirements like register masking. The assembly tool
 // inserts the file containing the macros as an input into all the assembly
 // jobs.
-void nacltools::AssembleARM::ConstructJob(Compilation &C, const JobAction &JA,
-                                          const InputInfo &Output,
-                                          const InputInfoList &Inputs,
-                                          const ArgList &Args,
-                                          const char *LinkingOutput) const {
+void nacltools::AssemblerARM::ConstructJob(Compilation &C, const JobAction &JA,
+                                           const InputInfo &Output,
+                                           const InputInfoList &Inputs,
+                                           const ArgList &Args,
+                                           const char *LinkingOutput) const {
   const toolchains::NaCl_TC& ToolChain =
     static_cast<const toolchains::NaCl_TC&>(getToolChain());
   InputInfo NaClMacros(ToolChain.GetNaClArmMacrosPath(), &JA,
@@ -8572,20 +8569,19 @@ void nacltools::AssembleARM::ConstructJob(Compilation &C, const JobAction &JA,
   InputInfoList NewInputs;
   NewInputs.push_back(NaClMacros);
   NewInputs.append(Inputs.begin(), Inputs.end());
-  gnutools::Assemble::ConstructJob(C, JA, Output, NewInputs, Args,
-                                   LinkingOutput);
+  gnutools::Assembler::ConstructJob(C, JA, Output, NewInputs, Args,
+                                    LinkingOutput);
 }
-
 
 // This is quite similar to gnutools::link::ConstructJob with changes that
 // we use static by default, do not yet support sanitizers or LTO, and a few
 // others. Eventually we can support more of that and hopefully migrate back
 // to gnutools::link.
-void nacltools::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                   const InputInfo &Output,
-                                   const InputInfoList &Inputs,
-                                   const ArgList &Args,
-                                   const char *LinkingOutput) const {
+void nacltools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                     const InputInfo &Output,
+                                     const InputInfoList &Inputs,
+                                     const ArgList &Args,
+                                     const char *LinkingOutput) const {
 
   const toolchains::NaCl_TC &ToolChain =
       static_cast<const toolchains::NaCl_TC &>(getToolChain());
@@ -8719,12 +8715,11 @@ void nacltools::Link::ConstructJob(Compilation &C, const JobAction &JA,
                                           ToolChain.Linker.c_str(), CmdArgs));
 }
 
-
-void minix::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
-                                   const InputInfo &Output,
-                                   const InputInfoList &Inputs,
-                                   const ArgList &Args,
-                                   const char *LinkingOutput) const {
+void minix::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
+                                    const InputInfo &Output,
+                                    const InputInfoList &Inputs,
+                                    const ArgList &Args,
+                                    const char *LinkingOutput) const {
   claimNoWarnArgs(Args);
   ArgStringList CmdArgs;
 
@@ -8740,11 +8735,11 @@ void minix::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void minix::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                               const InputInfo &Output,
-                               const InputInfoList &Inputs,
-                               const ArgList &Args,
-                               const char *LinkingOutput) const {
+void minix::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                 const InputInfo &Output,
+                                 const InputInfoList &Inputs,
+                                 const ArgList &Args,
+                                 const char *LinkingOutput) const {
   const Driver &D = getToolChain().getDriver();
   ArgStringList CmdArgs;
 
@@ -8801,11 +8796,11 @@ void minix::Link::ConstructJob(Compilation &C, const JobAction &JA,
 
 // For now, DragonFly Assemble does just about the same as for
 // FreeBSD, but this may change soon.
-void dragonfly::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
-                                       const InputInfo &Output,
-                                       const InputInfoList &Inputs,
-                                       const ArgList &Args,
-                                       const char *LinkingOutput) const {
+void dragonfly::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
+                                        const InputInfo &Output,
+                                        const InputInfoList &Inputs,
+                                        const ArgList &Args,
+                                        const char *LinkingOutput) const {
   claimNoWarnArgs(Args);
   ArgStringList CmdArgs;
 
@@ -8826,11 +8821,11 @@ void dragonfly::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void dragonfly::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                   const InputInfo &Output,
-                                   const InputInfoList &Inputs,
-                                   const ArgList &Args,
-                                   const char *LinkingOutput) const {
+void dragonfly::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                     const InputInfo &Output,
+                                     const InputInfoList &Inputs,
+                                     const ArgList &Args,
+                                     const char *LinkingOutput) const {
   const Driver &D = getToolChain().getDriver();
   ArgStringList CmdArgs;
   bool UseGCC47 = llvm::sys::fs::exists("/usr/lib/gcc47");
@@ -8996,11 +8991,11 @@ static std::string FindVisualStudioExecutable(const ToolChain &TC,
   return Exe;
 }
 
-void visualstudio::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                      const InputInfo &Output,
-                                      const InputInfoList &Inputs,
-                                      const ArgList &Args,
-                                      const char *LinkingOutput) const {
+void visualstudio::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                        const InputInfo &Output,
+                                        const InputInfoList &Inputs,
+                                        const ArgList &Args,
+                                        const char *LinkingOutput) const {
   ArgStringList CmdArgs;
   const ToolChain &TC = getToolChain();
 
@@ -9142,15 +9137,15 @@ void visualstudio::Link::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void visualstudio::Compile::ConstructJob(Compilation &C, const JobAction &JA,
-                                         const InputInfo &Output,
-                                         const InputInfoList &Inputs,
-                                         const ArgList &Args,
-                                         const char *LinkingOutput) const {
+void visualstudio::Compiler::ConstructJob(Compilation &C, const JobAction &JA,
+                                          const InputInfo &Output,
+                                          const InputInfoList &Inputs,
+                                          const ArgList &Args,
+                                          const char *LinkingOutput) const {
   C.addCommand(GetCommand(C, JA, Output, Inputs, Args, LinkingOutput));
 }
 
-std::unique_ptr<Command> visualstudio::Compile::GetCommand(
+std::unique_ptr<Command> visualstudio::Compiler::GetCommand(
     Compilation &C, const JobAction &JA, const InputInfo &Output,
     const InputInfoList &Inputs, const ArgList &Args,
     const char *LinkingOutput) const {
@@ -9238,15 +9233,14 @@ std::unique_ptr<Command> visualstudio::Compile::GetCommand(
                                     CmdArgs);
 }
 
-
 /// XCore Tools
 // We pass assemble and link construction to the xcc tool.
 
-void XCore::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
-                                       const InputInfo &Output,
-                                       const InputInfoList &Inputs,
-                                       const ArgList &Args,
-                                       const char *LinkingOutput) const {
+void XCore::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
+                                    const InputInfo &Output,
+                                    const InputInfoList &Inputs,
+                                    const ArgList &Args,
+                                    const char *LinkingOutput) const {
   claimNoWarnArgs(Args);
   ArgStringList CmdArgs;
 
@@ -9276,11 +9270,11 @@ void XCore::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void XCore::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                   const InputInfo &Output,
-                                   const InputInfoList &Inputs,
-                                   const ArgList &Args,
-                                   const char *LinkingOutput) const {
+void XCore::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                 const InputInfo &Output,
+                                 const InputInfoList &Inputs,
+                                 const ArgList &Args,
+                                 const char *LinkingOutput) const {
   ArgStringList CmdArgs;
 
   if (Output.isFilename()) {
@@ -9598,11 +9592,11 @@ void NVPTX::Link::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void CrossWindows::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
-                                          const InputInfo &Output,
-                                          const InputInfoList &Inputs,
-                                          const ArgList &Args,
-                                          const char *LinkingOutput) const {
+void CrossWindows::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
+                                           const InputInfo &Output,
+                                           const InputInfoList &Inputs,
+                                           const ArgList &Args,
+                                           const char *LinkingOutput) const {
   claimNoWarnArgs(Args);
   const auto &TC =
       static_cast<const toolchains::CrossWindowsToolChain &>(getToolChain());
@@ -9636,11 +9630,11 @@ void CrossWindows::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void CrossWindows::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                      const InputInfo &Output,
-                                      const InputInfoList &Inputs,
-                                      const ArgList &Args,
-                                      const char *LinkingOutput) const {
+void CrossWindows::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                        const InputInfo &Output,
+                                        const InputInfoList &Inputs,
+                                        const ArgList &Args,
+                                        const char *LinkingOutput) const {
   const auto &TC =
       static_cast<const toolchains::CrossWindowsToolChain &>(getToolChain());
   const llvm::Triple &T = TC.getTriple();
@@ -9778,11 +9772,11 @@ void CrossWindows::Link::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
 }
 
-void tools::SHAVE::Compile::ConstructJob(Compilation &C, const JobAction &JA,
-                                         const InputInfo &Output,
-                                         const InputInfoList &Inputs,
-                                         const ArgList &Args,
-                                         const char *LinkingOutput) const {
+void tools::SHAVE::Compiler::ConstructJob(Compilation &C, const JobAction &JA,
+                                          const InputInfo &Output,
+                                          const InputInfoList &Inputs,
+                                          const ArgList &Args,
+                                          const char *LinkingOutput) const {
 
   ArgStringList CmdArgs;
 
@@ -9823,12 +9817,11 @@ void tools::SHAVE::Compile::ConstructJob(Compilation &C, const JobAction &JA,
       llvm::make_unique<Command>(JA, *this, Args.MakeArgString(Exec), CmdArgs));
 }
 
-void tools::SHAVE::Assemble::ConstructJob(Compilation &C,
-                                          const JobAction &JA,
-                                          const InputInfo &Output,
-                                          const InputInfoList &Inputs,
-                                          const ArgList &Args,
-                                          const char *LinkingOutput) const {
+void tools::SHAVE::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
+                                           const InputInfo &Output,
+                                           const InputInfoList &Inputs,
+                                           const ArgList &Args,
+                                           const char *LinkingOutput) const {
   ArgStringList CmdArgs;
 
   assert(Inputs.size() == 1);
