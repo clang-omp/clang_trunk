@@ -47,7 +47,7 @@ namespace clang {
     void Visit##Type(Type *);
 #include "clang/AST/StmtNodes.inc"
   };
-}
+} // namespace clang
 
 void ASTStmtWriter::
 AddTemplateKWAndArgsInfo(const ASTTemplateKWAndArgsInfo &Args) {

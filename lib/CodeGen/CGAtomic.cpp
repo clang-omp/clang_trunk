@@ -167,7 +167,7 @@ namespace {
   private:
     bool requiresMemSetZero(llvm::Type *type) const;
   };
-}
+} // namespace
 
 static RValue emitAtomicLibcall(CodeGenFunction &CGF,
                                 StringRef fnName,

@@ -1962,7 +1962,7 @@ namespace {
     
     llvm::APInt getAsInteger() const;
   };
-}
+} // namespace
 
 void ModuleSignature::add(uint64_t Value, unsigned int NumBits) {
   CurValue |= Value << CurBit;

@@ -114,7 +114,6 @@ const char *getOpenMPSimpleClauseTypeName(OpenMPClauseKind Kind, unsigned Type);
 
 bool isAllowedClauseForDirective(OpenMPDirectiveKind DKind,
                                  OpenMPClauseKind CKind);
-
-}
+} // namespace clang
 
 #endif

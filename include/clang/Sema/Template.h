@@ -518,6 +518,6 @@ namespace clang {
         VarTemplatePartialSpecializationDecl *PartialSpec);
     void InstantiateEnumDefinition(EnumDecl *Enum, EnumDecl *Pattern);
   };  
-}
+} // namespace clang
 
 #endif // LLVM_CLANG_SEMA_TEMPLATE_H

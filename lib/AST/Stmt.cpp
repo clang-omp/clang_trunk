@@ -161,7 +161,7 @@ static inline bad implements_getLocEnd(getLocEnd_t Stmt::*) { return bad(); }
   (void) is_good(implements_getLocStart(&type::getLocStart))
 #define ASSERT_IMPLEMENTS_getLocEnd(type)                                      \
   (void) is_good(implements_getLocEnd(&type::getLocEnd))
-}
+} // namespace
 
 /// Check whether the various Stmt classes implement their member
 /// functions.
@@ -193,24 +193,25 @@ Stmt::child_range Stmt::children() {
 //
 // See also Expr.cpp:getExprLoc().
 namespace {
-/// This implementation is used when a class provides a custom
-/// implementation of getSourceRange.
-template <class S, class T>
-SourceRange getSourceRangeImpl(const Stmt *stmt, SourceRange (T::*v)() const) {
-  return static_cast<const S *>(stmt)->getSourceRange();
-}
+  /// This implementation is used when a class provides a custom
+  /// implementation of getSourceRange.
+  template <class S, class T>
+  SourceRange getSourceRangeImpl(const Stmt *stmt,
+                                 SourceRange (T::*v)() const) {
+    return static_cast<const S *>(stmt)->getSourceRange();
+  }
 
-/// This implementation is used when a class doesn't provide a custom
-/// implementation of getSourceRange.  Overload resolution should pick it over
-/// the implementation above because it's more specialized according to
-/// function template partial ordering.
-template <class S>
-SourceRange getSourceRangeImpl(const Stmt *stmt,
-                               SourceRange (Stmt::*v)() const) {
-  return SourceRange(static_cast<const S *>(stmt)->getLocStart(),
-                     static_cast<const S *>(stmt)->getLocEnd());
-}
-}
+  /// This implementation is used when a class doesn't provide a custom
+  /// implementation of getSourceRange.  Overload resolution should pick it over
+  /// the implementation above because it's more specialized according to
+  /// function template partial ordering.
+  template <class S>
+  SourceRange getSourceRangeImpl(const Stmt *stmt,
+                                 SourceRange (Stmt::*v)() const) {
+    return SourceRange(static_cast<const S*>(stmt)->getLocStart(),
+                       static_cast<const S*>(stmt)->getLocEnd());
+  }
+} // namespace
 
 SourceRange Stmt::getSourceRange() const {
   switch (getStmtClass()) {

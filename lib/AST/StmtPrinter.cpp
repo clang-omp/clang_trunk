@@ -106,7 +106,7 @@ namespace  {
 #include "clang/AST/StmtNodes.inc"
     void VisitOMPExecutableDirective(OMPExecutableDirective *Node);
   };
-}
+} // namespace
 
 //===----------------------------------------------------------------------===//
 //  Stmt printing methods.

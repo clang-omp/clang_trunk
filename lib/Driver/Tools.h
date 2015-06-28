@@ -238,7 +238,7 @@ namespace arm {
   const char* getLLVMArchSuffixForARM(StringRef CPU, StringRef Arch);
 
   void appendEBLinkFlags(const llvm::opt::ArgList &Args, ArgStringList &CmdArgs, const llvm::Triple &Triple);
-}
+} // namespace arm
 
 namespace mips {
   typedef enum {
@@ -257,7 +257,7 @@ namespace mips {
                      StringRef ABIName, StringRef FloatABI);
   bool shouldUseFPXX(const llvm::opt::ArgList &Args, const llvm::Triple &Triple,
                      StringRef CPUName, StringRef ABIName, StringRef FloatABI);
-}
+} // namespace mips
 
 namespace ppc {
   bool hasPPCAbiArg(const llvm::opt::ArgList &Args, const char *Value);
@@ -376,7 +376,7 @@ namespace darwin {
                       const char *LinkingOutput) const override;
   };
 
-}
+} // namespace darwin
 
   /// openbsd -- Directly call GNU Binutils assembler and linker
 namespace openbsd {
@@ -521,7 +521,7 @@ namespace gnutools {
                       const llvm::opt::ArgList &TCArgs,
                       const char *LinkingOutput) const override;
   };
-}
+} // namespace gnutools
 
 namespace nacltools {
   class LLVM_LIBRARY_VISIBILITY AssembleARM : public gnutools::Assemble  {
@@ -547,7 +547,7 @@ namespace nacltools {
                               const llvm::opt::ArgList &TCArgs,
                               const char *LinkingOutput) const override;
   };
-}
+} // namespace nacltools
 
   /// minix -- Directly call GNU Binutils assembler and linker
 namespace minix {
@@ -767,7 +767,7 @@ public:
                     const llvm::opt::ArgList &TCArgs,
                     const char *LinkingOutput) const override;
 };
-}
+} // namespace CrossWindows
 
 /// SHAVE tools -- Directly call moviCompile and moviAsm
 namespace SHAVE {

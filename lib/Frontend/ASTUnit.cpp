@@ -96,7 +96,7 @@ namespace {
     /// \brief Erase temporary files and the preamble file.
     void Cleanup();
   };
-}
+} // namespace
 
 static llvm::sys::SmartMutex<false> &getOnDiskMutex() {
   static llvm::sys::SmartMutex<false> M(/* recursive = */ true);
@@ -973,7 +973,7 @@ public:
   }
 };
 
-}
+} // namespace
 
 std::unique_ptr<ASTConsumer>
 PrecompilePreambleAction::CreateASTConsumer(CompilerInstance &CI,
@@ -2124,7 +2124,7 @@ namespace {
       return Next.getCodeCompletionTUInfo();
     }
   };
-}
+} // namespace
 
 /// \brief Helper function that computes which global names are hidden by the
 /// local code-completion results.

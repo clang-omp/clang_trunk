@@ -99,7 +99,7 @@ namespace {
     void prettyPrintAttributes(Decl *D);
     void printDeclType(QualType T, StringRef DeclName, bool Pack = false);
   };
-}
+} // namespace
 
 void Decl::print(raw_ostream &Out, unsigned Indentation,
                  bool PrintInstantiation) const {
