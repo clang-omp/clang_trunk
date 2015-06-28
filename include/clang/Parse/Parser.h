@@ -1723,6 +1723,7 @@ private:
     DSC_top_level, // top-level/namespace declaration context
     DSC_template_type_arg, // template type argument context
     DSC_objc_method_result, // ObjC method result context, enables 'instancetype'
+    DSC_condition // condition declaration context
   };
 
   /// Is this a context in which we are parsing just a type-specifier (or
@@ -1733,6 +1734,7 @@ private:
     case DSC_class:
     case DSC_top_level:
     case DSC_objc_method_result:
+    case DSC_condition:
       return false;
 
     case DSC_template_type_arg:
