@@ -10064,7 +10064,8 @@ TreeTransform<Derived>::TransformLambdaExpr(LambdaExpr *E) {
     }
 
     // Capture the transformed variable.
-    getSema().tryCaptureVariable(CapturedVar, C->getLocation(), Kind);
+    getSema().tryCaptureVariable(CapturedVar, C->getLocation(), Kind,
+                                 EllipsisLoc);
   }
   if (!FinishedExplicitCaptures)
     getSema().finishLambdaExplicitCaptures(LSI);
