@@ -401,6 +401,20 @@ public:
 
   };
 
+  /// \brief RAII for correct setting/restoring of CapturedStmtInfo.
+  class CGCapturedStmtRAII {
+  private:
+    CodeGenFunction &CGF;
+    CGCapturedStmtInfo *PrevCapturedStmtInfo;
+  public:
+    CGCapturedStmtRAII(CodeGenFunction &CGF,
+                       CGCapturedStmtInfo *NewCapturedStmtInfo)
+        : CGF(CGF), PrevCapturedStmtInfo(CGF.CapturedStmtInfo) {
+      CGF.CapturedStmtInfo = NewCapturedStmtInfo;
+    }
+    ~CGCapturedStmtRAII() { CGF.CapturedStmtInfo = PrevCapturedStmtInfo; }
+  };
+
   /// BoundsChecking - Emit run-time bounds checks. Higher values mean
   /// potentially higher performance penalties.
   unsigned char BoundsChecking;
