@@ -711,11 +711,9 @@ DerivedArgList *MachO::TranslateArgs(const DerivedArgList &Args,
       // "input arguments".
       if (A->getOption().hasFlag(options::LinkerInput)) {
         // Convert the argument into individual Zlinker_input_args.
-        for (unsigned i = 0, e = A->getNumValues(); i != e; ++i) {
-          DAL->AddSeparateArg(OriginalArg,
-                              Opts.getOption(options::OPT_Zlinker_input),
-                              A->getValue(i));
-
+        for (const char *Value : A->getValues()) {
+          DAL->AddSeparateArg(
+              OriginalArg, Opts.getOption(options::OPT_Zlinker_input), Value);
         }
         continue;
       }
@@ -1259,28 +1257,24 @@ Generic_GCC::GCCInstallationDetector::init( const Driver &D,
   // Loop over the various components which exist and select the best GCC
   // installation available. GCC installs are ranked by version number.
   Version = GCCVersion::Parse("0.0.0");
-  for (unsigned i = 0, ie = Prefixes.size(); i < ie; ++i) {
-    if (!llvm::sys::fs::exists(Prefixes[i]))
+  for (const std::string &Prefix : Prefixes) {
+    if (!llvm::sys::fs::exists(Prefix))
       continue;
-    for (unsigned j = 0, je = CandidateLibDirs.size(); j < je; ++j) {
-      const std::string LibDir = Prefixes[i] + CandidateLibDirs[j].str();
+    for (const StringRef Suffix : CandidateLibDirs) {
+      const std::string LibDir = Prefix + Suffix.str();
       if (!llvm::sys::fs::exists(LibDir))
         continue;
-      for (unsigned k = 0, ke = CandidateTripleAliases.size(); k < ke; ++k)
-        ScanLibDirForGCCTriple(TargetTriple, Args, LibDir,
-                               CandidateTripleAliases[k],
+      for (const StringRef Candidate : CandidateTripleAliases)
+        ScanLibDirForGCCTriple(TargetTriple, Args, LibDir, Candidate,
                                isOpenMPTarget);
     }
-    for (unsigned j = 0, je = CandidateBiarchLibDirs.size(); j < je; ++j) {
-      const std::string LibDir = Prefixes[i] + CandidateBiarchLibDirs[j].str();
+    for (const StringRef Suffix : CandidateBiarchLibDirs) {
+      const std::string LibDir = Prefix + Suffix.str();
       if (!llvm::sys::fs::exists(LibDir))
         continue;
-      for (unsigned k = 0, ke = CandidateBiarchTripleAliases.size(); k < ke;
-           ++k)
-        ScanLibDirForGCCTriple(TargetTriple, Args, LibDir,
-                               CandidateBiarchTripleAliases[k],
-                               isOpenMPTarget,
-                               /*NeedsBiarchSuffix=*/ true);
+      for (const StringRef Candidate : CandidateBiarchTripleAliases)
+        ScanLibDirForGCCTriple(TargetTriple, Args, LibDir, Candidate,
+                               isOpenMPTarget, /*NeedsBiarchSuffix=*/ true);
     }
   }
 }
@@ -2246,9 +2240,9 @@ static void GetHexagonLibraryPaths(
   //----------------------------------------------------------------------------
   // -L Args
   //----------------------------------------------------------------------------
-  for (const Arg *A : Args.filtered(options::OPT_L))
-    for (unsigned i = 0, e = A->getNumValues(); i != e; ++i)
-      LibPaths->push_back(A->getValue(i));
+  for (Arg *A : Args.filtered(options::OPT_L))
+    for (const char *Value : A->getValues())
+      LibPaths->push_back(Value);
 
   //----------------------------------------------------------------------------
   // Other standard paths
@@ -3040,25 +3034,25 @@ static Distro DetectDistro(llvm::Triple::ArchType Arch) {
     SmallVector<StringRef, 16> Lines;
     Data.split(Lines, "\n");
     Distro Version = UnknownDistro;
-    for (unsigned i = 0, s = Lines.size(); i != s; ++i)
-      if (Version == UnknownDistro && Lines[i].startswith("DISTRIB_CODENAME="))
-        Version = llvm::StringSwitch<Distro>(Lines[i].substr(17))
-          .Case("hardy", UbuntuHardy)
-          .Case("intrepid", UbuntuIntrepid)
-          .Case("jaunty", UbuntuJaunty)
-          .Case("karmic", UbuntuKarmic)
-          .Case("lucid", UbuntuLucid)
-          .Case("maverick", UbuntuMaverick)
-          .Case("natty", UbuntuNatty)
-          .Case("oneiric", UbuntuOneiric)
-          .Case("precise", UbuntuPrecise)
-          .Case("quantal", UbuntuQuantal)
-          .Case("raring", UbuntuRaring)
-          .Case("saucy", UbuntuSaucy)
-          .Case("trusty", UbuntuTrusty)
-          .Case("utopic", UbuntuUtopic)
-          .Case("vivid", UbuntuVivid)
-          .Default(UnknownDistro);
+    for (const StringRef Line : Lines)
+      if (Version == UnknownDistro && Line.startswith("DISTRIB_CODENAME="))
+        Version = llvm::StringSwitch<Distro>(Line.substr(17))
+                      .Case("hardy", UbuntuHardy)
+                      .Case("intrepid", UbuntuIntrepid)
+                      .Case("jaunty", UbuntuJaunty)
+                      .Case("karmic", UbuntuKarmic)
+                      .Case("lucid", UbuntuLucid)
+                      .Case("maverick", UbuntuMaverick)
+                      .Case("natty", UbuntuNatty)
+                      .Case("oneiric", UbuntuOneiric)
+                      .Case("precise", UbuntuPrecise)
+                      .Case("quantal", UbuntuQuantal)
+                      .Case("raring", UbuntuRaring)
+                      .Case("saucy", UbuntuSaucy)
+                      .Case("trusty", UbuntuTrusty)
+                      .Case("utopic", UbuntuUtopic)
+                      .Case("vivid", UbuntuVivid)
+                      .Default(UnknownDistro);
     return Version;
   }
 
@@ -3751,6 +3745,8 @@ SanitizerMask Linux::getSupportedSanitizers() const {
   const bool IsX86_64 = getTriple().getArch() == llvm::Triple::x86_64;
   const bool IsMIPS64 = getTriple().getArch() == llvm::Triple::mips64 ||
                         getTriple().getArch() == llvm::Triple::mips64el;
+  const bool IsPowerPC64 = getTriple().getArch() == llvm::Triple::ppc64 ||
+                           getTriple().getArch() == llvm::Triple::ppc64le;
   SanitizerMask Res = ToolChain::getSupportedSanitizers();
   Res |= SanitizerKind::Address;
   Res |= SanitizerKind::KernelAddress;
@@ -3758,9 +3754,10 @@ SanitizerMask Linux::getSupportedSanitizers() const {
   if (IsX86_64 || IsMIPS64) {
     Res |= SanitizerKind::DataFlow;
     Res |= SanitizerKind::Leak;
-    Res |= SanitizerKind::Memory;
     Res |= SanitizerKind::Thread;
   }
+  if (IsX86_64 || IsMIPS64 || IsPowerPC64)
+    Res |= SanitizerKind::Memory;
   if (IsX86 || IsX86_64) {
     Res |= SanitizerKind::Function;
     Res |= SanitizerKind::SafeStack;
