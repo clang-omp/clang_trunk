@@ -35,7 +35,8 @@ enum DeclUpdateKind {
   UPD_DECL_MARKED_USED,
   UPD_MANGLING_NUMBER,
   UPD_STATIC_LOCAL_NUMBER,
-  UPD_DECL_EXPORTED
+  UPD_DECL_EXPORTED,
+  UPD_ADDED_ATTR_TO_RECORD
 };
 
 TypeIdx TypeIdxFromBuiltin(const BuiltinType *BT);

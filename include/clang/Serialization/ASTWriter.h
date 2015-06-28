@@ -43,6 +43,7 @@ namespace llvm {
 namespace clang {
 
 class ASTContext;
+class Attr;
 class NestedNameSpecifier;
 class CXXBaseSpecifier;
 class CXXCtorInitializer;
@@ -61,6 +62,7 @@ class Module;
 class PreprocessedEntity;
 class PreprocessingRecord;
 class Preprocessor;
+class RecordDecl;
 class Sema;
 class SourceManager;
 struct StoredDeclsList;
@@ -303,6 +305,7 @@ private:
       unsigned Loc;
       unsigned Val;
       Module *Mod;
+      const Attr *Attribute;
     };
 
   public:
@@ -316,6 +319,8 @@ private:
         : Kind(Kind), Val(Val) {}
     DeclUpdate(unsigned Kind, Module *M)
           : Kind(Kind), Mod(M) {}
+    DeclUpdate(unsigned Kind, const Attr *Attribute)
+          : Kind(Kind), Attribute(Attribute) {}
 
     unsigned getKind() const { return Kind; }
     const Decl *getDecl() const { return Dcl; }
@@ -325,6 +330,7 @@ private:
     }
     unsigned getNumber() const { return Val; }
     Module *getModule() const { return Mod; }
+    const Attr *getAttr() const { return Attribute; }
   };
 
   typedef SmallVector<DeclUpdate, 1> UpdateRecord;
@@ -860,6 +866,8 @@ public:
                                     const ObjCCategoryDecl *ClassExt) override;
   void DeclarationMarkedUsed(const Decl *D) override;
   void RedefinedHiddenDefinition(const NamedDecl *D, Module *M) override;
+  void AddedAttributeToRecord(const Attr *Attr,
+                              const RecordDecl *Record) override;
 };
 
 /// \brief AST Writer for OpenMP clauses, used for both clauses-stmts
