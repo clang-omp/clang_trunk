@@ -9231,11 +9231,11 @@ void XCore::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 // FIXME: get the exact cpu we are assembling to nad include it
 // as part of the arguments
 
-void NVPTX::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
-                                       const InputInfo &Output,
-                                       const InputInfoList &Inputs,
-                                       const ArgList &Args,
-                                       const char *LinkingOutput) const {
+void NVPTX::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
+                                     const InputInfo &Output,
+                                     const InputInfoList &Inputs,
+                                     const ArgList &Args,
+                                     const char *LinkingOutput) const {
   ArgStringList CmdArgs;
 
   if (Args.hasArg(options::OPT_v))
@@ -9308,11 +9308,11 @@ static void BitcodeToCubin(Compilation &C, const JobAction &JA, const Tool &T,
   CmdArgs.push_back(CubinF);
 }
 
-void NVPTX::Link::ConstructJob(Compilation &C, const JobAction &JA,
-                                   const InputInfo &Output,
-                                   const InputInfoList &Inputs,
-                                   const ArgList &Args,
-                                   const char *LinkingOutput) const {
+void NVPTX::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                 const InputInfo &Output,
+                                 const InputInfoList &Inputs,
+                                 const ArgList &Args,
+                                 const char *LinkingOutput) const {
   ArgStringList CmdArgs;
 
   if (Output.isFilename()) {

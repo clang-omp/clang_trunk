@@ -3787,11 +3787,11 @@ NVPTX_TC::NVPTX_TC(const Driver &D, const llvm::Triple &Triple,
 }
 
 Tool *NVPTX_TC::buildAssembler() const {
-  return new tools::NVPTX::Assemble(*this);
+  return new tools::NVPTX::Assembler(*this);
 }
 
 Tool *NVPTX_TC::buildLinker() const {
-  return new tools::NVPTX::Link(*this);
+  return new tools::NVPTX::Linker(*this);
 }
 
 bool NVPTX_TC::isPICDefault() const {
