@@ -707,21 +707,7 @@ public:
                       const llvm::opt::ArgList &TCArgs,
                       const char *LinkingOutput) const override;
   };
-  } // end namespace XCore.
-
-  namespace CrossWindows {
-  class LLVM_LIBRARY_VISIBILITY Assembler : public Tool {
-  public:
-    Assembler(const ToolChain &TC)
-        : Tool("CrossWindows::Assembler", "as", TC) {}
-
-    bool hasIntegratedCPP() const override { return false; }
-
-    void ConstructJob(Compilation &C, const JobAction &JA,
-                      const InputInfo &Output, const InputInfoList &Inputs,
-                      const llvm::opt::ArgList &TCArgs,
-                      const char *LinkingOutput) const override;
-  };
+} // end namespace XCore.
 
 namespace NVPTX {
   // For NVPTX, we do not need to instantiate tools for PreProcess, PreCompile and Compile.
