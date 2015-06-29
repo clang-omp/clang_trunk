@@ -712,9 +712,9 @@ public:
 namespace NVPTX {
   // For NVPTX, we do not need to instantiate tools for PreProcess, PreCompile and Compile.
   // We simply use "clang -cc1" for those actions.
-  class LLVM_LIBRARY_VISIBILITY Assemble : public Tool {
+  class LLVM_LIBRARY_VISIBILITY Assembler : public Tool {
   public:
-    Assemble(const ToolChain &TC) : Tool("NVPTX::Assemble",
+    Assembler(const ToolChain &TC) : Tool("NVPTX::Assembler",
       "ptxas", TC) {}
 
     virtual bool hasIntegratedCPP() const { return false; }
@@ -725,9 +725,9 @@ namespace NVPTX {
                               const char *LinkingOutput) const;
   };
 
-  class LLVM_LIBRARY_VISIBILITY Link : public Tool {
+  class LLVM_LIBRARY_VISIBILITY Linker : public Tool {
   public:
-    Link(const ToolChain &TC) : Tool("NVPTX::Link",
+    Linker(const ToolChain &TC) : Tool("NVPTX::Linker",
       "nvlink", TC) {}
 
     virtual bool hasIntegratedCPP() const { return false; }
@@ -741,9 +741,9 @@ namespace NVPTX {
 } // end namespace NVPTX.
 
 namespace CrossWindows {
-class LLVM_LIBRARY_VISIBILITY Assemble : public Tool {
+class LLVM_LIBRARY_VISIBILITY Assembler : public Tool {
 public:
-  Assemble(const ToolChain &TC) : Tool("CrossWindows::Assemble", "as", TC) { }
+  Assembler(const ToolChain &TC) : Tool("CrossWindows::Assembler", "as", TC) { }
 
   bool hasIntegratedCPP() const override { return false; }
 
@@ -753,9 +753,9 @@ public:
                     const char *LinkingOutput) const override;
 };
 
-class LLVM_LIBRARY_VISIBILITY Link : public Tool {
+class LLVM_LIBRARY_VISIBILITY Linker : public Tool {
 public:
-  Link(const ToolChain &TC) : Tool("CrossWindows::Link", "ld", TC, RF_Full) {}
+  Linker(const ToolChain &TC) : Tool("CrossWindows::Linker", "ld", TC, RF_Full) {}
 
   bool hasIntegratedCPP() const override { return false; }
   bool isLinkJob() const override { return true; }
