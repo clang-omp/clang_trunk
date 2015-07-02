@@ -2465,9 +2465,9 @@ static void CollectArgsForIntegratedAssembler(Compilation &C,
 
 // Until ARM libraries are build separately, we have them all in one library
 static StringRef getArchNameForCompilerRTLib(const ToolChain &TC) {
-  // FIXME: handle 64-bit
   if (TC.getTriple().isOSWindows() &&
-      !TC.getTriple().isWindowsItaniumEnvironment())
+      !TC.getTriple().isWindowsItaniumEnvironment() &&
+      TC.getArch() == llvm::Triple::x86)
     return "i386";
   if (TC.getArch() == llvm::Triple::arm || TC.getArch() == llvm::Triple::armeb)
     return "arm";
@@ -2485,8 +2485,8 @@ static SmallString<128> getCompilerRTLibDir(const ToolChain &TC) {
   return Res;
 }
 
-static SmallString<128> getCompilerRT(const ToolChain &TC, StringRef Component,
-                                      bool Shared = false) {
+SmallString<128> tools::getCompilerRT(const ToolChain &TC, StringRef Component,
+                                      bool Shared) {
   const char *Env = TC.getTriple().getEnvironment() == llvm::Triple::Android
                         ? "-android"
                         : "";
@@ -4198,7 +4198,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     }
 
   const SanitizerArgs &Sanitize = getToolChain().getSanitizerArgs();
-  Sanitize.addArgs(Args, CmdArgs);
+  Sanitize.addArgs(getToolChain(), Args, CmdArgs, InputType);
 
   // Report an error for -faltivec on anything other than PowerPC.
   if (const Arg *A = Args.getLastArg(options::OPT_faltivec)) {
