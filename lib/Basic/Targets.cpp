@@ -4235,7 +4235,9 @@ public:
     // zero length bitfield.
     UseZeroLengthBitfieldAlignment = true;
   }
+
   StringRef getABI() const override { return ABI; }
+
   bool setABI(const std::string &Name) override {
     ABI = Name;
 

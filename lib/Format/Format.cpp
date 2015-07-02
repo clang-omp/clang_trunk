@@ -783,11 +783,16 @@ private:
     unsigned TokenCount = 0;
     for (auto I = Tokens.rbegin() + 1, E = Tokens.rend(); I != E; ++I) {
       ++TokenCount;
-      if (I[0]->isOneOf(tok::slash, tok::slashequal) && I + 1 != E &&
-          (I[1]->isOneOf(tok::l_paren, tok::semi, tok::l_brace, tok::r_brace,
-                         tok::exclaim, tok::l_square, tok::colon, tok::comma,
-                         tok::question, tok::kw_return) ||
-           I[1]->isBinaryOperator())) {
+      auto Prev = I + 1;
+      while (Prev != E && Prev[0]->is(tok::comment))
+        ++Prev;
+      if (I[0]->isOneOf(tok::slash, tok::slashequal) &&
+          (Prev == E ||
+           ((Prev[0]->isOneOf(tok::l_paren, tok::semi, tok::l_brace,
+                              tok::r_brace, tok::exclaim, tok::l_square,
+                              tok::colon, tok::comma, tok::question,
+                              tok::kw_return) ||
+             Prev[0]->isBinaryOperator())))) {
         unsigned LastColumn = Tokens.back()->OriginalColumn;
         SourceLocation Loc = Tokens.back()->Tok.getLocation();
         if (MightEndWithEscapedSlash) {
@@ -803,6 +808,8 @@ private:
         Tokens.resize(Tokens.size() - TokenCount);
         Tokens.back()->Tok.setKind(tok::unknown);
         Tokens.back()->Type = TT_RegexLiteral;
+        // Treat regex literals like other string_literals.
+        Tokens.back()->Tok.setKind(tok::string_literal);
         Tokens.back()->ColumnWidth += LastColumn - I[0]->OriginalColumn;
         return true;
       }
@@ -837,7 +844,7 @@ private:
         EndBacktick->OriginalColumn + EndBacktick->ColumnWidth;
     for (auto I = Tokens.rbegin() + 1, E = Tokens.rend(); I != E; I++) {
       ++TokenCount;
-      if (I[0]->NewlinesBefore > 0 || I[0]->IsMultiline)
+      if (I[0]->IsMultiline)
         IsMultiline = true;
 
       // If there was a preceding template string, this must be the start of a
@@ -853,9 +860,10 @@ private:
           EndColumnInFirstLine = I[0]->OriginalColumn + I[0]->ColumnWidth;
         // If the token has newlines, the token before it (if it exists) is the
         // rhs end of the previous line.
-        if (I[0]->NewlinesBefore > 0 && (I + 1 != E))
+        if (I[0]->NewlinesBefore > 0 && (I + 1 != E)) {
           EndColumnInFirstLine = I[1]->OriginalColumn + I[1]->ColumnWidth;
-
+          IsMultiline = true;
+        }
         continue;
       }
 
@@ -888,7 +896,8 @@ private:
         //     until here`;
         Tokens.back()->ColumnWidth =
             EndColumnInFirstLine - Tokens.back()->OriginalColumn;
-        Tokens.back()->LastLineColumnWidth = EndOriginalColumn;
+        // +1 for the ` itself.
+        Tokens.back()->LastLineColumnWidth = EndOriginalColumn + 1;
         Tokens.back()->IsMultiline = true;
       } else {
         // Token simply spans from start to end, +1 for the ` itself.
@@ -1080,7 +1089,6 @@ private:
           break;
         default:
           FormatTok->Type = TT_ImplicitStringLiteral;
-          ++Column;
           break;
         }
       }
@@ -1225,6 +1233,7 @@ private:
                         getFormattingLangOpts(Style), Buffer.begin(),
                         Buffer.begin() + Offset, Buffer.end()));
     Lex->SetKeepWhitespaceMode(true);
+    TrailingWhitespace = 0;
   }
 };
 
