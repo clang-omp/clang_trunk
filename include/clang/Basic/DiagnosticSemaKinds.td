@@ -5576,8 +5576,6 @@ def err_seh_try_outside_functions : Error<
   "cannot use SEH '__try' in blocks, captured regions, or Obj-C method decls">;
 def err_mixing_cxx_try_seh_try : Error<
   "cannot use C++ 'try' in the same function as SEH '__try'">;
-def err_seh_try_unsupported : Error<
-  "SEH '__try' is not supported on this target">;
 def note_conflicting_try_here : Note<
   "conflicting %0 here">;
 def warn_jump_out_of_seh_finally : Warning<
@@ -6803,6 +6801,15 @@ def warn_format_non_standard_conversion_spec: Warning<
 def warn_printf_ignored_flag: Warning<
   "flag '%0' is ignored when flag '%1' is present">,
   InGroup<Format>;
+def warn_printf_empty_objc_flag: Warning<
+  "missing object format flag">,
+  InGroup<Format>;
+def warn_printf_ObjCflags_without_ObjCConversion: Warning<
+  "object format flags cannot be used with '%0' conversion specifier">,
+  InGroup<Format>;
+def warn_printf_invalid_objc_flag: Warning<
+    "'%0' is not a valid object format flag">,
+    InGroup<Format>;
 def warn_scanf_scanlist_incomplete : Warning<
   "no closing ']' for '%%[' in scanf format string">,
   InGroup<Format>;
