@@ -1855,6 +1855,9 @@ void ASTDumper::VisitUnaryExprOrTypeTraitExpr(
   case UETT_VecStep:
     OS << " vec_step";
     break;
+  case UETT_OpenMPRequiredSimdAlign:
+    OS << " __builtin_omp_required_simd_align";
+    break;
   }
   if (Node->isArgumentType())
     dumpType(Node->getArgumentType());

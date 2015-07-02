@@ -6354,8 +6354,11 @@ static void EmitOMPAlignedClause(CodeGenFunction &CGF, CodeGenModule &CGM,
       // OpenMP [2.8.1, Description]
       // If no optional parameter isspecified, implementation-defined default
       // alignments for SIMD instructions on the target platforms are assumed.
-      Alignment = CGM.getTargetCodeGenInfo().getOpenMPSimdDefaultAlignment(
-          E->getType());
+      Alignment =
+        CGF.getContext()
+            .toCharUnitsFromBits(CGF.getContext().getOpenMPDefaultSimdAlign(
+                E->getType()->getPointeeType()))
+            .getQuantity();
     }
     assert((Alignment == 0 || llvm::isPowerOf2_32(Alignment)) &&
            "alignment is not power of 2");
