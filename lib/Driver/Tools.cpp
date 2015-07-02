@@ -9318,7 +9318,7 @@ void MinGW::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   for (const auto &Path : Paths)
     CmdArgs.push_back(Args.MakeArgString(StringRef("-L") + Path));
 
-  AddLinkerInputs(TC, Inputs, Args, CmdArgs);
+  AddLinkerInputs(TC, Inputs, Args, CmdArgs, JA.getOffloadingDevice());
 
   // TODO: Add ASan stuff here
 
