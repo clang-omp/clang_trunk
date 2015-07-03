@@ -1880,8 +1880,8 @@ DEF_TRAVERSE_DECL(ParmVarDecl, {
     TRY_TO(WalkUpFrom##STMT(S));                                               \
     StmtQueueAction StmtQueue(*this);                                          \
     { CODE; }                                                                  \
-    for (Stmt::child_range range = S->children(); range; ++range) {            \
-      StmtQueue.queue(*range);                                                 \
+    for (Stmt *SubStmt : S->children()) {                                      \
+      StmtQueue.queue(SubStmt);                                                \
     }                                                                          \
     return true;                                                               \
   }
@@ -2030,8 +2030,8 @@ bool RecursiveASTVisitor<Derived>::TraverseInitListExpr(InitListExpr *S) {
   TRY_TO(WalkUpFromInitListExpr(S));
   StmtQueueAction StmtQueue(*this);
   // All we need are the default actions.  FIXME: use a helper function.
-  for (Stmt::child_range range = S->children(); range; ++range) {
-    StmtQueue.queue(*range);
+  for (Stmt *SubStmt : S->children()) {
+    StmtQueue.queue(SubStmt);
   }
   return true;
 }

@@ -973,8 +973,8 @@ bool CodeGenFunction::ContainsLabel(const Stmt *S, bool IgnoreCaseStmts) {
     IgnoreCaseStmts = true;
 
   // Scan subexpressions for verboten labels.
-  for (Stmt::const_child_range I = S->children(); I; ++I)
-    if (ContainsLabel(*I, IgnoreCaseStmts))
+  for (const Stmt *SubStmt : S->children())
+    if (ContainsLabel(SubStmt, IgnoreCaseStmts))
       return true;
 
   return false;
@@ -997,8 +997,8 @@ bool CodeGenFunction::containsBreak(const Stmt *S) {
     return true;
 
   // Scan subexpressions for verboten breaks.
-  for (Stmt::const_child_range I = S->children(); I; ++I)
-    if (containsBreak(*I))
+  for (const Stmt *SubStmt : S->children())
+    if (containsBreak(SubStmt))
       return true;
 
   return false;
