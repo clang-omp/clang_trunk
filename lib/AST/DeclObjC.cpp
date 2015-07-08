@@ -259,6 +259,15 @@ ObjCTypeParamList *ObjCInterfaceDecl::getTypeParamList() const {
   return nullptr;
 }
 
+void ObjCInterfaceDecl::setTypeParamList(ObjCTypeParamList *TPL) {
+  TypeParamList = TPL;
+  if (!TPL)
+    return;
+  // Set the declaration context of each of the type parameters.
+  for (auto typeParam : *TypeParamList)
+    typeParam->setDeclContext(this);
+}
+
 ObjCInterfaceDecl *ObjCInterfaceDecl::getSuperClass() const {
   // FIXME: Should make sure no callers ever do this.
   if (!hasDefinition())
@@ -1013,6 +1022,12 @@ SourceRange ObjCMethodDecl::getReturnTypeSourceRange() const {
   return SourceRange();
 }
 
+QualType ObjCMethodDecl::getSendResultType() const {
+  ASTContext &Ctx = getASTContext();
+  return getReturnType().getNonLValueExprType(Ctx)
+           .substObjCTypeArgs(Ctx, {}, ObjCSubstitutionContext::Result);
+}
+
 QualType ObjCMethodDecl::getSendResultType(QualType receiverType) const {
   // FIXME: Handle related result types here.
 
@@ -1236,8 +1251,10 @@ SourceRange ObjCTypeParamDecl::getSourceRange() const {
 ObjCTypeParamList::ObjCTypeParamList(SourceLocation lAngleLoc,
                                      ArrayRef<ObjCTypeParamDecl *> typeParams,
                                      SourceLocation rAngleLoc)
-  : Brackets(lAngleLoc, rAngleLoc), NumParams(typeParams.size())
+  : NumParams(typeParams.size())
 {
+  Brackets.Begin = lAngleLoc.getRawEncoding();
+  Brackets.End = rAngleLoc.getRawEncoding();
   std::copy(typeParams.begin(), typeParams.end(), begin());
 }
 
@@ -1302,7 +1319,7 @@ ObjCInterfaceDecl::ObjCInterfaceDecl(const ASTContext &C, DeclContext *DC,
                                      ObjCInterfaceDecl *PrevDecl,
                                      bool IsInternal)
     : ObjCContainerDecl(ObjCInterface, DC, Id, CLoc, AtLoc),
-      redeclarable_base(C), TypeForDecl(nullptr), TypeParamList(typeParamList),
+      redeclarable_base(C), TypeForDecl(nullptr), TypeParamList(nullptr),
       Data() {
   setPreviousDecl(PrevDecl);
   
@@ -1312,11 +1329,7 @@ ObjCInterfaceDecl::ObjCInterfaceDecl(const ASTContext &C, DeclContext *DC,
   
   setImplicit(IsInternal);
 
-  // Update the declaration context of the type parameters.
-  if (typeParamList) {
-    for (auto typeParam : *typeParamList)
-      typeParam->setDeclContext(this);
-  }
+  setTypeParamList(typeParamList);
 }
 
 void ObjCInterfaceDecl::LoadExternalDefinition() const {
@@ -1799,16 +1812,11 @@ ObjCCategoryDecl::ObjCCategoryDecl(DeclContext *DC, SourceLocation AtLoc,
                                    SourceLocation IvarLBraceLoc,
                                    SourceLocation IvarRBraceLoc)
   : ObjCContainerDecl(ObjCCategory, DC, Id, ClassNameLoc, AtLoc),
-    ClassInterface(IDecl), TypeParamList(typeParamList),
+    ClassInterface(IDecl), TypeParamList(nullptr),
     NextClassCategory(nullptr), CategoryNameLoc(CategoryNameLoc),
     IvarLBraceLoc(IvarLBraceLoc), IvarRBraceLoc(IvarRBraceLoc) 
 {
-  // Set the declaration context of each of the type parameters.
-  if (typeParamList) {
-    for (auto typeParam : *typeParamList) {
-      typeParam->setDeclContext(this);
-    }
-  }
+  setTypeParamList(typeParamList);
 }
 
 ObjCCategoryDecl *ObjCCategoryDecl::Create(ASTContext &C, DeclContext *DC,
@@ -1851,6 +1859,15 @@ ObjCCategoryImplDecl *ObjCCategoryDecl::getImplementation() const {
 
 void ObjCCategoryDecl::setImplementation(ObjCCategoryImplDecl *ImplD) {
   getASTContext().setObjCImplementation(this, ImplD);
+}
+
+void ObjCCategoryDecl::setTypeParamList(ObjCTypeParamList *TPL) {
+  TypeParamList = TPL;
+  if (!TPL)
+    return;
+  // Set the declaration context of each of the type parameters.
+  for (auto typeParam : *TypeParamList)
+    typeParam->setDeclContext(this);
 }
 
 

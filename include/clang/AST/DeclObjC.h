@@ -332,10 +332,10 @@ public:
   SourceRange getReturnTypeSourceRange() const;
 
   /// \brief Determine the type of an expression that sends a message to this
-  /// function.
-  QualType getSendResultType() const {
-    return getReturnType().getNonLValueExprType(getASTContext());
-  }
+  /// function. This replaces the type parameters with the types they would
+  /// get if the receiver was parameterless (e.g. it may replace the type
+  /// parameter with 'id').
+  QualType getSendResultType() const;
 
   /// Determine the type of an expression that sends a message to this
   /// function with the given receiver type.
@@ -610,7 +610,10 @@ public:
 class ObjCTypeParamList {
   union { 
     /// Location of the left and right angle brackets.
-    SourceRange Brackets;
+    struct {
+      unsigned Begin;
+      unsigned End;
+    } Brackets;
 
     // Used only for alignment.
     ObjCTypeParamDecl *AlignmentHack;
@@ -661,9 +664,15 @@ public:
     return *(end() - 1);
   }
 
-  SourceLocation getLAngleLoc() const { return Brackets.getBegin(); }
-  SourceLocation getRAngleLoc() const { return Brackets.getEnd(); }
-  SourceRange getSourceRange() const { return Brackets; }
+  SourceLocation getLAngleLoc() const {
+    return SourceLocation::getFromRawEncoding(Brackets.Begin);
+  }
+  SourceLocation getRAngleLoc() const {
+    return SourceLocation::getFromRawEncoding(Brackets.End);
+  }
+  SourceRange getSourceRange() const {
+    return SourceRange(getLAngleLoc(), getRAngleLoc());
+  }
 
   /// Gather the default set of type arguments to be substituted for
   /// these type parameters when dealing with an unspecialized type.
@@ -955,6 +964,12 @@ public:
   /// defined (with \c \@interface), it will search for a declaration that
   /// has type parameters, skipping any declarations that do not.
   ObjCTypeParamList *getTypeParamList() const;
+
+  /// Set the type parameters of this class.
+  ///
+  /// This function is used by the AST importer, which must import the type
+  /// parameters after creating their DeclContext to avoid loops.
+  void setTypeParamList(ObjCTypeParamList *TPL);
 
   /// Retrieve the type parameters written on this particular declaration of
   /// the class.
@@ -1962,6 +1977,13 @@ public:
   /// Retrieve the type parameter list associated with this category or
   /// extension.
   ObjCTypeParamList *getTypeParamList() const { return TypeParamList; }
+
+  /// Set the type parameters of this category.
+  ///
+  /// This function is used by the AST importer, which must import the type
+  /// parameters after creating their DeclContext to avoid loops.
+  void setTypeParamList(ObjCTypeParamList *TPL);
+
 
   ObjCCategoryImplDecl *getImplementation() const;
   void setImplementation(ObjCCategoryImplDecl *ImplD);
