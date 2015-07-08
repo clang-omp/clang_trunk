@@ -73,6 +73,7 @@ add_clang_library(clangCodeGen
   ItaniumCXXABI.cpp
   MicrosoftCXXABI.cpp
   ModuleBuilder.cpp
+  ObjectFilePCHContainerOperations.cpp
   SanitizerMetadata.cpp
   TargetInfo.cpp
 
