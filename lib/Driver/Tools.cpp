@@ -3076,6 +3076,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     assert((isa<CompileJobAction>(JA) || isa<BackendJobAction>(JA)) &&
            "Invalid action for clang tool.");
 
+    if (JA.getType() == types::TY_LTO_IR ||
+        JA.getType() == types::TY_LTO_BC) {
+      CmdArgs.push_back("-flto");
+    }
     if (JA.getType() == types::TY_Nothing) {
       CmdArgs.push_back("-fsyntax-only");
     } else if (JA.getType() == types::TY_LLVM_IR ||
@@ -9354,10 +9358,8 @@ void MinGW::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       if (Args.hasArg(options::OPT_pg))
         CmdArgs.push_back("-lgmon");
 
-      // FIXME: what to do about pthreads library?
-      // Currently required for OpenMP and posix-threading libgcc, 
-      // does not exists in mingw.org.
-      //CmdArgs.push_back("-lpthread");
+      if (Args.hasArg(options::OPT_pthread))
+        CmdArgs.push_back("-lpthread");
 
       // add system libraries
       if (Args.hasArg(options::OPT_mwindows)) {
