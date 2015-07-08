@@ -2498,8 +2498,8 @@ Sema::LookupInObjCMethod(LookupResult &Lookup, Scope *S,
         Diag(Loc, diag::warn_direct_ivar_access) << IV->getDeclName();
 
       ObjCIvarRefExpr *Result = new (Context)
-          ObjCIvarRefExpr(IV, IV->getType(), Loc, IV->getLocation(),
-                          SelfExpr.get(), true, true);
+          ObjCIvarRefExpr(IV, IV->getUsageType(SelfExpr.get()->getType()), Loc,
+                          IV->getLocation(), SelfExpr.get(), true, true);
 
       if (getLangOpts().ObjCAutoRefCount) {
         if (IV->getType().getObjCLifetime() == Qualifiers::OCL_Weak) {
@@ -5217,17 +5217,17 @@ Sema::ActOnInitList(SourceLocation LBraceLoc, MultiExprArg InitArgList,
 }
 
 /// Do an explicit extend of the given block pointer if we're in ARC.
-static void maybeExtendBlockObject(Sema &S, ExprResult &E) {
+void Sema::maybeExtendBlockObject(ExprResult &E) {
   assert(E.get()->getType()->isBlockPointerType());
   assert(E.get()->isRValue());
 
   // Only do this in an r-value context.
-  if (!S.getLangOpts().ObjCAutoRefCount) return;
+  if (!getLangOpts().ObjCAutoRefCount) return;
 
-  E = ImplicitCastExpr::Create(S.Context, E.get()->getType(),
+  E = ImplicitCastExpr::Create(Context, E.get()->getType(),
                                CK_ARCExtendBlockObject, E.get(),
                                /*base path*/ nullptr, VK_RValue);
-  S.ExprNeedsCleanups = true;
+  ExprNeedsCleanups = true;
 }
 
 /// Prepare a conversion of the given expression to an ObjC object
@@ -5237,7 +5237,7 @@ CastKind Sema::PrepareCastToObjCObjectPointer(ExprResult &E) {
   if (type->isObjCObjectPointerType()) {
     return CK_BitCast;
   } else if (type->isBlockPointerType()) {
-    maybeExtendBlockObject(*this, E);
+    maybeExtendBlockObject(E);
     return CK_BlockPointerToObjCPointerCast;
   } else {
     assert(type->isPointerType());
@@ -5279,7 +5279,7 @@ CastKind Sema::PrepareScalarCast(ExprResult &Src, QualType DestTy) {
         return CK_BitCast;
       if (SrcKind == Type::STK_CPointer)
         return CK_CPointerToObjCPointerCast;
-      maybeExtendBlockObject(*this, Src);
+      maybeExtendBlockObject(Src);
       return CK_BlockPointerToObjCPointerCast;
     case Type::STK_Bool:
       return CK_PointerToBoolean;
@@ -5858,36 +5858,6 @@ static QualType checkConditionalPointerCompatibility(Sema &S, ExprResult &LHS,
   return ResultTy;
 }
 
-/// \brief Returns true if QT is quelified-id and implements 'NSObject' and/or
-/// 'NSCopying' protocols (and nothing else); or QT is an NSObject and optionally
-/// implements 'NSObject' and/or NSCopying' protocols (and nothing else).
-static bool isObjCPtrBlockCompatible(Sema &S, ASTContext &C, QualType QT) {
-  if (QT->isObjCIdType())
-    return true;
-  
-  const ObjCObjectPointerType *OPT = QT->getAs<ObjCObjectPointerType>();
-  if (!OPT)
-    return false;
-
-  if (ObjCInterfaceDecl *ID = OPT->getInterfaceDecl())
-    if (ID->getIdentifier() != &C.Idents.get("NSObject"))
-      return false;
-  
-  ObjCProtocolDecl* PNSCopying =
-    S.LookupProtocol(&C.Idents.get("NSCopying"), SourceLocation());
-  ObjCProtocolDecl* PNSObject =
-    S.LookupProtocol(&C.Idents.get("NSObject"), SourceLocation());
-
-  for (auto *Proto : OPT->quals()) {
-    if ((PNSCopying && declaresSameEntity(Proto, PNSCopying)) ||
-        (PNSObject && declaresSameEntity(Proto, PNSObject)))
-      ;
-    else
-      return false;
-  }
-  return true;
-}
-
 /// \brief Return the resulting type when the operands are both block pointers.
 static QualType checkConditionalBlockPointerCompatibility(Sema &S,
                                                           ExprResult &LHS,
@@ -6335,7 +6305,10 @@ QualType Sema::FindCompositeObjCPointerType(ExprResult &LHS, ExprResult &RHS,
 
     // FIXME: Consider unifying with 'areComparableObjCPointerTypes'.
     // It could return the composite type.
-    if (Context.canAssignObjCInterfaces(LHSOPT, RHSOPT)) {
+    if (!(compositeType =
+          Context.areCommonBaseCompatible(LHSOPT, RHSOPT)).isNull()) {
+      // Nothing more to do.
+    } else if (Context.canAssignObjCInterfaces(LHSOPT, RHSOPT)) {
       compositeType = RHSOPT->isObjCBuiltinType() ? RHSTy : LHSTy;
     } else if (Context.canAssignObjCInterfaces(RHSOPT, LHSOPT)) {
       compositeType = LHSOPT->isObjCBuiltinType() ? LHSTy : RHSTy;
@@ -6349,10 +6322,7 @@ QualType Sema::FindCompositeObjCPointerType(ExprResult &LHS, ExprResult &RHS,
       compositeType = Context.getObjCIdType();
     } else if (LHSTy->isObjCIdType() || RHSTy->isObjCIdType()) {
       compositeType = Context.getObjCIdType();
-    } else if (!(compositeType =
-                 Context.areCommonBaseCompatible(LHSOPT, RHSOPT)).isNull())
-      ;
-    else {
+    } else {
       Diag(QuestionLoc, diag::ext_typecheck_cond_incompatible_operands)
       << LHSTy << RHSTy
       << LHS.get()->getSourceRange() << RHS.get()->getSourceRange();
@@ -7040,9 +7010,9 @@ Sema::CheckAssignmentConstraints(QualType LHSType, ExprResult &RHS,
     }
 
     // Only under strict condition T^ is compatible with an Objective-C pointer.
-    if (RHSType->isBlockPointerType() &&
-        isObjCPtrBlockCompatible(*this, Context, LHSType)) {
-      maybeExtendBlockObject(*this, RHS);
+    if (RHSType->isBlockPointerType() && 
+        LHSType->isBlockCompatibleObjCPointerType(Context)) {
+      maybeExtendBlockObject(RHS);
       Kind = CK_BlockPointerToObjCPointerCast;
       return Compatible;
     }
@@ -8251,9 +8221,6 @@ static bool hasIsEqualMethod(Sema &S, const Expr *LHS, const Expr *RHS) {
 
   // Get the LHS object's interface type.
   QualType InterfaceType = Type->getPointeeType();
-  if (const ObjCObjectType *iQFaceTy =
-      InterfaceType->getAsObjCQualifiedInterfaceType())
-    InterfaceType = iQFaceTy->getBaseType();
 
   // If the RHS isn't an Objective-C object, bail out.
   if (!RHS->getType()->isObjCObjectPointerType())

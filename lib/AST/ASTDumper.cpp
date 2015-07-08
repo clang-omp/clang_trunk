@@ -240,6 +240,9 @@ namespace  {
     void dumpTemplateArgument(const TemplateArgument &A,
                               SourceRange R = SourceRange());
 
+    // Objective-C utilities.
+    void dumpObjCTypeParamList(const ObjCTypeParamList *typeParams);
+
     // Types
     void VisitComplexType(const ComplexType *T) {
       dumpTypeAsChild(T->getElementType());
@@ -463,6 +466,7 @@ namespace  {
     // ObjC Decls
     void VisitObjCIvarDecl(const ObjCIvarDecl *D);
     void VisitObjCMethodDecl(const ObjCMethodDecl *D);
+    void VisitObjCTypeParamDecl(const ObjCTypeParamDecl *D);
     void VisitObjCCategoryDecl(const ObjCCategoryDecl *D);
     void VisitObjCCategoryImplDecl(const ObjCCategoryImplDecl *D);
     void VisitObjCProtocolDecl(const ObjCProtocolDecl *D);
@@ -953,6 +957,18 @@ void ASTDumper::dumpTemplateArgument(const TemplateArgument &A, SourceRange R) {
       break;
     }
   });
+}
+
+//===----------------------------------------------------------------------===//
+//  Objective-C Utilities
+//===----------------------------------------------------------------------===//
+void ASTDumper::dumpObjCTypeParamList(const ObjCTypeParamList *typeParams) {
+  if (!typeParams)
+    return;
+
+  for (auto typeParam : *typeParams) {
+    dumpDecl(typeParam);
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -1458,9 +1474,30 @@ void ASTDumper::VisitObjCMethodDecl(const ObjCMethodDecl *D) {
     dumpStmt(D->getBody());
 }
 
+void ASTDumper::VisitObjCTypeParamDecl(const ObjCTypeParamDecl *D) {
+  dumpName(D);
+  switch (D->getVariance()) {
+  case ObjCTypeParamVariance::Invariant:
+    break;
+
+  case ObjCTypeParamVariance::Covariant:
+    OS << " covariant";
+    break;
+
+  case ObjCTypeParamVariance::Contravariant:
+    OS << " contravariant";
+    break;
+  }
+
+  if (D->hasExplicitBound())
+    OS << " bounded";
+  dumpType(D->getUnderlyingType());
+}
+
 void ASTDumper::VisitObjCCategoryDecl(const ObjCCategoryDecl *D) {
   dumpName(D);
   dumpDeclRef(D->getClassInterface());
+  dumpObjCTypeParamList(D->getTypeParamList());
   dumpDeclRef(D->getImplementation());
   for (ObjCCategoryDecl::protocol_iterator I = D->protocol_begin(),
                                            E = D->protocol_end();
@@ -1483,6 +1520,7 @@ void ASTDumper::VisitObjCProtocolDecl(const ObjCProtocolDecl *D) {
 
 void ASTDumper::VisitObjCInterfaceDecl(const ObjCInterfaceDecl *D) {
   dumpName(D);
+  dumpObjCTypeParamList(D->getTypeParamListAsWritten());
   dumpDeclRef(D->getSuperClass(), "super");
 
   dumpDeclRef(D->getImplementation());

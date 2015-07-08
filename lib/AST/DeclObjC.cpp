@@ -239,6 +239,53 @@ ObjCPropertyDecl *ObjCContainerDecl::FindPropertyDeclaration(
 
 void ObjCInterfaceDecl::anchor() { }
 
+ObjCTypeParamList *ObjCInterfaceDecl::getTypeParamList() const {
+  // If this particular declaration has a type parameter list, return it.
+  if (ObjCTypeParamList *written = getTypeParamListAsWritten())
+    return written;
+
+  // If there is a definition, return its type parameter list.
+  if (const ObjCInterfaceDecl *def = getDefinition())
+    return def->getTypeParamListAsWritten();
+
+  // Otherwise, look at previous declarations to determine whether any
+  // of them has a type parameter list, skipping over those
+  // declarations that do not.
+  for (auto decl = getMostRecentDecl(); decl; decl = decl->getPreviousDecl()) {
+    if (ObjCTypeParamList *written = decl->getTypeParamListAsWritten())
+      return written;
+  }
+
+  return nullptr;
+}
+
+ObjCInterfaceDecl *ObjCInterfaceDecl::getSuperClass() const {
+  // FIXME: Should make sure no callers ever do this.
+  if (!hasDefinition())
+    return nullptr;
+    
+  if (data().ExternallyCompleted)
+    LoadExternalDefinition();
+
+  if (const ObjCObjectType *superType = getSuperClassType()) {
+    if (ObjCInterfaceDecl *superDecl = superType->getInterface()) {
+      if (ObjCInterfaceDecl *superDef = superDecl->getDefinition())
+        return superDef;
+
+      return superDecl;
+    }
+  }
+
+  return nullptr;
+}
+
+SourceLocation ObjCInterfaceDecl::getSuperClassLoc() const {
+  if (TypeSourceInfo *superTInfo = getSuperClassTInfo())
+    return superTInfo->getTypeLoc().getLocStart();
+  
+  return SourceLocation();
+}
+
 /// FindPropertyVisibleInPrimaryClass - Finds declaration of the property
 /// with name 'PropertyId' in the primary class; including those in protocols
 /// (direct or indirect) used by the primary class.
@@ -966,6 +1013,14 @@ SourceRange ObjCMethodDecl::getReturnTypeSourceRange() const {
   return SourceRange();
 }
 
+QualType ObjCMethodDecl::getSendResultType(QualType receiverType) const {
+  // FIXME: Handle related result types here.
+
+  return getReturnType().getNonLValueExprType(getASTContext())
+           .substObjCMemberType(receiverType, getDeclContext(),
+                                ObjCSubstitutionContext::Result);
+}
+
 static void CollectOverriddenMethodsRecurse(const ObjCContainerDecl *Container,
                                             const ObjCMethodDecl *Method,
                                SmallVectorImpl<const ObjCMethodDecl *> &Methods,
@@ -1137,6 +1192,78 @@ ObjCMethodDecl::findPropertyDecl(bool CheckOverrides) const {
 }
 
 //===----------------------------------------------------------------------===//
+// ObjCTypeParamDecl
+//===----------------------------------------------------------------------===//
+
+void ObjCTypeParamDecl::anchor() { }
+
+ObjCTypeParamDecl *ObjCTypeParamDecl::Create(ASTContext &ctx, DeclContext *dc,
+                                             ObjCTypeParamVariance variance,
+                                             SourceLocation varianceLoc,
+                                             unsigned index,
+                                             SourceLocation nameLoc,
+                                             IdentifierInfo *name,
+                                             SourceLocation colonLoc,
+                                             TypeSourceInfo *boundInfo) {
+  return new (ctx, dc) ObjCTypeParamDecl(ctx, dc, variance, varianceLoc, index,
+                                         nameLoc, name, colonLoc, boundInfo);
+}
+
+ObjCTypeParamDecl *ObjCTypeParamDecl::CreateDeserialized(ASTContext &ctx,
+                                                         unsigned ID) {
+  return new (ctx, ID) ObjCTypeParamDecl(ctx, nullptr,
+                                         ObjCTypeParamVariance::Invariant,
+                                         SourceLocation(), 0, SourceLocation(),
+                                         nullptr, SourceLocation(), nullptr);
+}
+
+SourceRange ObjCTypeParamDecl::getSourceRange() const {
+  SourceLocation startLoc = VarianceLoc;
+  if (startLoc.isInvalid())
+    startLoc = getLocation();
+
+  if (hasExplicitBound()) {
+    return SourceRange(startLoc,
+                       getTypeSourceInfo()->getTypeLoc().getEndLoc());
+  }
+
+  return SourceRange(startLoc);
+}
+
+//===----------------------------------------------------------------------===//
+// ObjCTypeParamList
+//===----------------------------------------------------------------------===//
+ObjCTypeParamList::ObjCTypeParamList(SourceLocation lAngleLoc,
+                                     ArrayRef<ObjCTypeParamDecl *> typeParams,
+                                     SourceLocation rAngleLoc)
+  : Brackets(lAngleLoc, rAngleLoc), NumParams(typeParams.size())
+{
+  std::copy(typeParams.begin(), typeParams.end(), begin());
+}
+
+
+ObjCTypeParamList *ObjCTypeParamList::create(
+                     ASTContext &ctx,
+                     SourceLocation lAngleLoc,
+                     ArrayRef<ObjCTypeParamDecl *> typeParams,
+                     SourceLocation rAngleLoc) {
+  unsigned size = sizeof(ObjCTypeParamList)
+                + sizeof(ObjCTypeParamDecl *) * typeParams.size();
+  static_assert(alignof(ObjCTypeParamList) >= alignof(ObjCTypeParamDecl*),
+                "type parameter list needs greater alignment");
+  unsigned align = llvm::alignOf<ObjCTypeParamList>();
+  void *mem = ctx.Allocate(size, align);
+  return new (mem) ObjCTypeParamList(lAngleLoc, typeParams, rAngleLoc);
+}
+
+void ObjCTypeParamList::gatherDefaultTypeArgs(
+       SmallVectorImpl<QualType> &typeArgs) const {
+  typeArgs.reserve(size());
+  for (auto typeParam : *this)
+    typeArgs.push_back(typeParam->getUnderlyingType());
+}
+
+//===----------------------------------------------------------------------===//
 // ObjCInterfaceDecl
 //===----------------------------------------------------------------------===//
 
@@ -1144,11 +1271,13 @@ ObjCInterfaceDecl *ObjCInterfaceDecl::Create(const ASTContext &C,
                                              DeclContext *DC,
                                              SourceLocation atLoc,
                                              IdentifierInfo *Id,
+                                             ObjCTypeParamList *typeParamList,
                                              ObjCInterfaceDecl *PrevDecl,
                                              SourceLocation ClassLoc,
                                              bool isInternal){
   ObjCInterfaceDecl *Result = new (C, DC)
-      ObjCInterfaceDecl(C, DC, atLoc, Id, ClassLoc, PrevDecl, isInternal);
+      ObjCInterfaceDecl(C, DC, atLoc, Id, typeParamList, ClassLoc, PrevDecl,
+                        isInternal);
   Result->Data.setInt(!C.getLangOpts().Modules);
   C.getObjCInterfaceType(Result, PrevDecl);
   return Result;
@@ -1159,6 +1288,7 @@ ObjCInterfaceDecl *ObjCInterfaceDecl::CreateDeserialized(const ASTContext &C,
   ObjCInterfaceDecl *Result = new (C, ID) ObjCInterfaceDecl(C, nullptr,
                                                             SourceLocation(),
                                                             nullptr,
+                                                            nullptr,
                                                             SourceLocation(),
                                                             nullptr, false);
   Result->Data.setInt(!C.getLangOpts().Modules);
@@ -1167,11 +1297,13 @@ ObjCInterfaceDecl *ObjCInterfaceDecl::CreateDeserialized(const ASTContext &C,
 
 ObjCInterfaceDecl::ObjCInterfaceDecl(const ASTContext &C, DeclContext *DC,
                                      SourceLocation AtLoc, IdentifierInfo *Id,
+                                     ObjCTypeParamList *typeParamList,
                                      SourceLocation CLoc,
                                      ObjCInterfaceDecl *PrevDecl,
                                      bool IsInternal)
     : ObjCContainerDecl(ObjCInterface, DC, Id, CLoc, AtLoc),
-      redeclarable_base(C), TypeForDecl(nullptr), Data() {
+      redeclarable_base(C), TypeForDecl(nullptr), TypeParamList(typeParamList),
+      Data() {
   setPreviousDecl(PrevDecl);
   
   // Copy the 'data' pointer over.
@@ -1179,6 +1311,12 @@ ObjCInterfaceDecl::ObjCInterfaceDecl(const ASTContext &C, DeclContext *DC,
     Data = PrevDecl->Data;
   
   setImplicit(IsInternal);
+
+  // Update the declaration context of the type parameters.
+  if (typeParamList) {
+    for (auto typeParam : *typeParamList)
+      typeParam->setDeclContext(this);
+  }
 }
 
 void ObjCInterfaceDecl::LoadExternalDefinition() const {
@@ -1492,6 +1630,11 @@ const ObjCInterfaceDecl *ObjCIvarDecl::getContainingInterface() const {
   }
 }
 
+QualType ObjCIvarDecl::getUsageType(QualType objectType) const {
+  return getType().substObjCMemberType(objectType, getDeclContext(),
+                                       ObjCSubstitutionContext::Property);
+}
+
 //===----------------------------------------------------------------------===//
 // ObjCAtDefsFieldDecl
 //===----------------------------------------------------------------------===//
@@ -1648,17 +1791,39 @@ ObjCProtocolDecl::getObjCRuntimeNameAsString() const {
 
 void ObjCCategoryDecl::anchor() { }
 
+ObjCCategoryDecl::ObjCCategoryDecl(DeclContext *DC, SourceLocation AtLoc,
+                                   SourceLocation ClassNameLoc, 
+                                   SourceLocation CategoryNameLoc,
+                                   IdentifierInfo *Id, ObjCInterfaceDecl *IDecl,
+                                   ObjCTypeParamList *typeParamList,
+                                   SourceLocation IvarLBraceLoc,
+                                   SourceLocation IvarRBraceLoc)
+  : ObjCContainerDecl(ObjCCategory, DC, Id, ClassNameLoc, AtLoc),
+    ClassInterface(IDecl), TypeParamList(typeParamList),
+    NextClassCategory(nullptr), CategoryNameLoc(CategoryNameLoc),
+    IvarLBraceLoc(IvarLBraceLoc), IvarRBraceLoc(IvarRBraceLoc) 
+{
+  // Set the declaration context of each of the type parameters.
+  if (typeParamList) {
+    for (auto typeParam : *typeParamList) {
+      typeParam->setDeclContext(this);
+    }
+  }
+}
+
 ObjCCategoryDecl *ObjCCategoryDecl::Create(ASTContext &C, DeclContext *DC,
                                            SourceLocation AtLoc,
                                            SourceLocation ClassNameLoc,
                                            SourceLocation CategoryNameLoc,
                                            IdentifierInfo *Id,
                                            ObjCInterfaceDecl *IDecl,
+                                           ObjCTypeParamList *typeParamList,
                                            SourceLocation IvarLBraceLoc,
                                            SourceLocation IvarRBraceLoc) {
   ObjCCategoryDecl *CatDecl =
       new (C, DC) ObjCCategoryDecl(DC, AtLoc, ClassNameLoc, CategoryNameLoc, Id,
-                                   IDecl, IvarLBraceLoc, IvarRBraceLoc);
+                                   IDecl, typeParamList, IvarLBraceLoc,
+                                   IvarRBraceLoc);
   if (IDecl) {
     // Link this category into its class's category list.
     CatDecl->NextClassCategory = IDecl->getCategoryListRaw();
@@ -1676,7 +1841,7 @@ ObjCCategoryDecl *ObjCCategoryDecl::CreateDeserialized(ASTContext &C,
                                                        unsigned ID) {
   return new (C, ID) ObjCCategoryDecl(nullptr, SourceLocation(),
                                       SourceLocation(), SourceLocation(),
-                                      nullptr, nullptr);
+                                      nullptr, nullptr, nullptr);
 }
 
 ObjCCategoryImplDecl *ObjCCategoryDecl::getImplementation() const {
@@ -1874,6 +2039,11 @@ ObjCPropertyDecl *ObjCPropertyDecl::CreateDeserialized(ASTContext &C,
   return new (C, ID) ObjCPropertyDecl(nullptr, SourceLocation(), nullptr,
                                       SourceLocation(), SourceLocation(),
                                       QualType(), nullptr, None);
+}
+
+QualType ObjCPropertyDecl::getUsageType(QualType objectType) const {
+  return DeclType.substObjCMemberType(objectType, getDeclContext(),
+                                      ObjCSubstitutionContext::Property);
 }
 
 //===----------------------------------------------------------------------===//
