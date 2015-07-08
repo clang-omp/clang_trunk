@@ -54,6 +54,7 @@
 #include "llvm/Support/Program.h"
 #include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Support/Signals.h"
+#include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/Threading.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
@@ -2943,6 +2944,12 @@ CXIndex clang_createIndex(int excludeDeclarationsFromPCH,
   // static which registers our fatal error handler. This ensures it is only
   // registered once.
   (void)*RegisterFatalErrorHandlerOnce;
+
+  // Initialize targets for clang module support.
+  llvm::InitializeAllTargets();
+  llvm::InitializeAllTargetMCs();
+  llvm::InitializeAllAsmPrinters();
+  llvm::InitializeAllAsmParsers();
 
   CIndexer *CIdxr =
       new CIndexer(std::make_shared<ObjectFilePCHContainerOperations>());

@@ -98,12 +98,6 @@ public:
     if (Builder)
       Builder->Release();
 
-    // Initialize the backend if we haven't done so already.
-    LLVMInitializeAllTargetInfos();
-    LLVMInitializeAllTargets();
-    LLVMInitializeAllAsmPrinters();
-    LLVMInitializeAllTargetMCs();
-
     // Ensure the target exists.
     std::string Error;
     auto Triple = Ctx.getTargetInfo().getTriple();
