@@ -1466,6 +1466,10 @@ public:
 
   void addReplacement(StringRef Name, llvm::Constant *C);
 
+  /// Returns whether the given record is blacklisted from control flow
+  /// integrity checks.
+  bool IsCFIBlacklistedRecord(const CXXRecordDecl *RD);
+
   /// Emit bit set entries for the given vtable using the given layout if
   /// vptr CFI is enabled.
   void EmitVTableBitSetEntries(llvm::GlobalVariable *VTable,
