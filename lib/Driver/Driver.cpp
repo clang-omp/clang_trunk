@@ -1955,7 +1955,7 @@ void Driver::BuildJobsForAction(Compilation &C, const Action *A,
     const char *OpenMPTargetName = BTA->getTargetName();
 
     if (OpenMPTargetName) {
-      TC = &getToolChain(C.getArgs(), "", OpenMPTargetName);
+      TC = &getToolChain(C.getArgs(), llvm::Triple(), OpenMPTargetName);
       // If the toolchain does not have isOpenMPTargetToolchain set it means
       // there was some problem creating the toolchain
       if (!TC->isOpenMPTargetToolchain()) {
