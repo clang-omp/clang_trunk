@@ -507,7 +507,7 @@ def femit_all_decls : Flag<["-"], "femit-all-decls">, Group<f_Group>, Flags<[CC1
   HelpText<"Emit all declarations, even if unused">;
 def fencoding_EQ : Joined<["-"], "fencoding=">, Group<f_Group>;
 def ferror_limit_EQ : Joined<["-"], "ferror-limit=">, Group<f_Group>, Flags<[CoreOption]>;
-def fexceptions : Flag<["-"], "fexceptions">, Group<f_Group>, Flags<[CC1Option]>,
+def fexceptions : Flag<["-"], "fexceptions">, Group<f_Group>, Flags<[CC1Option, CoreOption]>,
   HelpText<"Enable support for exception handling">;
 def fexcess_precision_EQ : Joined<["-"], "fexcess-precision=">,
     Group<clang_ignored_gcc_optimization_f_Group>;
@@ -560,6 +560,9 @@ def fsanitize_memory_track_origins : Flag<["-"], "fsanitize-memory-track-origins
 def fno_sanitize_memory_track_origins : Flag<["-"], "fno-sanitize-memory-track-origins">,
                                         Group<f_clang_Group>, Flags<[CC1Option]>,
                                         HelpText<"Disable origins tracking in MemorySanitizer">;
+def fsanitize_memory_use_after_dtor : Flag<["-"], "fsanitize-memory-use-after-dtor">,
+                                     Group<f_clang_Group>, Flags<[CC1Option]>,
+                                     HelpText<"Enable use-after-destroy detection in MemorySanitizer">;
 def fsanitize_address_field_padding : Joined<["-"], "fsanitize-address-field-padding=">,
                                         Group<f_clang_Group>, Flags<[CC1Option]>,
                                         HelpText<"Level of field padding for AddressSanitizer">;
@@ -1543,6 +1546,7 @@ def private__bundle : Flag<["-"], "private_bundle">;
 def pthreads : Flag<["-"], "pthreads">;
 def pthread : Flag<["-"], "pthread">, Flags<[CC1Option]>,
   HelpText<"Support POSIX threads in generated code">;
+def no_pthread : Flag<["-"], "no-pthread">, Flags<[CC1Option]>;
 def p : Flag<["-"], "p">;
 def pie : Flag<["-"], "pie">;
 def read__only__relocs : Separate<["-"], "read_only_relocs">;

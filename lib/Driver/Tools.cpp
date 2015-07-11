@@ -1501,9 +1501,7 @@ void Clang::AddPPCTargetArgs(const ArgList &Args,
                              ArgStringList &CmdArgs) const {
   // Select the ABI to use.
   const char *ABIName = nullptr;
-  if (Arg *A = Args.getLastArg(options::OPT_mabi_EQ)) {
-    ABIName = A->getValue();
-  } else if (getToolChain().getTriple().isOSLinux())
+  if (getToolChain().getTriple().isOSLinux())
     switch (getToolChain().getArch()) {
     case llvm::Triple::ppc64: {
       // When targeting a processor that supports QPX, or if QPX is
@@ -1527,6 +1525,13 @@ void Clang::AddPPCTargetArgs(const ArgList &Args,
     default:
       break;
     }
+
+  if (Arg *A = Args.getLastArg(options::OPT_mabi_EQ))
+    // The ppc64 linux abis are all "altivec" abis by default. Accept and ignore
+    // the option if given as we don't have backend support for any targets
+    // that don't use the altivec abi.
+    if (StringRef(A->getValue()) != "altivec")
+      ABIName = A->getValue();
 
   if (ABIName) {
     CmdArgs.push_back("-target-abi");
@@ -2270,17 +2275,6 @@ shouldUseExceptionTablesForObjCExceptions(const ObjCRuntime &runtime,
            Triple.getArch() == llvm::Triple::arm));
 }
 
-// exceptionSettings() exists to share the logic between -cc1 and linker
-// invocations.
-static bool exceptionSettings(const ArgList &Args, const llvm::Triple &Triple) {
-  if (Arg *A = Args.getLastArg(options::OPT_fexceptions,
-                               options::OPT_fno_exceptions))
-    if (A->getOption().matches(options::OPT_fexceptions))
-      return true;
-
-  return false;
-}
-
 /// Adds exception related arguments to the driver command arguments. There's a
 /// master flag, -fexceptions and also language specific flags to enable/disable
 /// C++ and Objective-C exceptions. This makes it possible to for example
@@ -2304,8 +2298,9 @@ static void addExceptionArgs(const ArgList &Args, types::ID InputType,
     return;
   }
 
-  // Gather the exception settings from the command line arguments.
-  bool EH = exceptionSettings(Args, Triple);
+  // See if the user explicitly enabled exceptions.
+  bool EH = Args.hasFlag(options::OPT_fexceptions, options::OPT_fno_exceptions,
+                         false);
 
   // Obj-C exceptions are enabled by default, regardless of -fexceptions. This
   // is not necessarily sensible, but follows GCC.
@@ -2318,8 +2313,11 @@ static void addExceptionArgs(const ArgList &Args, types::ID InputType,
   }
 
   if (types::isCXX(InputType)) {
-    bool CXXExceptionsEnabled =
-        Triple.getArch() != llvm::Triple::xcore && !Triple.isPS4CPU();
+    // Disable C++ EH by default on XCore, PS4, and MSVC.
+    // FIXME: Remove MSVC from this list once things work.
+    bool CXXExceptionsEnabled = Triple.getArch() != llvm::Triple::xcore &&
+                                !Triple.isPS4CPU() &&
+                                !Triple.isWindowsMSVCEnvironment();
     Arg *ExceptionArg = Args.getLastArg(
         options::OPT_fcxx_exceptions, options::OPT_fno_cxx_exceptions,
         options::OPT_fexceptions, options::OPT_fno_exceptions);
@@ -2964,6 +2962,89 @@ VersionTuple visualstudio::getMSVCVersion(const Driver *D,
     return VersionTuple(18);
   }
   return VersionTuple();
+}
+
+static void addPGOAndCoverageFlags(Compilation &C, const Driver &D,
+                                   const InputInfo &Output, const ArgList &Args,
+                                   ArgStringList &CmdArgs) {
+  auto *ProfileGenerateArg = Args.getLastArg(
+      options::OPT_fprofile_instr_generate,
+      options::OPT_fprofile_instr_generate_EQ, options::OPT_fprofile_generate,
+      options::OPT_fprofile_generate_EQ);
+
+  auto *ProfileUseArg = Args.getLastArg(
+      options::OPT_fprofile_instr_use, options::OPT_fprofile_instr_use_EQ,
+      options::OPT_fprofile_use, options::OPT_fprofile_use_EQ);
+
+  if (ProfileGenerateArg && ProfileUseArg)
+    D.Diag(diag::err_drv_argument_not_allowed_with)
+        << ProfileGenerateArg->getSpelling()
+        << ProfileUseArg->getSpelling();
+
+  if (ProfileGenerateArg &&
+      ProfileGenerateArg->getOption().matches(
+          options::OPT_fprofile_instr_generate_EQ))
+    ProfileGenerateArg->render(Args, CmdArgs);
+  else if (ProfileGenerateArg &&
+           ProfileGenerateArg->getOption().matches(
+               options::OPT_fprofile_generate_EQ)) {
+    SmallString<128> Path(ProfileGenerateArg->getValue());
+    llvm::sys::path::append(Path, "default.profraw");
+    CmdArgs.push_back(
+        Args.MakeArgString(Twine("-fprofile-instr-generate=") + Path));
+  } else
+    Args.AddAllArgs(CmdArgs, options::OPT_fprofile_instr_generate);
+
+  if (ProfileUseArg &&
+      ProfileUseArg->getOption().matches(options::OPT_fprofile_instr_use_EQ))
+    ProfileUseArg->render(Args, CmdArgs);
+  else if (ProfileUseArg &&
+           (ProfileUseArg->getOption().matches(options::OPT_fprofile_use_EQ) ||
+            ProfileUseArg->getOption().matches(
+                options::OPT_fprofile_instr_use))) {
+    SmallString<128> Path(
+        ProfileUseArg->getNumValues() == 0 ? "" : ProfileUseArg->getValue());
+    if (Path.empty() || llvm::sys::fs::is_directory(Path))
+      llvm::sys::path::append(Path, "default.profdata");
+    CmdArgs.push_back(Args.MakeArgString(Twine("-fprofile-instr-use=") + Path));
+  }
+
+  if (Args.hasArg(options::OPT_ftest_coverage) ||
+      Args.hasArg(options::OPT_coverage))
+    CmdArgs.push_back("-femit-coverage-notes");
+  if (Args.hasFlag(options::OPT_fprofile_arcs, options::OPT_fno_profile_arcs,
+                   false) ||
+      Args.hasArg(options::OPT_coverage))
+    CmdArgs.push_back("-femit-coverage-data");
+
+  if (Args.hasArg(options::OPT_fcoverage_mapping) && !ProfileGenerateArg)
+    D.Diag(diag::err_drv_argument_only_allowed_with)
+        << "-fcoverage-mapping"
+        << "-fprofile-instr-generate";
+
+  if (Args.hasArg(options::OPT_fcoverage_mapping))
+    CmdArgs.push_back("-fcoverage-mapping");
+
+  if (C.getArgs().hasArg(options::OPT_c) ||
+      C.getArgs().hasArg(options::OPT_S)) {
+    if (Output.isFilename()) {
+      CmdArgs.push_back("-coverage-file");
+      SmallString<128> CoverageFilename;
+      if (Arg *FinalOutput = C.getArgs().getLastArg(options::OPT_o)) {
+        CoverageFilename = FinalOutput->getValue();
+      } else {
+        CoverageFilename = llvm::sys::path::filename(Output.getBaseInput());
+      }
+      if (llvm::sys::path::is_relative(CoverageFilename)) {
+        SmallString<128> Pwd;
+        if (!llvm::sys::fs::current_path(Pwd)) {
+          llvm::sys::path::append(Pwd, CoverageFilename);
+          CoverageFilename.swap(Pwd);
+        }
+      }
+      CmdArgs.push_back(Args.MakeArgString(CoverageFilename));
+    }
+  }
 }
 
 void Clang::ConstructJob(Compilation &C, const JobAction &JA,
@@ -3804,83 +3885,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   Args.AddAllArgs(CmdArgs, options::OPT_finstrument_functions);
 
-  auto *ProfileGenerateArg = Args.getLastArg(
-      options::OPT_fprofile_instr_generate,
-      options::OPT_fprofile_instr_generate_EQ, options::OPT_fprofile_generate,
-      options::OPT_fprofile_generate_EQ);
-
-  auto *ProfileUseArg = Args.getLastArg(
-      options::OPT_fprofile_instr_use, options::OPT_fprofile_instr_use_EQ,
-      options::OPT_fprofile_use, options::OPT_fprofile_use_EQ);
-
-  if (ProfileGenerateArg && ProfileUseArg)
-    D.Diag(diag::err_drv_argument_not_allowed_with)
-        << ProfileGenerateArg->getSpelling()
-        << ProfileUseArg->getSpelling();
-
-  SmallString<128> Path;
-  if (ProfileGenerateArg &&
-      ProfileGenerateArg->getOption().matches(
-          options::OPT_fprofile_instr_generate_EQ))
-    ProfileGenerateArg->render(Args, CmdArgs);
-  else if (ProfileGenerateArg &&
-           ProfileGenerateArg->getOption().matches(
-               options::OPT_fprofile_generate_EQ)) {
-    Path = ProfileGenerateArg->getValue();
-    llvm::sys::path::append(Path, "default.profraw");
-    CmdArgs.push_back(
-        Args.MakeArgString(Twine("-fprofile-instr-generate=") + Path));
-  } else
-    Args.AddAllArgs(CmdArgs, options::OPT_fprofile_instr_generate);
-
-  if (ProfileUseArg &&
-      ProfileUseArg->getOption().matches(options::OPT_fprofile_instr_use_EQ))
-    ProfileUseArg->render(Args, CmdArgs);
-  else if (ProfileUseArg &&
-           (ProfileUseArg->getOption().matches(options::OPT_fprofile_use_EQ) ||
-            ProfileUseArg->getOption().matches(
-                options::OPT_fprofile_instr_use))) {
-    Path = ProfileUseArg->getNumValues() == 0 ? "" : ProfileUseArg->getValue();
-    if (Path.empty() || llvm::sys::fs::is_directory(Path))
-      llvm::sys::path::append(Path, "default.profdata");
-    CmdArgs.push_back(Args.MakeArgString(Twine("-fprofile-instr-use=") + Path));
-  }
-
-  if (Args.hasArg(options::OPT_ftest_coverage) ||
-      Args.hasArg(options::OPT_coverage))
-    CmdArgs.push_back("-femit-coverage-notes");
-  if (Args.hasFlag(options::OPT_fprofile_arcs, options::OPT_fno_profile_arcs,
-                   false) ||
-      Args.hasArg(options::OPT_coverage))
-    CmdArgs.push_back("-femit-coverage-data");
-
-  if (Args.hasArg(options::OPT_fcoverage_mapping) && !ProfileGenerateArg)
-    D.Diag(diag::err_drv_argument_only_allowed_with)
-        << "-fcoverage-mapping"
-        << "-fprofile-instr-generate";
-
-  if (Args.hasArg(options::OPT_fcoverage_mapping))
-    CmdArgs.push_back("-fcoverage-mapping");
-
-  if (C.getArgs().hasArg(options::OPT_c) ||
-      C.getArgs().hasArg(options::OPT_S)) {
-    if (Output.isFilename()) {
-      CmdArgs.push_back("-coverage-file");
-      SmallString<128> CoverageFilename;
-      if (Arg *FinalOutput = C.getArgs().getLastArg(options::OPT_o)) {
-        CoverageFilename = FinalOutput->getValue();
-      } else {
-        CoverageFilename = llvm::sys::path::filename(Output.getBaseInput());
-      }
-      if (llvm::sys::path::is_relative(CoverageFilename)) {
-        if (!llvm::sys::fs::current_path(Path)) {
-          llvm::sys::path::append(Path, CoverageFilename);
-          CoverageFilename.swap(Path);
-        }
-      }
-      CmdArgs.push_back(Args.MakeArgString(CoverageFilename));
-    }
-  }
+  addPGOAndCoverageFlags(C, D, Output, Args, CmdArgs);
 
   // Pass options for controlling the default header search paths.
   if (Args.hasArg(options::OPT_nostdinc)) {
@@ -4466,7 +4471,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   // -fmodule-cache-path specifies where our implicitly-built module files
   // should be written.
-  Path = "";
+  SmallString<128> Path;
   if (Arg *A = Args.getLastArg(options::OPT_fmodules_cache_path))
     Path = A->getValue();
   if (HaveModules) {
@@ -5297,6 +5302,7 @@ struct EHFlags {
 /// The default is /EHs-c-, meaning cleanups are disabled.
 static EHFlags parseClangCLEHFlags(const Driver &D, const ArgList &Args) {
   EHFlags EH;
+
   std::vector<std::string> EHArgs =
       Args.getAllArgValues(options::OPT__SLASH_EH);
   for (auto EHVal : EHArgs) {
@@ -5318,6 +5324,15 @@ static EHFlags parseClangCLEHFlags(const Driver &D, const ArgList &Args) {
       break;
     }
   }
+
+  // Only enable C++ exceptions if the user opts into it by passing
+  // -fexceptions. Lots of build systems implicitly pass /EHsc when users don't
+  // actually need it.
+  // FIXME: Remove this when they work out of the box.
+  if (!Args.hasFlag(options::OPT_fexceptions, options::OPT_fno_exceptions,
+                    /*default=*/false))
+    EH = EHFlags();
+
   return EH;
 }
 
@@ -9476,7 +9491,9 @@ void XCore::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   if (Args.hasArg(options::OPT_v))
     CmdArgs.push_back("-v");
 
-  if (exceptionSettings(Args, getToolChain().getTriple()))
+  // Pass -fexceptions through to the linker if it was present.
+  if (Args.hasFlag(options::OPT_fexceptions, options::OPT_fno_exceptions,
+                   false))
     CmdArgs.push_back("-fexceptions");
 
   AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs,

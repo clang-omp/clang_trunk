@@ -91,6 +91,7 @@ namespace {
         BFI = OrigBFI;
         BFI.Offset = Offset;
         BFI.StorageSize = AtomicSizeInBits;
+        BFI.StorageOffset += OffsetInChars;
         LVal = LValue::MakeBitfield(Addr, BFI, lvalue.getType(),
                                     lvalue.getAlignment());
       } else if (lvalue.isVectorElt()) {
