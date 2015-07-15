@@ -1564,7 +1564,8 @@ void Sema::CompleteOMPDeclareReductionDecl(OMPDeclareReductionDecl *D,
 
 bool Sema::ActOnStartOpenMPDeclareTargetDirective(Scope *S,
                                                   SourceLocation Loc) {
-  if (CurContext && !CurContext->isFileContext()) {
+  if (CurContext && !CurContext->isFileContext() &&
+      !CurContext->isExternCContext() && !CurContext->isExternCXXContext()) {
     Diag(Loc, diag::err_omp_region_not_file_context);
     return false;
   }
