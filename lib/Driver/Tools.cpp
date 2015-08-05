@@ -9641,6 +9641,7 @@ static void BitcodeToCubin(Compilation &C, const JobAction &JA, const Tool &T,
   if (!CPU.empty()) {
     std::string CPUFlag = "-mcpu=" + CPU;
     LlcCmdArgs.push_back(C.getArgs().MakeArgString(CPUFlag));
+    LlcCmdArgs.push_back(C.getArgs().MakeArgString("-mattr=ptx40"));
   }
   const char *LlcExec = Args.MakeArgString(TC.getDriver().Dir + "/llc");
   C.addCommand(llvm::make_unique<Command>(JA, T, LlcExec, LlcCmdArgs));
