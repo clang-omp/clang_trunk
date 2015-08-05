@@ -15,8 +15,32 @@ void foo() {}
 #pragma omp end declare target
 // CHECK: #pragma omp end declare target
 
+extern "C" {
+#pragma omp declare target
+// CHECK: #pragma omp declare target
+
+void foo_c() {}
+// CHECK-NEXT: void foo_c()
+
+#pragma omp end declare target
+// CHECK: #pragma omp end declare target
+}
+
+extern "C++" {
+#pragma omp declare target
+// CHECK: #pragma omp declare target
+
+void foo_cpp() {}
+// CHECK-NEXT: void foo_cpp()
+
+#pragma omp end declare target
+// CHECK: #pragma omp end declare target
+}
+
 int main (int argc, char **argv) {
   foo();
+  foo_c();
+  foo_cpp();
   return (0);
 }
 
