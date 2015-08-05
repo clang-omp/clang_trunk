@@ -2533,6 +2533,12 @@ DEF_TRAVERSE_STMT(OMPTargetUpdateDirective, {
   return TraverseOMPExecutableDirective(S);
 })
 
+DEF_TRAVERSE_STMT(OMPTargetEnterDataDirective,
+                  { return TraverseOMPExecutableDirective(S); })
+
+DEF_TRAVERSE_STMT(OMPTargetExitDataDirective,
+                  { return TraverseOMPExecutableDirective(S); })
+
 DEF_TRAVERSE_STMT(OMPTargetTeamsDirective, {
   return TraverseOMPExecutableDirective(S);
 })

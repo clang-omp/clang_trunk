@@ -1127,8 +1127,13 @@ static void FindAndProcessTargetRegions(CodeGenFunction &CGF, const Stmt *S){
   }
 
   // Keep looking for target regions recursively
-  for(Stmt::const_child_iterator ii=S->child_begin(), ie=S->child_end(); ii != ie; ++ii)
+  for (Stmt::const_child_iterator ii = S->child_begin(), ie = S->child_end();
+       ii != ie; ++ii) {
+    if ((*ii) && ii->getStmtClass() == Stmt::ReturnStmtClass)
+      return;
+
     FindAndProcessTargetRegions(CGF,*ii);
+  }
 }
 static void ScanFunctionTargetRegions(CodeGenModule &CGM, const FunctionDecl*D){
 
@@ -1891,7 +1896,7 @@ CodeGenModule::GetOrCreateLLVMGlobal(StringRef MangledName,
       llvm::GlobalVariable::NotThreadLocal, AddrSpace);
 
   // Create the OpenMP entries for this global
-  if (OpenMPRuntime && D) {
+  if (OpenMPRuntime && D && !D->hasExternalStorage()) {
     OpenMPRuntime->registerGlobalVariable(D, GV);
   }
 
@@ -3830,19 +3835,20 @@ llvm::Constant *CodeGenModule::EmitUuidofInitializer(StringRef Uuid) {
   return llvm::ConstantStruct::getAnon(Fields);
 }
 
-CodeGenModule::OpenMPSupportStackTy::OMPStackElemTy::OMPStackElemTy(CodeGenModule &CGM)
-  : PrivateVars(), IfEnd(0), IfClauseCondition(0), ReductionFunc(0), CGM(CGM),
-    RedCGF(0), ReductionTypes(), ReductionMap(), ReductionRec(0), ReductionRecVar(0),
-    RedArg1(0), RedArg2(0), ReduceSwitch(0), BB1(0), BB1IP(0), BB2(0), BB2IP(0), LockVar(0),
-    LastprivateBB(0), LastprivateIP(0), LastprivateEndBB(0), LastIterVar(0), TaskFlags(0),
-    PTaskTValue(0), PTask(0), UntiedPartIdAddr(0), UntiedCounter(0), UntiedSwitch(0),
-    UntiedEnd(0), ParentCGF(0),
-    NoWait(true), Mergeable(false), Schedule(0), ChunkSize(0), NewTask(false),
-    Untied(false), HasLastPrivate(false),
-    TaskPrivateTy(0), TaskPrivateQTy(), TaskPrivateBase(0), NumTeams(0), ThreadLimit(0),
-    WaitDepsArgs(0), MapsBegin(0), MapsEnd(0),
-    OffloadingMapBeginFunctionCall(0), OffloadingDevice(0),
-    OffloadingHostFunctionCall(0) { }
+CodeGenModule::OpenMPSupportStackTy::OMPStackElemTy::OMPStackElemTy(
+    CodeGenModule &CGM)
+    : PrivateVars(), IfEnd(0), IfClauseCondition(0), ReductionFunc(0), CGM(CGM),
+      RedCGF(0), ReductionTypes(), ReductionMap(), ReductionRec(0),
+      ReductionRecVar(0), RedArg1(0), RedArg2(0), ReduceSwitch(0), BB1(0),
+      BB1IP(0), BB2(0), BB2IP(0), LockVar(0), LastprivateBB(0),
+      LastprivateIP(0), LastprivateEndBB(0), LastIterVar(0), TaskFlags(0),
+      PTaskTValue(0), PTask(0), UntiedPartIdAddr(0), UntiedCounter(0),
+      UntiedSwitch(0), UntiedEnd(0), ParentCGF(0), NoWait(true),
+      Mergeable(false), Schedule(0), ChunkSize(0), NewTask(false),
+      Untied(false), HasLastPrivate(false), TaskPrivateTy(0), TaskPrivateQTy(),
+      TaskPrivateBase(0), NumTeams(0), ThreadLimit(0), WaitDepsArgs(0),
+      MapsBegin(0), MapsEnd(0), OffloadingDevice(0),
+      OffloadingHostFunctionCall(0) {}
 
 CodeGenFunction &CodeGenModule::OpenMPSupportStackTy::getCGFForReductionFunction() {
   if (!OpenMPStack.back().RedCGF) {
@@ -4252,12 +4258,6 @@ void CodeGenModule::OpenMPSupportStackTy::getOffloadingMapArrays(ArrayRef<const 
   Ptrs  = OpenMPStack.back().OffloadingMapPtrs;
   Sizes = OpenMPStack.back().OffloadingMapSizes;
   Types = OpenMPStack.back().OffloadingMapTypes;
-}
-llvm::CallInst*  CodeGenModule::OpenMPSupportStackTy::getOffloadingMapBeginFunctionCall(){
-  return OpenMPStack.back().OffloadingMapBeginFunctionCall;
-}
-void CodeGenModule::OpenMPSupportStackTy::setOffloadingMapBeginFunctionCall(llvm::CallInst *OffloadingMapBeginFunctionCall){
-  OpenMPStack.back().OffloadingMapBeginFunctionCall = OffloadingMapBeginFunctionCall;
 }
 void CodeGenModule::OpenMPSupportStackTy::setMapsBegin(bool Flag){
   OpenMPStack.back().MapsBegin = Flag;

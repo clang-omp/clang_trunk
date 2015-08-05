@@ -16,8 +16,8 @@ int main (int argc, char **argv) {
 // CHECK:      #pragma omp target update
   a=2;
 // CHECK-NEXT: a = 2;
-#pragma omp target update if(b) device(c+e) from(c) to(e, f)
-// CHECK:      #pragma omp target update if(b) device(c + e) from(c) to(e,f)
+#pragma omp target update if(b) device(c+e) from(c) to(e, f) depend(in: f) depend(out: c) depend(inout: e)
+// CHECK:      #pragma omp target update if(b) device(c + e) from(c) to(e,f) depend(in: f) depend(out: c) depend(inout: e)
   foo();
 // CHECK-NEXT: foo();
   return (0);

@@ -4466,6 +4466,13 @@ bool ASTReader::ParseLanguageOptions(const RecordData &Record,
     LangOpts.OMPTargetTriples.push_back(
         llvm::Triple(ReadString(Record, Idx)));
   }
+  for (unsigned N = Record[Idx++]; N; --N) {
+    llvm::APInt Size = ReadAPInt(Record, Idx);
+    LangOpts.OMPNVPTXSharingSizesPerThread.push_back(Size.getZExtValue());
+  }
+  LangOpts.OMPNVPTXSharingSizePerTeam = ReadAPInt(Record, Idx).getZExtValue();
+  LangOpts.OMPNVPTXSharingSizePerKernel = ReadAPInt(Record, Idx).getZExtValue();
+
   return Listener.ReadLanguageOptions(LangOpts, Complain,
                                       AllowCompatibleDifferences);
 }

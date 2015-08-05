@@ -3489,6 +3489,138 @@ public:
   }
 };
 
+/// \brief This represents '#pragma omp target enter data' directive.
+///
+/// \code
+/// #pragma omp target enter data map(to: a) device(1)
+/// \endcode
+/// In this example directive '#pragma omp target enter data' has a map clause
+/// with type 'to' of variable 'a' and clause 'device' with argument '1'.
+///
+class OMPTargetEnterDataDirective : public OMPExecutableDirective {
+  /// \brief Build directive with the given start and end location.
+  ///
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param N The number of clauses.
+  ///
+  OMPTargetEnterDataDirective(SourceLocation StartLoc, SourceLocation EndLoc,
+                              unsigned N)
+      : OMPExecutableDirective(
+            OMPTargetEnterDataDirectiveClass, OMPD_target_enter_data, StartLoc,
+            EndLoc, N,
+            reinterpret_cast<OMPClause **>(
+                reinterpret_cast<char *>(this) +
+                llvm::RoundUpToAlignment(sizeof(OMPTargetEnterDataDirective),
+                                         llvm::alignOf<OMPClause *>())),
+            false, 0) {}
+
+  /// \brief Build an empty directive.
+  ///
+  /// \param N Number of clauses.
+  ///
+  explicit OMPTargetEnterDataDirective(unsigned N)
+      : OMPExecutableDirective(
+            OMPTargetEnterDataDirectiveClass, OMPD_target_enter_data,
+            SourceLocation(), SourceLocation(), N,
+            reinterpret_cast<OMPClause **>(
+                reinterpret_cast<char *>(this) +
+                llvm::RoundUpToAlignment(sizeof(OMPTargetEnterDataDirective),
+                                         llvm::alignOf<OMPClause *>())),
+            false, 0) {}
+
+public:
+  /// \brief Creates directive with a list of \a Clauses.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param Clauses List of clauses.
+  ///
+  static OMPTargetEnterDataDirective *Create(const ASTContext &C,
+                                             SourceLocation StartLoc,
+                                             SourceLocation EndLoc,
+                                             ArrayRef<OMPClause *> Clauses);
+
+  /// \brief Creates an empty directive with the place for \a N clauses.
+  ///
+  /// \param C AST context.
+  /// \param N The number of clauses.
+  ///
+  static OMPTargetEnterDataDirective *CreateEmpty(const ASTContext &C,
+                                                  unsigned N, EmptyShell);
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == OMPTargetEnterDataDirectiveClass;
+  }
+};
+
+/// \brief This represents '#pragma omp target exit data' directive.
+///
+/// \code
+/// #pragma omp target exit data map(from: a) device(1)
+/// \endcode
+/// In this example directive '#pragma omp target exit data' has a map clause
+/// with type 'from' of variable 'a' and clause 'device' with argument '1'.
+///
+class OMPTargetExitDataDirective : public OMPExecutableDirective {
+  /// \brief Build directive with the given start and end location.
+  ///
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param N The number of clauses.
+  ///
+  OMPTargetExitDataDirective(SourceLocation StartLoc, SourceLocation EndLoc,
+                             unsigned N)
+      : OMPExecutableDirective(
+            OMPTargetExitDataDirectiveClass, OMPD_target_exit_data, StartLoc,
+            EndLoc, N,
+            reinterpret_cast<OMPClause **>(
+                reinterpret_cast<char *>(this) +
+                llvm::RoundUpToAlignment(sizeof(OMPTargetExitDataDirective),
+                                         llvm::alignOf<OMPClause *>())),
+            false, 0) {}
+
+  /// \brief Build an empty directive.
+  ///
+  /// \param N Number of clauses.
+  ///
+  explicit OMPTargetExitDataDirective(unsigned N)
+      : OMPExecutableDirective(
+            OMPTargetExitDataDirectiveClass, OMPD_target_exit_data,
+            SourceLocation(), SourceLocation(), N,
+            reinterpret_cast<OMPClause **>(
+                reinterpret_cast<char *>(this) +
+                llvm::RoundUpToAlignment(sizeof(OMPTargetExitDataDirective),
+                                         llvm::alignOf<OMPClause *>())),
+            false, 0) {}
+
+public:
+  /// \brief Creates directive with a list of \a Clauses.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param Clauses List of clauses.
+  ///
+  static OMPTargetExitDataDirective *Create(const ASTContext &C,
+                                            SourceLocation StartLoc,
+                                            SourceLocation EndLoc,
+                                            ArrayRef<OMPClause *> Clauses);
+
+  /// \brief Creates an empty directive with the place for \a N clauses.
+  ///
+  /// \param C AST context.
+  /// \param N The number of clauses.
+  ///
+  static OMPTargetExitDataDirective *CreateEmpty(const ASTContext &C,
+                                                 unsigned N, EmptyShell);
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == OMPTargetExitDataDirectiveClass;
+  }
+};
+
 /// \brief This represents '#pragma omp teams distribute' directive.
 ///
 /// \code

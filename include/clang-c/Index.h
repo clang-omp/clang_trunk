@@ -2183,7 +2183,13 @@ enum CXCursorKind {
    */
   CXCursor_SEHLeaveStmt                  = 271,
 
-  CXCursor_LastStmt                      = CXCursor_OMPAtomicDirective,
+ 
+  /** \brief OpenMP directives (cont.).
+  */
+  CXCursor_OMPTargetEnterDataDirective   = 272,
+  CXCursor_OMPTargetExitDataDirective    = 273,
+
+  CXCursor_LastStmt                      = CXCursor_OMPTargetExitDataDirective,
 
   /**
    * \brief Cursor that represents the translation unit itself.

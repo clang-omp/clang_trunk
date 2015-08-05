@@ -167,9 +167,12 @@ protected:
   std::string CurTargetParentFunctionName;
 
   // Set of all local variables that need to be turned global due to data sharing
-  // constraints
-  llvm::SmallSet<llvm::Value*, 32> ValuesToBeInSharedMemory;
-  llvm::DenseMap<llvm::Value *, int> SharedMemoryValuesToTargetNumber;
+  // constraints. This is organized as vector of trees.
+  typedef llvm::SmallSet<llvm::Value *, 32> SharedValuesSetTy;
+  typedef llvm::SmallVector<SharedValuesSetTy, 4> SharedValuesPerLevelTy;
+  typedef llvm::SmallVector<SharedValuesPerLevelTy, 4> SharedValuesPerRegionTy;
+  typedef llvm::SmallVector<SharedValuesPerRegionTy, 4> SharedValuesTy;
+  SharedValuesTy ValuesToBeInSharedMemory;
 
   // Set of all global initializers required in the declare target regions
   llvm::SmallSet<const llvm::Constant*, 32> TargetGlobalInitializers;
@@ -255,8 +258,9 @@ public:
   void registerGlobalVariable(const Decl *D, llvm::GlobalVariable *GV);
   void registerTargetRegion(const Decl *D, llvm::Function *Fn,
                             llvm::Function *ParentFunction);
-  void registerCtorRegion(llvm::Function *Fn);
-  void registerDtorRegion(llvm::Function *Fn, llvm::Constant *Destructee);
+  virtual void registerCtorRegion(llvm::Function *Fn);
+  virtual void registerDtorRegion(llvm::Function *Fn,
+                                  llvm::Constant *Destructee);
   void registerOtherGlobalVariable(const VarDecl *Other);
   void registerOtherFunction(const FunctionDecl *Other, StringRef Name);
 
@@ -299,8 +303,11 @@ public:
   // Return true if the current module has global initializers
   bool hasTargetGlobalInitializers();
 
+  // Start sharing region. This will initialize a new set of shared variables
+  void startSharedRegion(unsigned NestingLevel);
+
   // Mark value as requiring to be moved to global memory
-  void setRequiresSharedVersion(llvm::Value *V);
+  void addToSharedRegion(llvm::Value *V, unsigned NestingLevel);
 
   // Return the registered constant for a given declaration
   llvm::Constant *getEntryForDeclaration(const Decl *D);
@@ -413,11 +420,7 @@ public:
   DEFAULT_EMIT_OPENMP_DECL(taskgroup)
   DEFAULT_EMIT_OPENMP_DECL(end_taskgroup)
   DEFAULT_EMIT_OPENMP_DECL(register_lib)
-  DEFAULT_EMIT_OPENMP_DECL(target)
-  DEFAULT_EMIT_OPENMP_DECL(target_teams)
-  DEFAULT_EMIT_OPENMP_DECL(target_data_begin)
-  DEFAULT_EMIT_OPENMP_DECL(target_data_end)
-  DEFAULT_EMIT_OPENMP_DECL(target_data_update)
+  DEFAULT_EMIT_OPENMP_DECL(unregister_lib)
 
   DEFAULT_EMIT_OPENMP_DECL(threadprivate_register)
   DEFAULT_EMIT_OPENMP_DECL(global_thread_num)
@@ -451,6 +454,27 @@ public:
   // DEFAULT_GET_OPENMP_FUNC(omp_wait_deps)
   virtual llvm::Constant * Get_omp_wait_deps();
 
+  // Special processing for __tgt_target
+  virtual llvm::Constant * Get_target();
+  // Special processing for __tgt_target_nowait
+  virtual llvm::Constant * Get_target_nowait();
+  // Special processing for __tgt_target_teams
+  virtual llvm::Constant * Get_target_teams();
+  // Special processing for __tgt_target_teams_nowait
+  virtual llvm::Constant * Get_target_teams_nowait();
+  // Special processing for __tgt_target_data_begin
+  virtual llvm::Constant * Get_target_data_begin();
+  // Special processing for __tgt_target_data_begin
+  virtual llvm::Constant * Get_target_data_begin_nowait();
+  // Special processing for __tgt_target_data_end
+  virtual llvm::Constant * Get_target_data_end();
+  // Special processing for __tgt_target_data_end
+  virtual llvm::Constant * Get_target_data_end_nowait();
+  // Special processing for __tgt_target_data_update
+  virtual llvm::Constant * Get_target_data_update();
+  // Special processing for __tgt_target_data_update
+  virtual llvm::Constant * Get_target_data_update_nowait();
+
   // Special processing for __kmpc_threadprivate_cached
   // DEFAULT_GET_OPENMP_FUNC(threadprivate_cached)
   virtual llvm::Constant *  Get_threadprivate_cached();
@@ -462,6 +486,11 @@ public:
                                            bool Capture, bool Reverse);
   virtual llvm::Value *GetAtomicFunc(CodeGenFunction &CGF, QualType QTy,
       OpenMPReductionClauseOperator Op);
+
+  /// Return reduction call to perform specialized reduction in a single OpenMP
+  /// team if the target can benefit from it.
+  virtual llvm::Value *GetTeamReduFunc(CodeGenFunction &CGF, QualType QTy,
+                                       OpenMPReductionClauseOperator Op);
 
   /// This is a hook to enable postprocessing of the module.
   virtual void PostProcessModule(CodeGenModule &CGM);
@@ -539,19 +568,28 @@ public:
 
   /// \brief Code generation helper in target regions. Create a control-loop
   //  with inspector/executor for special back-ends (e.g. nvptx)
-  virtual void GenerateTargetControlLoop(SourceLocation Loc,
-      CodeGenFunction &CGF);
+  virtual void EnterTargetControlLoop(SourceLocation Loc, CodeGenFunction &CGF,
+                                      StringRef TgtFunName);
 
   // \brief Code generation for closing of sequential region. Set ups the next
   // labels for special back-ends (e.g. nvptx)
-  virtual void GenerateFinishLabelSetting(SourceLocation Loc,
-      CodeGenFunction &CGF, bool prevIsParallel);
+  virtual void ExitTargetControlLoop(SourceLocation Loc, CodeGenFunction &CGF,
+                                     bool prevIsParallel, StringRef TgtFunName);
 
   // \brief Function to close an openmp region. Set the labels and generate
   // new switch case
   virtual void GenerateNextLabel(CodeGenFunction &CGF, bool prevIsParallel,
                                  bool nextIsParallel,
                                  const char *CaseBBName = 0);
+
+  // \brief Function to open a workshare region. In NVPTX, record entering
+  // workshare region in bit vector used to calculate optimal number of lanes
+  // in a parallel region and update stack of pragmas
+  virtual void EnterWorkshareRegion();
+
+  // \brief Function to close a workshare region. In NVPTX, update stack of
+  // pragmas
+  virtual void ExitWorkshareRegion();
 
   virtual void GenerateIfMaster (SourceLocation Loc, CapturedStmt *CS,
       CodeGenFunction &CGF);
@@ -564,7 +602,7 @@ public:
   // \brief Code generation when exiting a simd region. For nvptx backend,
   // interact with control loop to select proper threads in following region
   virtual void ExitSimdRegion(CodeGenFunction &CGF, llvm::Value *LoopIndex,
-                              llvm::Value *LoopCount);
+                              llvm::AllocaInst *LoopCount);
 
   // \brief Rename function if part of standard libraries. This is useful to
   // distinguish whether such functions are called from the device, as they
@@ -588,12 +626,12 @@ public:
 
   virtual bool RequireFirstprivateSynchronization() { return true; }
 
-  virtual void StartParallelRegionInTarget(CodeGenFunction &CGF,
+  virtual void EnterParallelRegionInTarget(CodeGenFunction &CGF,
                                            OpenMPDirectiveKind DKind,
                                            ArrayRef<OpenMPDirectiveKind> SKinds,
                                            const OMPExecutableDirective &S);
 
-  virtual void EndParallelRegionInTarget (CodeGenFunction &CGF);
+  virtual void ExitParallelRegionInTarget(CodeGenFunction &CGF);
 
   virtual void SupportCritical (const OMPCriticalDirective &S,
       CodeGenFunction &CGF, llvm::Function * CurFn, llvm::GlobalVariable *Lck);
@@ -601,6 +639,8 @@ public:
   virtual void EmitNativeBarrier(CodeGenFunction &CGF);
 
   virtual bool IsNestedParallel();
+
+  virtual unsigned CalculateParallelNestingLevel();
 
   virtual llvm::Value * AllocateThreadLocalInfo(CodeGenFunction & CGF);
 

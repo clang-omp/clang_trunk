@@ -522,6 +522,19 @@ void CodeGenModule::EmitOMPRegisterLib() {
     CGF.StartFunction(GlobalDecl(), CGF.getContext().VoidTy, TRD_F,
         CGF.getTypes().arrangeNullaryFunction(), FunctionArgList());
     CGF.Builder.CreateCall(OpenMPRuntime->Get_register_lib(),TRD);
+
+    // FIXME: Try to get rid of these declaration, it has no use here other
+    // that registering a name
+    IdentifierInfo &II = getContext().Idents.get("__omptgt__unregister_lib");
+    VarDecl *DummyD = VarDecl::Create(
+        CGF.getContext(), nullptr, SourceLocation(), SourceLocation(), &II,
+        CGF.getContext().VoidPtrTy,
+        CGF.getContext().getTrivialTypeSourceInfo(CGF.getContext().VoidPtrTy),
+        SC_Static);
+
+    CGF.CGM.getCXXABI().registerGlobalDtor(
+        CGF, *DummyD, OpenMPRuntime->Get_unregister_lib(), TRD);
+
     CGF.FinishFunction();
   }
 

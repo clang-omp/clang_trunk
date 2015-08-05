@@ -172,6 +172,26 @@ OpenMPDirectiveKind Parser::ParseOpenMPDirective() {
             }
           }
         }
+      } else if (Spelling == "enter") {
+        Token SavedToken = PP.LookAhead(1);
+        if (!SavedToken.isAnnotation()) {
+          Spelling = PP.getSpelling(SavedToken);
+          if (Spelling == "data") {
+            DKind = OMPD_target_enter_data;
+            ConsumeToken();
+            ConsumeToken();
+          }
+        }
+      } else if (Spelling == "exit") {
+        Token SavedToken = PP.LookAhead(1);
+        if (!SavedToken.isAnnotation()) {
+          Spelling = PP.getSpelling(SavedToken);
+          if (Spelling == "data") {
+            DKind = OMPD_target_exit_data;
+            ConsumeToken();
+            ConsumeToken();
+          }
+        }
       }
     }
     break;
@@ -849,6 +869,8 @@ Parser::ParseOpenMPDeclarativeOrExecutableDirective(bool StandAloneAllowed) {
   case OMPD_cancel:
   case OMPD_cancellation_point:
   case OMPD_target_update:
+  case OMPD_target_enter_data:
+  case OMPD_target_exit_data:
   case OMPD_flush: {
     if (!StandAloneAllowed) {
       Diag(Tok, diag::err_omp_immediate_directive)
@@ -897,12 +919,14 @@ Parser::ParseOpenMPDeclarativeOrExecutableDirective(bool StandAloneAllowed) {
         if (Tok.is(tok::comma))
           ConsumeAnyToken();
       }
-    } else if (DKind == OMPD_target_update) {
+    } else if (DKind == OMPD_target_update || DKind == OMPD_target_enter_data ||
+               DKind == OMPD_target_exit_data) {
       ConsumeAnyToken();
       while (Tok.isNot(tok::annot_pragma_openmp_end)) {
         OpenMPClauseKind CKind = Tok.isAnnotation()
                                      ? OMPC_unknown
                                      : getOpenMPClauseKind(PP.getSpelling(Tok));
+
         OMPClause *Clause =
             ParseOpenMPClause(DKind, CKind, !FirstClauses[CKind].getInt());
         FirstClauses[CKind].setInt(true);
@@ -1726,6 +1750,8 @@ OMPClause *Parser::ParseOpenMPVarListClause(OpenMPClauseKind Kind) {
     case OMPC_MAP_to:
     case OMPC_MAP_from:
     case OMPC_MAP_tofrom:
+    case OMPC_MAP_release:
+    case OMPC_MAP_delete:
     case OMPC_MAP_unknown:
       break;
     case NUM_OPENMP_MAP_KIND:

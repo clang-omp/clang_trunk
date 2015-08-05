@@ -190,6 +190,55 @@ static void addDirectoryList(const ArgList &Args, ArgStringList &CmdArgs,
   }
 }
 
+namespace {
+enum OpenMPRuntimeKind {
+  /// An unknown OpenMP runtime. We can't generate effective OpenMP code
+  /// without knowing what runtime to target.
+  OMPRT_Unknown,
+
+  /// The LLVM OpenMP runtime. When completed and integrated, this will become
+  /// the default for Clang.
+  OMPRT_OMP,
+
+  /// The GNU OpenMP runtime. Clang doesn't support generating OpenMP code for
+  /// this runtime but can swallow the pragmas, and find and link against the
+  /// runtime library itself.
+  OMPRT_GOMP,
+
+  /// The legacy name for the LLVM OpenMP runtime from when it was the Intel
+  /// OpenMP runtime. We support this mode for users with existing dependencies
+  /// on this runtime library name.
+  OMPRT_IOMP5
+};
+}
+
+/// Compute the desired OpenMP runtime from the flag provided.
+static OpenMPRuntimeKind getOpenMPRuntime(const ToolChain &TC,
+                                          const ArgList &Args) {
+  StringRef RuntimeName(/*CLANG_DEFAULT_OPENMP_RUNTIME*/ "libomp");
+
+  const Arg *A = Args.getLastArg(options::OPT_fopenmp_EQ);
+  if (A)
+    RuntimeName = A->getValue();
+
+  auto RT = llvm::StringSwitch<OpenMPRuntimeKind>(RuntimeName)
+                .Case("libomp", OMPRT_OMP)
+                .Case("libgomp", OMPRT_GOMP)
+                .Case("libiomp5", OMPRT_IOMP5)
+                .Default(OMPRT_Unknown);
+
+  if (RT == OMPRT_Unknown) {
+    if (A)
+      TC.getDriver().Diag(diag::err_drv_unsupported_option_argument)
+          << A->getOption().getName() << A->getValue();
+    else
+      // FIXME: We could use a nicer diagnostic here.
+      TC.getDriver().Diag(diag::err_drv_unsupported_opt) << "-fopenmp";
+  }
+
+  return RT;
+}
+
 static bool AddLTOInputs(Compilation &C, const JobAction &JA, const Tool &T,
                          const ToolChain &TC, const InputInfo &Output,
                          const InputInfoList &Inputs, const ArgList &Args,
@@ -277,7 +326,14 @@ static void AddLinkerInputs(const ToolChain &TC,
                             ArgStringList &CmdArgs, bool isTargetLinkage) {
   const Driver &D = TC.getDriver();
 
-  bool OpenMP = Args.hasArg(options::OPT_fopenmp);
+  bool OpenMP = false;
+
+  if (Args.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
+                   options::OPT_fno_openmp, false)) {
+    auto RT = getOpenMPRuntime(TC, Args);
+    OpenMP = RT == OMPRT_OMP || RT == OMPRT_IOMP5;
+  }
+
   bool OpenMPTarget = OpenMP && Args.hasArg(options::OPT_omptargets_EQ);
 
   // Add extra linker input arguments which are not treated as inputs
@@ -339,11 +395,18 @@ static void AddOpenMPLinkerScript(const ToolChain &TC, Compilation &C,
                   const ArgList &Args,
                   ArgStringList &CmdArgs) {
 
-  if ( !Args.hasArg(options::OPT_fopenmp) )
-    return;
-
   // This is the linkage for the target
   if ( JA.getOffloadingDevice() )
+    return;
+
+  if (Args.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
+                   options::OPT_fno_openmp, false)) {
+
+    auto RT = getOpenMPRuntime(TC, Args);
+    if (RT != OMPRT_OMP && RT != OMPRT_IOMP5)
+      return;
+
+  } else
     return;
 
   // Add OpenMP target arguments by employing
@@ -426,7 +489,6 @@ static void AddOpenMPLinkerScript(const ToolChain &TC, Compilation &C,
   CmdArgs.push_back(LKS);
 
 }
-
 
 /// \brief Determine whether Objective-C automated reference counting is
 /// enabled.
@@ -2540,55 +2602,6 @@ static void addProfileRT(const ToolChain &TC, const ArgList &Args,
   CmdArgs.push_back(Args.MakeArgString(getCompilerRT(TC, "profile")));
 }
 
-namespace {
-enum OpenMPRuntimeKind {
-  /// An unknown OpenMP runtime. We can't generate effective OpenMP code
-  /// without knowing what runtime to target.
-  OMPRT_Unknown,
-
-  /// The LLVM OpenMP runtime. When completed and integrated, this will become
-  /// the default for Clang.
-  OMPRT_OMP,
-
-  /// The GNU OpenMP runtime. Clang doesn't support generating OpenMP code for
-  /// this runtime but can swallow the pragmas, and find and link against the
-  /// runtime library itself.
-  OMPRT_GOMP,
-
-  /// The legacy name for the LLVM OpenMP runtime from when it was the Intel
-  /// OpenMP runtime. We support this mode for users with existing dependencies
-  /// on this runtime library name.
-  OMPRT_IOMP5
-};
-}
-
-/// Compute the desired OpenMP runtime from the flag provided.
-static OpenMPRuntimeKind getOpenMPRuntime(const ToolChain &TC,
-                                          const ArgList &Args) {
-  StringRef RuntimeName(/*CLANG_DEFAULT_OPENMP_RUNTIME*/ "libiomp5");
-
-  const Arg *A = Args.getLastArg(options::OPT_fopenmp_EQ);
-  if (A)
-    RuntimeName = A->getValue();
-
-  auto RT = llvm::StringSwitch<OpenMPRuntimeKind>(RuntimeName)
-                .Case("libomp", OMPRT_OMP)
-                .Case("libgomp", OMPRT_GOMP)
-                .Case("libiomp5", OMPRT_IOMP5)
-                .Default(OMPRT_Unknown);
-
-  if (RT == OMPRT_Unknown) {
-    if (A)
-      TC.getDriver().Diag(diag::err_drv_unsupported_option_argument)
-          << A->getOption().getName() << A->getValue();
-    else
-      // FIXME: We could use a nicer diagnostic here.
-      TC.getDriver().Diag(diag::err_drv_unsupported_opt) << "-fopenmp";
-  }
-
-  return RT;
-}
-
 static void addSanitizerRuntime(const ToolChain &TC, const ArgList &Args,
                                 ArgStringList &CmdArgs, StringRef Sanitizer,
                                 bool IsShared) {
@@ -3070,40 +3083,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   //
   // FIXME: Implement custom jobs for internal actions.
   CmdArgs.push_back("-cc1");
-
-  if (Args.hasArg(options::OPT_fopenmp)){
-    CmdArgs.push_back("-fopenmp");
-
-    // pass the targets we are generating code to
-    if ( Arg *Tgts = Args.getLastArg(options::OPT_omptargets_EQ) ){
-
-      ArrayRef<const char *> Vals = Tgts->getValues();
-
-      if (!Vals.empty()){
-        std::string S("-omptargets=");
-        S += Vals[0];
-        for (unsigned i=1; i <Vals.size(); ++i ){
-          S += ',';
-          S += Vals[i];
-        }
-        CmdArgs.push_back(Args.MakeArgString(S));
-      }
-    }
-
-    // inform the frontend we are generating code for a target
-    if (JA.getOffloadingDevice()) {
-      CmdArgs.push_back("-omp-target-mode");
-      if (isa<CompileJobAction>(JA)) {
-        CmdArgs.push_back("-omp-host-output-file-path");
-        CmdArgs.push_back(Args.MakeArgString(Inputs[1].getFilename()));
-      }
-    }
-
-    // the frontend components needs to know the path of the original source
-    // file given that the target functions use that to generate a unique name
-    CmdArgs.push_back("-omp-main-file-path");
-    CmdArgs.push_back(Args.MakeArgString(Inputs[0].getBaseInput()));
-  }
 
   // Add the "effective" target triple.
   CmdArgs.push_back("-triple");
@@ -4225,6 +4204,68 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     case OMPRT_IOMP5:
       // Clang can generate useful OpenMP code for these two runtime libraries.
       CmdArgs.push_back("-fopenmp");
+      {
+        // pass the targets we are generating code to
+        if (Arg *Tgts = Args.getLastArg(options::OPT_omptargets_EQ)) {
+
+          ArrayRef<const char *> Vals = Tgts->getValues();
+
+          if (!Vals.empty()) {
+            std::string S("-omptargets=");
+            S += Vals[0];
+            for (unsigned i = 1; i < Vals.size(); ++i) {
+              S += ',';
+              S += Vals[i];
+            }
+            CmdArgs.push_back(Args.MakeArgString(S));
+          }
+        }
+
+        // inform the frontend we are generating code for a target
+        if (JA.getOffloadingDevice()) {
+          CmdArgs.push_back("-omp-target-mode");
+          if (isa<CompileJobAction>(JA)) {
+            CmdArgs.push_back("-omp-host-output-file-path");
+            CmdArgs.push_back(Args.MakeArgString(Inputs[1].getFilename()));
+          }
+
+          // Check some NVPTX specific flags.
+          if (Arg *A =
+                  Args.getLastArg(options::OPT_omp_nvptx_data_sharing_type)) {
+            SmallString<128> S("-omp-nvptx-data-sharing-type=");
+            S.append(A->getValue());
+            CmdArgs.push_back(Args.MakeArgString(S.c_str()));
+          }
+          if (Arg *A = Args.getLastArg(
+                  options::OPT_omp_nvptx_data_sharing_sizes_per_thread)) {
+            SmallString<128> S("-omp-nvptx-data-sharing-sizes-per-thread=");
+            for (auto *SS : A->getValues()) {
+              S.append(SS);
+              S.append(",");
+            }
+            S.pop_back();
+            CmdArgs.push_back(Args.MakeArgString(S.c_str()));
+          }
+          if (Arg *A = Args.getLastArg(
+                  options::OPT_omp_nvptx_data_sharing_size_per_team)) {
+            SmallString<128> S("-omp-nvptx-data-sharing-size-per-team=");
+            S.append(A->getValue());
+            CmdArgs.push_back(Args.MakeArgString(S.c_str()));
+          }
+          if (Arg *A = Args.getLastArg(
+                  options::OPT_omp_nvptx_data_sharing_size_per_kernel)) {
+            SmallString<128> S("-omp-nvptx-data-sharing-size-per-kernel=");
+            S.append(A->getValue());
+            CmdArgs.push_back(Args.MakeArgString(S.c_str()));
+          }
+        }
+
+        // the frontend components needs to know the path of the original source
+        // file given that the target functions use that to generate a unique
+        // name
+        CmdArgs.push_back("-omp-main-file-path");
+        CmdArgs.push_back(Args.MakeArgString(Inputs[0].getBaseInput()));
+      }
       break;
     default:
       // By default, if Clang doesn't know how to generate useful OpenMP code
@@ -4736,7 +4777,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-fapplication-extension");
 
   // Handle GCC-style exception args.
-  if (!C.getDriver().IsCLMode())
+  if (!C.getDriver().IsCLMode() && !JA.getOffloadingDevice())
     addExceptionArgs(Args, InputType, getToolChain(), KernelOrKext, objcRuntime,
                      CmdArgs);
 
@@ -5791,12 +5832,29 @@ void gcc::Linker::RenderExtraToolArgs(const JobAction &JA,
   // The types are (hopefully) good enough.
 
   if (!Args.hasArg(options::OPT_nostdlib))
-    if (!Args.hasArg(options::OPT_nodefaultlibs))
-      if (Args.hasArg(options::OPT_fopenmp)) {
-        CmdArgs.push_back("-liomp5");
-        if (Args.hasArg(options::OPT_omptargets_EQ))
-          CmdArgs.push_back("-lomptarget");
+    if (!Args.hasArg(options::OPT_nodefaultlibs)) {
+      if (Args.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
+                       options::OPT_fno_openmp, false)) {
+        switch (getOpenMPRuntime(getToolChain(), Args)) {
+        case OMPRT_OMP:
+          CmdArgs.push_back("-lomp");
+          if (Args.hasArg(options::OPT_omptargets_EQ))
+            CmdArgs.push_back("-lomptarget");
+          break;
+        case OMPRT_GOMP:
+          CmdArgs.push_back("-lgomp");
+          break;
+        case OMPRT_IOMP5:
+          CmdArgs.push_back("-liomp5");
+          if (Args.hasArg(options::OPT_omptargets_EQ))
+            CmdArgs.push_back("-lomptarget");
+          break;
+        case OMPRT_Unknown:
+          // Already diagnosed.
+          break;
+        }
       }
+    }
 }
 
 // Hexagon tools start.
@@ -6701,20 +6759,21 @@ void darwin::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     switch (getOpenMPRuntime(getToolChain(), Args)) {
     case OMPRT_OMP:
       CmdArgs.push_back("-lomp");
+      if (Args.hasArg(options::OPT_omptargets_EQ))
+        CmdArgs.push_back("-lomptarget");
       break;
     case OMPRT_GOMP:
       CmdArgs.push_back("-lgomp");
       break;
     case OMPRT_IOMP5:
       CmdArgs.push_back("-liomp5");
+      if (Args.hasArg(options::OPT_omptargets_EQ))
+        CmdArgs.push_back("-lomptarget");
       break;
     case OMPRT_Unknown:
       // Already diagnosed.
       break;
     }
-
-    if (Args.hasArg(options::OPT_omptargets_EQ))
-      CmdArgs.push_back("-lomptarget");
   }
 
   AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs,
@@ -8430,7 +8489,15 @@ void gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // Do not use gold plugin when compiling with an OpenMP target, as usually
   // a linker script is required, and such scripts are poorly supported by
   // gold.
-  bool OpenMP = Args.hasArg(options::OPT_fopenmp);
+
+  bool OpenMP = false;
+
+  if (Args.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
+                   options::OPT_fno_openmp, false)) {
+    auto RT = getOpenMPRuntime(getToolChain(), Args);
+    OpenMP = RT == OMPRT_OMP || RT == OMPRT_IOMP5;
+  }
+
   bool OpenMPTarget = OpenMP && Args.hasArg(options::OPT_omptargets_EQ);
   bool OpenMPRTIsBitcode = false;
   if (D.IsUsingLTO(Args)) {
@@ -8486,6 +8553,12 @@ void gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
         switch (getOpenMPRuntime(ToolChain, Args)) {
         case OMPRT_OMP:
           CmdArgs.push_back("-lomp");
+
+          if (OpenMPRTIsBitcode)
+            CmdArgs.push_back("-ldl");
+
+          if (Args.hasArg(options::OPT_omptargets_EQ))
+            CmdArgs.push_back("-lomptarget");
           break;
         case OMPRT_GOMP:
           CmdArgs.push_back("-lgomp");
@@ -9536,6 +9609,9 @@ void NVPTX::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-arch");
     CmdArgs.push_back(Args.MakeArgString(CPU));
   }
+
+  CmdArgs.push_back("-maxrregcount");
+  CmdArgs.push_back("64");
 
   for (InputInfoList::const_iterator
        it = Inputs.begin(), ie = Inputs.end(); it != ie; ++it) {

@@ -218,7 +218,7 @@ typedef int32_t(omp_get_num_teams)();
 
 
 // Target-NVPTX specific functions, we may need to move these elsewhere
-typedef void(__kmpc_kernel_init)();
+typedef void(__kmpc_kernel_init)(int32_t thread_limit);
 typedef int(__kmpc_kernel_prepare_parallel)(int32_t num_threads,
                                             int32_t num_simd_lanes);
 typedef void(__kmpc_kernel_parallel)(int32_t num_simd_lanes);
@@ -271,22 +271,29 @@ struct __tgt_bin_desc{
 
 typedef void(__tgt_register_lib)(__tgt_bin_desc* desc);
 
-typedef int32_t(__tgt_target)(int32_t device_id, void *host_addr,
-    int32_t num_args, void** args_base, void** args, int64_t *args_size,
-    int32_t *args_maptype);
+typedef void(__tgt_unregister_lib)(__tgt_bin_desc *desc);
 
-typedef int32_t(__tgt_target_teams)(int32_t device_id, void *host_addr,
-    int32_t num_args, void** args_base, void** args, int64_t *args_size,
-    int32_t *args_maptype, int32_t num_teams, int32_t thread_limit);
+typedef int32_t(__tgt_target)(int32_t device_id, void *host_addr,
+                              int32_t num_args, void **args_base, void **args,
+                              int64_t *args_size, int32_t *args_maptype);
+
+typedef int32_t(__tgt_target_teams)(
+    int32_t device_id, void *host_addr, int32_t num_args, void **args_base,
+    void **args, int64_t *args_size, int32_t *args_maptype, int32_t num_teams,
+    int32_t thread_limit);
 
 typedef void(__tgt_target_data_begin)(int32_t device_id, int32_t num_args,
-    void** args_base, void** args, int64_t *args_size, int32_t *args_maptype);
+                                      void **args_base, void **args,
+                                      int64_t *args_size, int32_t *args_maptype);
 
 typedef void(__tgt_target_data_end)(int32_t device_id, int32_t num_args,
-    void** args_base, void** args, int64_t *args_size, int32_t *args_maptype);
+                                    void **args_base, void **args,
+                                    int64_t *args_size, int32_t *args_maptype);
 
 typedef void(__tgt_target_data_update)(int32_t device_id, int32_t num_args,
-    void** args_base, void** args, int64_t *args_size, int32_t *args_maptype);
+                                       void **args_base, void **args,
+                                       int64_t *args_size,
+                                       int32_t *args_maptype);
 }
 
 namespace llvm {

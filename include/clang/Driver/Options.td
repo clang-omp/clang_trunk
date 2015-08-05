@@ -312,6 +312,14 @@ def Wno_write_strings : Flag<["-"], "Wno-write-strings">, Group<W_Group>, Flags<
 def W_Joined : Joined<["-"], "W">, Group<W_Group>, Flags<[CC1Option, CoreOption]>,
   MetaVarName<"<warning>">, HelpText<"Enable the specified warning">;
 def Womp_implicit_target_files : Flag<["-"], "Womp-implicit-target-files">, Group<W_Group>, Flags<[CC1Option, NoArgumentUnused]>;
+def omp_nvptx_data_sharing_type : Joined<["-"], "omp-nvptx-data-sharing-type=">, Flags<[DriverOption,CC1Option,NoArgumentUnused]>,
+  HelpText<"Data sharing scheme to use in OpenMP codegeneration for nvptx target. Possible options are 'fast' (use CUDA shared memory - default) and 'regular' (use CUDA global memory).">;
+def omp_nvptx_data_sharing_sizes_per_thread : CommaJoined<["-"], "omp-nvptx-data-sharing-sizes-per-thread=">, Flags<[DriverOption,CC1Option,NoArgumentUnused]>,
+  HelpText<"Specify the comma separated sizes in bytes for the data sharing storage for each each level of parallelism. Default is 1024,32.">;
+def omp_nvptx_data_sharing_size_per_team : Joined<["-"], "omp-nvptx-data-sharing-size-per-team=">, Flags<[DriverOption,CC1Option,NoArgumentUnused]>,
+  HelpText<"Specify the size in bytes for the data sharing storage for each team. Default is 33792 (=1024+1024*32).">;
+def omp_nvptx_data_sharing_size_per_kernel : Joined<["-"], "omp-nvptx-data-sharing-size-per-kernel=">, Flags<[DriverOption,CC1Option,NoArgumentUnused]>,
+  HelpText<"Specify the size in bytes for the data sharing storage for each kernel. Default is 69206016 (=33792*2048).">;
 def Xanalyzer : Separate<["-"], "Xanalyzer">,
   HelpText<"Pass <arg> to the static analyzer">, MetaVarName<"<arg>">;
 def Xarch__ : JoinedAndSeparate<["-"], "Xarch_">, Flags<[DriverOption]>;

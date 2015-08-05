@@ -1301,6 +1301,13 @@ void ASTWriter::WriteControlBlock(Preprocessor &PP, ASTContext &Context,
   for( auto &T : Context.getLangOpts().OMPTargetTriples)
     AddString(T.getTriple(), Record);
 
+  Record.push_back(Context.getLangOpts().OMPNVPTXSharingSizesPerThread.size());
+  for (auto &T : Context.getLangOpts().OMPNVPTXSharingSizesPerThread)
+    AddAPInt(APInt(64, T), Record);
+
+  AddAPInt(APInt(64, Context.getLangOpts().OMPNVPTXSharingSizePerTeam), Record);
+  AddAPInt(APInt(64, Context.getLangOpts().OMPNVPTXSharingSizePerKernel),
+           Record);
   Stream.EmitRecord(LANGUAGE_OPTIONS, Record);
 
   // Target options.

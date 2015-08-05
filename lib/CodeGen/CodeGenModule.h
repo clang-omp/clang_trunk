@@ -1270,7 +1270,6 @@ public:
       llvm::SmallVector<unsigned, 8> OffloadingMapTypes;
       bool MapsBegin;
       bool MapsEnd;
-      llvm::CallInst* OffloadingMapBeginFunctionCall;
       llvm::Value* OffloadingDevice;
       llvm::CallInst* OffloadingHostFunctionCall;
       OMPStackElemTy(CodeGenModule &CGM);
@@ -1416,8 +1415,6 @@ public:
     llvm::Value **getWaitDepsArgs();
     void addOffloadingMap(const Expr *DExpr, llvm::Value *BasePtr, llvm::Value *Ptr, llvm::Value *Size, unsigned Type);
     void getOffloadingMapArrays(ArrayRef<const Expr*> &DExprs, ArrayRef<llvm::Value*> &BasePtrs, ArrayRef<llvm::Value*> &Ptrs, ArrayRef<llvm::Value*> &Sizes, ArrayRef<unsigned> &Types);
-    llvm::CallInst*  getOffloadingMapBeginFunctionCall();
-    void setOffloadingMapBeginFunctionCall(llvm::CallInst *OffloadingMapBeginFunctionCall);
     void setOffloadingMapArguments(llvm::ArrayRef<llvm::Value *> Args) {
       for (auto Arg : Args) {
         OpenMPStack.back().offloadingMapArguments.push_back(Arg);

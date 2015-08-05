@@ -7530,6 +7530,27 @@ StmtResult TreeTransform<Derived>::TransformOMPTargetUpdateDirective(
 }
 
 template <typename Derived>
+StmtResult TreeTransform<Derived>::TransformOMPTargetEnterDataDirective(
+    OMPTargetEnterDataDirective *D) {
+  DeclarationNameInfo DirName;
+  getDerived().getSema().StartOpenMPDSABlock(OMPD_target_enter_data, DirName,
+                                             0);
+  StmtResult Res = getDerived().TransformOMPExecutableDirective(D);
+  getDerived().getSema().EndOpenMPDSABlock(Res.get());
+  return Res;
+}
+
+template <typename Derived>
+StmtResult TreeTransform<Derived>::TransformOMPTargetExitDataDirective(
+    OMPTargetExitDataDirective *D) {
+  DeclarationNameInfo DirName;
+  getDerived().getSema().StartOpenMPDSABlock(OMPD_target_exit_data, DirName, 0);
+  StmtResult Res = getDerived().TransformOMPExecutableDirective(D);
+  getDerived().getSema().EndOpenMPDSABlock(Res.get());
+  return Res;
+}
+
+template <typename Derived>
 StmtResult TreeTransform<Derived>::TransformOMPTargetTeamsDirective(
     OMPTargetTeamsDirective *D) {
   DeclarationNameInfo DirName;

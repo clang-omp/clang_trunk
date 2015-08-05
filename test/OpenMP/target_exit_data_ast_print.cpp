@@ -12,12 +12,12 @@ int main (int argc, char **argv) {
   int b = argc, c, d, e, f, g;
   static int a;
 // CHECK: static int a;
-#pragma omp target
-// CHECK:      #pragma omp target
+#pragma omp target exit data map(from: a)
+// CHECK:      #pragma omp target exit data map(from: a)
   a=2;
 // CHECK-NEXT: a = 2;
-#pragma omp target if(b) device(c+e) map(b,c) map(to:d) map(from:e) map(alloc:f) map(tofrom: g) depend(in: argc) depend(out: c) depend(inout: d)
-// CHECK:      #pragma omp target if(b) device(c + e) map(tofrom: b,c) map(to: d) map(from: e) map(alloc: f) map(tofrom: g) depend(in: argc) depend(out: c) depend(inout: d)
+#pragma omp target exit data if(b) device(c+e) map(from:d) map(release:f) map(delete:c) nowait depend(in: argc) depend(out: c) depend(inout: d)
+// CHECK:      #pragma omp target exit data if(b) device(c + e) map(from: d) map(release: f) map(delete: c) nowait depend(in: argc) depend(out: c) depend(inout: d)
   foo();
 // CHECK-NEXT: foo();
   return (0);

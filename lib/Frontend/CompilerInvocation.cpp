@@ -1650,12 +1650,6 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     Opts.setMSPointerToMemberRepresentationMethod(InheritanceModel);
   }
 
-  // Check if -fopenmp= is specified.
-  //if (const Arg *A = Args.getLastArg(options::OPT_fopenmp_EQ)) {
-  //  Opts.OpenMP = llvm::StringSwitch<bool>(A->getValue())
-  //      .Case("libiomp5", true)
-  //      .Default(false);
-  //}
   Opts.OpenMP = Args.hasArg(OPT_fopenmp);
   Opts.OpenMPTargetMode = Args.hasArg(OPT_omp_target_mode);
   Opts.OpenMPHostIRDump = Args.hasArg(OPT_omp_dump_host_ir);
@@ -1695,6 +1689,50 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     }
     else
       Diags.Report(clang::diag::err_drv_omp_target_requires_main_file_path);
+  }
+
+  // Check NVPTX codegen for OpenMP specific options.
+  if (Opts.OpenMP) {
+    if (Arg *A = Args.getLastArg(options::OPT_omp_nvptx_data_sharing_type)) {
+      StringRef S = A->getValue();
+      unsigned R = llvm::StringSwitch<unsigned>(S)
+                       .Case("fast", 1)
+                       .Case("regular", 0)
+                       .Default(~0U);
+      if (R == ~0U)
+        Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << S;
+      else
+        Opts.OpenMPNVPTXFastShare = R;
+    }
+    if (Arg *A = Args.getLastArg(
+            options::OPT_omp_nvptx_data_sharing_sizes_per_thread)) {
+      for (auto *SS : A->getValues()) {
+        StringRef SR = SS;
+        Opts.OMPNVPTXSharingSizesPerThread.push_back(0u);
+        if (SR.getAsInteger(0, Opts.OMPNVPTXSharingSizesPerThread.back()))
+          Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args)
+                                                    << SR;
+      }
+    } else {
+      Opts.OMPNVPTXSharingSizesPerThread.push_back(1024u);
+      Opts.OMPNVPTXSharingSizesPerThread.push_back(32u);
+    }
+    if (Arg *A = Args.getLastArg(
+            options::OPT_omp_nvptx_data_sharing_size_per_team)) {
+      StringRef SR = A->getValue();
+      if (SR.getAsInteger(0, Opts.OMPNVPTXSharingSizePerTeam))
+        Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << SR;
+    } else {
+      Opts.OMPNVPTXSharingSizePerTeam = 33792u;
+    }
+    if (Arg *A = Args.getLastArg(
+            options::OPT_omp_nvptx_data_sharing_size_per_kernel)) {
+      StringRef SR = A->getValue();
+      if (SR.getAsInteger(0, Opts.OMPNVPTXSharingSizePerKernel))
+        Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << SR;
+    } else {
+      Opts.OMPNVPTXSharingSizePerKernel = 69206016u;
+    }
   }
 
   // Get OpenMP host file path if any and report if a non existent file is

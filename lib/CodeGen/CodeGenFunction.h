@@ -10,7 +10,6 @@
 // This is the internal per-function state used for llvm translation.
 //
 //===----------------------------------------------------------------------===//
-
 #ifndef LLVM_CLANG_LIB_CODEGEN_CODEGENFUNCTION_H
 #define LLVM_CLANG_LIB_CODEGEN_CODEGENFUNCTION_H
 
@@ -2213,7 +2212,8 @@ public:
                            ArrayRef<const Attr *> Attrs = None);
 
   LValue InitCapturedStruct(const CapturedStmt &S);
-  void InitOpenMPFunction(llvm::Value *Context, const CapturedStmt &S);
+  void InitOpenMPFunction(llvm::Value *Context, const OMPExecutableDirective &S,
+                          const CapturedStmt &CS, bool AllocLoopBounds = false);
   void InitOpenMPTargetFunction(const OMPExecutableDirective &D,
                                 const CapturedStmt &S,
                                 SmallVector<llvm::Value**, 8> &VLAToLoad);
@@ -2222,16 +2222,14 @@ public:
                                      SmallVector<llvm::Value *, 8>   &MappingDeclVals,
                                      SmallVector<llvm::Value**, 8>   &VLAExprLocs,
                                      SmallVector<llvm::Value *, 8>   &VLAExprVals);
-  bool ShouldIgnoreOpenMPCapture(const OMPExecutableDirective &S,
-                                 OpenMPDirectiveKind CurrentD,
-                                 const DeclRefExpr *DE);
+  bool IsCombinedDirectiveLoopBoundCapture(const OMPExecutableDirective &S,
+                                           const DeclRefExpr *DE);
 
   llvm::Function *EmitCapturedStmt(const CapturedStmt &S, CapturedRegionKind K);
   llvm::Function *GenerateCapturedStmtFunction(const CapturedStmt &S);
   llvm::Value *GenerateCapturedStmtArgument(const CapturedStmt &S);
 
   void EmitPragmaSimd(CGPragmaSimdWrapper &W);
-  void EmitPragmaSimdNVPTX(CGPragmaSimdWrapper &W);
   llvm::Function *EmitSimdFunction(CGPragmaSimdWrapper &W);
 
   void EmitSIMDForHelperCall(llvm::Function *BodyFunc,
@@ -2271,6 +2269,8 @@ public:
   void EmitOMPDistributeDirective(const OMPDistributeDirective &S);
   void EmitOMPTargetDirective(const OMPTargetDirective &S);
   void EmitOMPTargetDataDirective(const OMPTargetDataDirective &S);
+  void EmitOMPTargetEnterDataDirective(const OMPTargetEnterDataDirective &S);
+  void EmitOMPTargetExitDataDirective(const OMPTargetExitDataDirective &S);
   void EmitOMPTargetUpdateDirective(const OMPTargetUpdateDirective &S);
   void EmitOMPTargetTeamsDirective(const OMPTargetTeamsDirective &S);
   void EmitOMPTeamsDistributeDirective(const OMPTeamsDistributeDirective &S);

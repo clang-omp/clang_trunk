@@ -510,3 +510,135 @@ void foo(){
 
 }
 #endif
+
+
+///##############################################
+///
+/// Test target enter/exit data
+///
+///##############################################
+#ifdef TT7
+// RUN:   %clang -fopenmp -target powerpc64le-ibm-linux-gnu -omptargets=nvptx64sm_35-nvidia-cuda \
+// RUN:   -DTT7 -O0 -S -emit-llvm %s 2>&1
+// RUN:   FileCheck -check-prefix=CK7 -input-file=target_codegen_for_c.ll %s
+
+// The map types in #target data are 'to' for B and 'from' for A
+// CK7:     [[MT1:@.mapped_types[0-9]*]] = private constant [2 x i32] [
+// CK7-DAG: i32 1
+// CK7-DAG: i32 0
+// CK7: ]
+// the map types in #target are 'alloc' for A and B (they were mapped before) and 'to' for C
+// CK7:     [[MT2:@.tgt_types[0-9]*]] = private constant [3 x i32] [
+// CK7-DAG: i32 3
+// CK7-DAG: i32 3
+// CK7-DAG: i32 1
+// CK7: ]
+// the map type for data_end
+// CK7:     [[MT3:@.mapped_types.[0-9]+]] = private constant [2 x i32] [
+// CK7-DAG: i32 24
+// CK7-DAG: i32 2
+// CK7: ]
+
+
+// CK7-LABEL: @T1
+void T1(){
+
+  double A[32];
+  double B[32]; 
+  double C[32];
+  
+  // Base pointer, start and end address of B map
+  // CK7:     [[BB:%.*]] = getelementptr inbounds [32 x double], [32 x double]* %{{.*}}, i32 0, i64 0
+  // CK7:     [[SB:%.*]]  = getelementptr inbounds [32 x double], [32 x double]* %{{.*}}, i32 0, i64 0
+  // CK7:     [[ETB:%.*]]  = getelementptr inbounds [32 x double], [32 x double]* %{{.*}}, i32 0, i64 31
+  // CK7:     [[EB:%.*]] = getelementptr inbounds double, double* [[ETB]], i64 1
+  // CK7:     [[SBINT:%.*]] = ptrtoint double* [[SB]] to i64
+  // CK7:     [[EBINT:%.*]] = ptrtoint double* [[EB]] to i64
+  // CK7:     [[SIZEB:%.*]] = sub i64 [[EBINT]], [[SBINT]]
+  
+  // Base pointer, start and end address of A map
+  // CK7:     [[BA:%.*]] = getelementptr inbounds [32 x double], [32 x double]* %{{.*}}, i32 0, i64 0
+  // CK7:     [[SA:%.*]]  = getelementptr inbounds [32 x double], [32 x double]* %{{.*}}, i32 0, i64 2
+  // CK7:     [[ETA:%.*]]  = getelementptr inbounds [32 x double], [32 x double]* %{{.*}}, i32 0, i64 31
+  // CK7:     [[EA:%.*]] = getelementptr inbounds double, double* [[ETA]], i64 1
+  // CK7:     [[SAINT:%.*]] = ptrtoint double* [[SA]] to i64
+  // CK7:     [[EAINT:%.*]] = ptrtoint double* [[EA]] to i64
+  // CK7:     [[SIZEA:%.*]] = sub i64 [[EAINT]], [[SAINT]]
+  
+  // Store the pointers and sizes in the arrays passed to the runtime in order to create
+  // the data environment
+  // CK7:     [[BPTRS:%.*]] = alloca i8*, i32 2
+  // CK7:     [[PPTRS:%.*]] = alloca i8*, i32 2
+  // CK7:     [[SIZES:%.*]] = alloca i64, i32 2
+  // CK7:     [[EBPTRS0:%.*]] = getelementptr inbounds i8*, i8** [[BPTRS]], i32 0
+  // CK7:     [[EPPTRS0:%.*]] = getelementptr inbounds i8*, i8** [[PPTRS]], i32 0
+  // CK7:     [[ESIZES0:%.*]] = getelementptr inbounds i64, i64* [[SIZES]], i32 0
+  // CK7:     store i8* {{.*}}, i8** [[EBPTRS0]]
+  // CK7:     store i8* {{.*}}, i8** [[EPPTRS0]]
+  // CK7:     store i64 {{.*}}, i64* [[ESIZES0]]
+  // CK7:     [[EBPTRS1:%.*]] = getelementptr inbounds i8*, i8** [[BPTRS]], i32 1
+  // CK7:     [[EPPTRS1:%.*]] = getelementptr inbounds i8*, i8** [[PPTRS]], i32 1
+  // CK7:     [[ESIZES1:%.*]] = getelementptr inbounds i64, i64* [[SIZES]], i32 1
+  // CK7:     store i8* {{.*}}, i8** [[EBPTRS1]]
+  // CK7:     store i8* {{.*}}, i8** [[EPPTRS1]]
+  // CK7:     store i64 {{.*}}, i64* [[ESIZES1]]
+
+  // Begin data environment
+  // CK7:     call void @__tgt_target_data_begin(i32 1, i32 2, i8** [[BPTRS]], i8** [[PPTRS]], i64* [[SIZES]], i32* getelementptr inbounds ([2 x i32], [2 x i32]* [[MT1]], i32 0, i32 0))
+  
+  #pragma omp target enter data map(to: B[0:32]) map(alloc: A[2:30]) device(1)
+    // Base pointer, start and end address of C map
+    // CK7:     [[BC:%.*]] = getelementptr inbounds [32 x double], [32 x double]* %{{.*}}, i32 0, i64 0
+    // CK7:     [[SC:%.*]]  = getelementptr inbounds [32 x double], [32 x double]* %{{.*}}, i32 0, i64 2
+    // CK7:     [[ETC:%.*]]  = getelementptr inbounds [32 x double], [32 x double]* %{{.*}}, i32 0, i64 31
+    // CK7:     [[EC:%.*]] = getelementptr inbounds double, double* [[ETC]], i64 1
+    // CK7:     [[SCINT:%.*]] = ptrtoint double* [[SC]] to i64
+    // CK7:     [[ECINT:%.*]] = ptrtoint double* [[EC]] to i64
+    // CK7:     [[SIZEC:%.*]] = sub i64 [[ECINT]], [[SCINT]]
+  
+    // Store the pointers and sizes in the arrays passed to the runtime in order to transfer
+    // execution to the device
+    // CK7:     [[TGT_BPTRS:%.*]] = alloca i8*, i32 3
+    // CK7:     [[TGT_PPTRS:%.*]] = alloca i8*, i32 3
+    // CK7:     [[TGT_SIZES:%.*]] = alloca i64, i32 3
+    // CK7:     [[TGT_EBPTRS0:%.*]] = getelementptr inbounds i8*, i8** [[TGT_BPTRS]], i32 0
+    // CK7:     [[TGT_EPPTRS0:%.*]] = getelementptr inbounds i8*, i8** [[TGT_PPTRS]], i32 0
+    // CK7:     [[TGT_ESIZES0:%.*]] = getelementptr inbounds i64, i64* [[TGT_SIZES]], i32 0
+    // CK7:     store i8* {{.*}}, i8** [[TGT_EBPTRS0]]
+    // CK7:     store i8* {{.*}}, i8** [[TGT_EPPTRS0]]
+    // CK7:     store i64 {{.*}}, i64* [[TGT_ESIZES0]]
+    // CK7:     [[TGT_EBPTRS1:%.*]] = getelementptr inbounds i8*, i8** [[TGT_BPTRS]], i32 1
+    // CK7:     [[TGT_EPPTRS1:%.*]] = getelementptr inbounds i8*, i8** [[TGT_PPTRS]], i32 1
+    // CK7:     [[TGT_ESIZES1:%.*]] = getelementptr inbounds i64, i64* [[TGT_SIZES]], i32 1
+    // CK7:     store i8* {{.*}}, i8** [[TGT_EBPTRS1]]
+    // CK7:     store i8* {{.*}}, i8** [[TGT_EPPTRS1]]
+    // CK7:     store i64 {{.*}}, i64* [[TGT_ESIZES1]]
+    // CK7:     [[TGT_EBPTRS2:%.*]] = getelementptr inbounds i8*, i8** [[TGT_BPTRS]], i32 2
+    // CK7:     [[TGT_EPPTRS2:%.*]] = getelementptr inbounds i8*, i8** [[TGT_PPTRS]], i32 2
+    // CK7:     [[TGT_ESIZES2:%.*]] = getelementptr inbounds i64, i64* [[TGT_SIZES]], i32 2
+    // CK7:     store i8* {{.*}}, i8** [[TGT_EBPTRS2]]
+    // CK7:     store i8* {{.*}}, i8** [[TGT_EPPTRS2]]
+    // CK7:     store i64 {{.*}}, i64* [[TGT_ESIZES2]]
+    
+    // Call runtime to launch target execution
+    // CK?7:     call i32 @__tgt_target(i32 1, i8* {{.*}}, i32 3, i8** [[TGT_BPTRS]], i8** [[TGT_PPTRS]], i64* [[TGT_SIZES]], i32* getelementptr inbounds ([3 x i32], [3 x i32]* [[MT2]], i32 0, i32 0))
+    #pragma omp target map(to: C[2:30]) device(1)
+    for (int i=2; i<32; ++i){
+      A[i] = B[i] * C[i];
+    }
+
+
+    // Store the pointers and sizes in the arrays passed to the runtime in order to create
+    // the data environment
+    // CK7:     [[BPTRSE:%.*]] = alloca i8*, i32 2
+    // CK7:     [[PPTRSE:%.*]] = alloca i8*, i32 2
+    // CK7:     [[SIZESE:%.*]] = alloca i64, i32 2
+
+  // Close data environment
+  // CK7:     call void @__tgt_target_data_end(i32 1, i32 2, i8** [[BPTRSE]], i8** [[PPTRSE]], i64* [[SIZESE]], i32* getelementptr inbounds ([2 x i32], [2 x i32]* [[MT3]], i32 0, i32 0))
+  #pragma omp target exit data map(delete: B[0:32]) map(from: A[2:30]) device(1)
+
+  return;
+}
+
+#endif

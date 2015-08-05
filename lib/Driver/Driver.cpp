@@ -454,24 +454,33 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
   // Get the toolchains for the OpenMP targets if any
   OpenMPTargetToolChains.clear();
 
-  if (UArgs->hasArg(options::OPT_fopenmp)){
+  if (UArgs->hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
+                   options::OPT_fno_openmp, false)) {
+    bool isOpenMP = true;
+    if (const Arg *A = UArgs->getLastArg(options::OPT_fopenmp_EQ))
+      isOpenMP = llvm::StringSwitch<bool>(A->getValue())
+                     .Case("libomp", true)
+                     .Case("libiomp5", true)
+                     .Default(false);
 
-    // check if there is any openmp target we care generating code to
-    Arg *Tgts = UArgs->getLastArg(options::OPT_omptargets_EQ);
+    if (isOpenMP) {
+      // check if there is any openmp target we care generating code to
+      Arg *Tgts = UArgs->getLastArg(options::OPT_omptargets_EQ);
 
-    // If omptargets was specified use only the required targets
-    if ( Tgts && Tgts->getNumValues() ){
-      for (unsigned v=0; v<Tgts->getNumValues(); ++v){
-        std::string error;
-        const char *val = Tgts->getValue(v);
+      // If omptargets was specified use only the required targets
+      if (Tgts && Tgts->getNumValues()) {
+        for (unsigned v = 0; v < Tgts->getNumValues(); ++v) {
+          std::string error;
+          const char *val = Tgts->getValue(v);
 
-        llvm::Triple TT(val);
+          llvm::Triple TT(val);
 
-        //If the specified target is invalid, emit error
-        if (TT.getArch() == llvm::Triple::UnknownArch)
-          Diag(clang::diag::err_drv_invalid_omp_target) << val;
-        else{
-          OpenMPTargetToolChains.push_back(val);
+          // If the specified target is invalid, emit error
+          if (TT.getArch() == llvm::Triple::UnknownArch)
+            Diag(clang::diag::err_drv_invalid_omp_target) << val;
+          else {
+            OpenMPTargetToolChains.push_back(val);
+          }
         }
       }
     }

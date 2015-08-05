@@ -123,6 +123,16 @@ public:
   /// accurate offloading translation tables
   std::vector<llvm::Triple> OMPTargetTriples;
 
+  /// \brief Storage size reserved for data sharing in NVPTX per thread and
+  /// level.
+  std::vector<uint64_t> OMPNVPTXSharingSizesPerThread;
+
+  /// \brief Storage size reserved for data sharing in NVPTX per team.
+  uint64_t OMPNVPTXSharingSizePerTeam;
+
+  /// \brief Storage size reserved for data sharing in NVPTX per kernel.
+  uint64_t OMPNVPTXSharingSizePerKernel;
+
   LangOptions();
 
   // Define accessors/mutators for language options of enumeration type.

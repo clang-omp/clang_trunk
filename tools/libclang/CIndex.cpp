@@ -1947,6 +1947,8 @@ public:
   void VisitOMPTargetDirective(const OMPTargetDirective *D);
   void VisitOMPTargetDataDirective(const OMPTargetDataDirective *D);
   void VisitOMPTargetUpdateDirective(const OMPTargetUpdateDirective *D);
+  void VisitOMPTargetEnterDataDirective(const OMPTargetEnterDataDirective *D);
+  void VisitOMPTargetExitDataDirective(const OMPTargetExitDataDirective *D);
   void VisitOMPTeamsDistributeDirective(const OMPTeamsDistributeDirective *D);
   void VisitOMPTeamsDistributeSimdDirective(
       const OMPTeamsDistributeSimdDirective *D);
@@ -2606,6 +2608,16 @@ EnqueueVisitor::VisitOMPTargetDataDirective(const OMPTargetDataDirective *D) {
 
 void EnqueueVisitor::VisitOMPTargetUpdateDirective(
     const OMPTargetUpdateDirective *D) {
+  VisitOMPExecutableDirective(D);
+}
+
+void EnqueueVisitor::VisitOMPTargetEnterDataDirective(
+    const OMPTargetEnterDataDirective *D) {
+  VisitOMPExecutableDirective(D);
+}
+
+void EnqueueVisitor::VisitOMPTargetExitDataDirective(
+    const OMPTargetExitDataDirective *D) {
   VisitOMPExecutableDirective(D);
 }
 
@@ -4439,6 +4451,10 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
     return cxstring::createRef("OMPTargetDataDirective");
   case CXCursor_OMPTargetUpdateDirective:
     return cxstring::createRef("OMPTargetUpdateDirective");
+  case CXCursor_OMPTargetEnterDataDirective:
+    return cxstring::createRef("OMPTargetEnterDataDirective");
+  case CXCursor_OMPTargetExitDataDirective:
+    return cxstring::createRef("OMPTargetExitDataDirective");
   case CXCursor_OMPTeamsDistributeDirective:
     return cxstring::createRef("OMPTeamsDisitributeDirective");
   case CXCursor_OMPTeamsDistributeSimdDirective:

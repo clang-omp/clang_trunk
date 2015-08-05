@@ -2441,6 +2441,16 @@ StmtResult Sema::ActOnOpenMPExecutableDirective(
     Res =
         ActOnOpenMPTargetUpdateDirective(ClausesWithImplicit, StartLoc, EndLoc);
     break;
+  case OMPD_target_enter_data:
+    assert(!AStmt && "Statement is not allowed for target enter data");
+    Res = ActOnOpenMPTargetEnterDataDirective(ClausesWithImplicit, StartLoc,
+                                              EndLoc);
+    break;
+  case OMPD_target_exit_data:
+    assert(!AStmt && "Statement is not allowed for target exit data");
+    Res = ActOnOpenMPTargetExitDataDirective(ClausesWithImplicit, StartLoc,
+                                             EndLoc);
+    break;
   case OMPD_cancel:
     assert(!AStmt && "Statement is not allowed for cancel");
     if (ConstructType == OMPD_unknown)
@@ -2484,6 +2494,8 @@ StmtResult Sema::ActOnOpenMPExecutableDirective(
   case OMPD_cancel:
   case OMPD_cancellation_point:
   case OMPD_target_update:
+  case OMPD_target_enter_data:
+  case OMPD_target_exit_data:
   case OMPD_task:
     break;
   default: {
@@ -4198,6 +4210,61 @@ StmtResult Sema::ActOnOpenMPTargetUpdateDirective(ArrayRef<OMPClause *> Clauses,
 
   getCurFunction()->setHasBranchProtectedScope();
   return OMPTargetUpdateDirective::Create(Context, StartLoc, EndLoc, Clauses);
+}
+
+StmtResult
+Sema::ActOnOpenMPTargetEnterDataDirective(ArrayRef<OMPClause *> Clauses,
+                                          SourceLocation StartLoc,
+                                          SourceLocation EndLoc) {
+
+  // Ensure that there is at least one map clause
+  bool foundMap = false;
+  for (ArrayRef<OMPClause *>::iterator I = Clauses.begin(), E = Clauses.end();
+       I != E; ++I) {
+    if (*I) {
+      OMPClause *Clause = *I;
+      if (Clause->getClauseKind() == OMPC_map) {
+        foundMap = true;
+        break;
+      }
+    }
+  }
+
+  if (!foundMap) {
+    Diag(StartLoc, diag::err_omp_no_map_enter_data);
+    return StmtError();
+  }
+
+  getCurFunction()->setHasBranchProtectedScope();
+  return OMPTargetEnterDataDirective::Create(Context, StartLoc, EndLoc,
+                                             Clauses);
+}
+
+StmtResult
+Sema::ActOnOpenMPTargetExitDataDirective(ArrayRef<OMPClause *> Clauses,
+                                         SourceLocation StartLoc,
+                                         SourceLocation EndLoc) {
+
+  // Ensure that there is at least one map clause
+  bool foundMap = false;
+  for (ArrayRef<OMPClause *>::iterator I = Clauses.begin(), E = Clauses.end();
+       I != E; ++I) {
+    if (*I) {
+      OMPClause *Clause = *I;
+      if (Clause->getClauseKind() == OMPC_map) {
+        foundMap = true;
+        break;
+      }
+    }
+  }
+
+  if (!foundMap) {
+    Diag(StartLoc, diag::err_omp_no_map_exit_data);
+    return StmtError();
+  }
+
+  getCurFunction()->setHasBranchProtectedScope();
+  return OMPTargetExitDataDirective::Create(Context, StartLoc, EndLoc, Clauses);
 }
 
 StmtResult
@@ -7346,6 +7413,29 @@ OMPClause *Sema::ActOnOpenMPMapClause(ArrayRef<Expr *> VarList,
     //  A list item must have a mappable type.
     if (!CheckTypeMappable(VE->getExprLoc(), VE->getSourceRange(), *this,
                            DSAStack, Type)) {
+      continue;
+    }
+
+    // target enter data
+    // OpenMP [2.10.10, Restrictions, p. 113]
+    // A map-type must be specified in all map clauses and must be either
+    // to or alloc.
+    OpenMPDirectiveKind DKind = DSAStack->getCurrentDirective();
+    if (DKind == OMPD_target_enter_data &&
+        !(Kind == OMPC_MAP_to || Kind == OMPC_MAP_alloc)) {
+      Diag(StartLoc, diag::err_omp_invalid_map_type_enter_data);
+      continue;
+    }
+
+    // target exit_data
+    // OpenMP [2.10.11, Restrictions, p. 116]
+    // A map-type must be specified in all map clauses and must be either
+    // from, release, or delete.
+    DKind = DSAStack->getCurrentDirective();
+    if (DKind == OMPD_target_exit_data &&
+        !(Kind == OMPC_MAP_from || Kind == OMPC_MAP_release ||
+          Kind == OMPC_MAP_delete)) {
+      Diag(StartLoc, diag::err_omp_invalid_map_type_exit_data);
       continue;
     }
 

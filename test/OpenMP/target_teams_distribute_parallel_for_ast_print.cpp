@@ -51,10 +51,10 @@ int main (int argc, char **argv) {
   for (int i=0; i < 2; ++i)*a=2;
 // CHECK-NEXT: for (int i = 0; i < 2; ++i)
 // CHECK-NEXT: *a = 2;
-#pragma omp target teams distribute parallel for private(argc,b),lastprivate(d,f),reduction(+:e) reduction(min : g),  collapse(2) dist_schedule(static, 3) default(none) firstprivate(f) num_teams(b) num_threads(argc) shared(k1, k2) map(to:b) map(from:c) map(tofrom:d) device(f) if(g)
+#pragma omp target teams distribute parallel for private(argc,b),lastprivate(d,f),reduction(+:e) reduction(min : g),  collapse(2) dist_schedule(static, 3) default(none) firstprivate(f) num_teams(b) num_threads(argc) shared(k1, k2) map(to:b) map(from:c) map(tofrom:d) device(f) depend(in: argc) depend(out: c) depend(inout: d) if(g)
   for (int i = 0; i < 10; ++i)
   for (int j = 0; j < 10; ++j) {foo(); k1 += 8; k2 += 8;}
-// CHECK-NEXT: #pragma omp target teams distribute parallel for private(argc,b) lastprivate(d,f) reduction(+: e) reduction(min: g) collapse(2) dist_schedule(static, 3) default(none) firstprivate(f) num_teams(b) num_threads(argc) shared(k1,k2) map(to: b) map(from: c) map(tofrom: d) device(f) if(g)
+// CHECK-NEXT: #pragma omp target teams distribute parallel for private(argc,b) lastprivate(d,f) reduction(+: e) reduction(min: g) collapse(2) dist_schedule(static, 3) default(none) firstprivate(f) num_teams(b) num_threads(argc) shared(k1,k2) map(to: b) map(from: c) map(tofrom: d) device(f) depend(in: argc) depend(out: c) depend(inout: d) if(g)
 // CHECK-NEXT: for (int i = 0; i < 10; ++i)
 // CHECK-NEXT: for (int j = 0; j < 10; ++j) {
 // CHECK-NEXT: foo();

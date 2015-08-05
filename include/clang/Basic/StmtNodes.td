@@ -215,6 +215,8 @@ def OMPCancellationPointDirective : DStmt<OMPExecutableDirective>;
 def OMPTargetDirective : DStmt<OMPExecutableDirective>;
 def OMPTargetDataDirective : DStmt<OMPExecutableDirective>;
 def OMPTargetUpdateDirective : DStmt<OMPExecutableDirective>;
+def OMPTargetEnterDataDirective : DStmt<OMPExecutableDirective>;
+def OMPTargetExitDataDirective : DStmt<OMPExecutableDirective>;
 def OMPTargetTeamsDirective : DStmt<OMPExecutableDirective>;
 def OMPTeamsDistributeDirective : DStmt<OMPExecutableDirective>;
 def OMPTeamsDistributeSimdDirective : DStmt<OMPExecutableDirective>;

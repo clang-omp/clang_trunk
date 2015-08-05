@@ -7505,6 +7505,14 @@ def err_omp_once_referenced : Error<
   "variable can appear only once in OpenMP '%0' clause">;
 def err_omp_once_referenced_in_target_update : Error<
   "variable can appear only once in OpenMP 'target update' construct">;
+def err_omp_invalid_map_type_enter_data : Error<
+  "invalid map-type in OpenMP 'target enter data' construct">;
+def err_omp_invalid_map_type_exit_data : Error<
+  "invalid map-type in OpenMP 'target exit data' construct">;
+def err_omp_no_map_enter_data : Error<
+  "expected at least one map clause in OpenMP 'target enter data' construct">;
+def err_omp_no_map_exit_data : Error<
+  "expected at least one map clause in OpenMP 'target exit data' construct">;
 def err_omp_const_variable : Error<
   "const-qualified variable cannot be %0">;
 def note_omp_explicit_dsa : Note<

@@ -17,6 +17,8 @@
 // CK1: @__omptgt__ControlState = common addrspace(3) global [2 x i32] zeroinitializer
 // CK1: @__omptgt__CudaThreadsInParallel = common addrspace(3) global i32 0
 // CK1: @__omptgt__SimdNumLanes = common addrspace(3) global i32 0
+// CK1: @__omptgt__[[KERNUNQ:[a-zA-Z0-9_\.]+]]__thread_limit = global i32 0
+// CK1: @__omptgt__[[KERNUNQ]]__simd_info = constant i8 1
 
 int foo() {
 
@@ -27,7 +29,9 @@ int foo() {
   return 0;
 }
 
-// CK1: %[[NXTSTT:[a-zA-Z0-9_\.]+]] = alloca i32
+// CK1: %[[PARNEST:[a-zA-Z0-9_\.]+]] = alloca i32
+// CK1-NEXT: store i32 0, i32* %[[PARNEST]]
+// CK1-NEXT: %[[NXTSTT:[a-zA-Z0-9_\.]+]] = alloca i32
 // CK1-NEXT: store i32 0, i32* %[[NXTSTT]]
 // CK1-NEXT: %[[CTLSTTIDX:[a-zA-Z0-9_\.]+]] = alloca i32
 // CK1-NEXT: store i32 0, i32* %[[CTLSTTIDX]]
@@ -93,7 +97,8 @@ int foo() {
 // CK1-NEXT: br label %[[SYNC]]
 
 // CK1: [[FSTSQ]]:
-// CK1-NEXT: call void @__kmpc_kernel_init()
+// CK1-NEXT: %[[THLIMGBL:[a-zA-Z0-9_\.]+]] = load i32, i32* @__omptgt__[[KERNUNQ]]__thread_limit
+// CK1-NEXT: call void @__kmpc_kernel_init(i32 %[[THLIMGBL]])
 // CK1-NEXT: %[[CTLSTTIDXVAL2:[a-zA-Z0-9_\.]+]] = load i32, i32* %[[CTLSTTIDX]]
 // CK1-NEXT: %[[CTLSTTPOSPT1:[a-zA-Z0-9_\.]+]] = getelementptr [2 x i32], [2 x i32] addrspace(3)* @__omptgt__ControlState, i32 0, i32 %[[CTLSTTIDXVAL2]]
 // CK1-NEXT: store i32 1, i32 addrspace(3)* %[[CTLSTTPOSPT1]]
@@ -115,6 +120,8 @@ int foo() {
 // CK2: @__omptgt__ControlState = common addrspace(3) global [2 x i32] zeroinitializer
 // CK2: @__omptgt__CudaThreadsInParallel = common addrspace(3) global i32 0
 // CK2: @__omptgt__SimdNumLanes = common addrspace(3) global i32 0
+// CK2: @__omptgt__[[KERNUNQ2:[a-zA-Z0-9_\.]+]]__thread_limit = global i32 0
+// CK2: @__omptgt__[[KERNUNQ2]]__simd_info = constant i8 1
 
 int foo() {
 
@@ -127,6 +134,8 @@ int foo() {
 }
 
 // CK2: %[[AB:[a-zA-Z0-9_\.]+]] = alloca i32, align 4
+// CK2-NEXT: %[[PARNEST:[a-zA-Z0-9_\.]+]] = alloca i32
+// CK2-NEXT: store i32 0, i32* %[[PARNEST]]
 // CK2-NEXT: %[[NXTSTT:[a-zA-Z0-9_\.]+]] = alloca i32
 // CK2-NEXT: store i32 0, i32* %[[NXTSTT]]
 // CK2-NEXT: %[[CTLSTTIDX:[a-zA-Z0-9_\.]+]] = alloca i32
@@ -193,7 +202,8 @@ int foo() {
 // CK2-NEXT: br label %[[SYNC]]
 
 // CK2: [[FSTSQ]]:
-// CK2-NEXT: call void @__kmpc_kernel_init()
+// CK2-NEXT: %[[THLIMGBL:[a-zA-Z0-9_\.]+]] = load i32, i32* @__omptgt__[[KERNUNQ2]]__thread_limit
+// CK2-NEXT: call void @__kmpc_kernel_init(i32 %[[THLIMGBL]])
 // CK2-NEXT: store i32 1, i32* %[[AB]], align 4
 // CK2-NEXT: %[[CTLSTTIDXVAL2:[a-zA-Z0-9_\.]+]] = load i32, i32* %[[CTLSTTIDX]]
 // CK2-NEXT: %[[CTLSTTPOSPT1:[a-zA-Z0-9_\.]+]] = getelementptr [2 x i32], [2 x i32] addrspace(3)* @__omptgt__ControlState, i32 0, i32 %[[CTLSTTIDXVAL2]]
@@ -216,7 +226,9 @@ int foo() {
 // CK3: @__omptgt__ControlState = common addrspace(3) global [2 x i32] zeroinitializer
 // CK3: @__omptgt__CudaThreadsInParallel = common addrspace(3) global i32 0
 // CK3: @__omptgt__SimdNumLanes = common addrspace(3) global i32 0
-// CK3: @__omptgt__shared_data_tbl_ = internal addrspace(3) global [1024 x %[[tmp2:[a-zA-Z0-9_\.]+]]] zeroinitializer
+// CK3: @__omptgt__[[KERNUNQ3:[a-zA-Z0-9_\.]+]]__thread_limit = global i32 0
+// CK3: @__omptgt__[[KERNUNQ3]]__simd_info = constant i8 1
+// CK3: @__omptgt__shared_data_ = common addrspace(3) global [{{[0-9]+}} x i8] zeroinitializer
 
 #include <stdio.h>
 
@@ -249,7 +261,9 @@ int foo() {
 // CK3-NEXT: %[[ST:[a-zA-Z0-9_\.]+]] = alloca i32, align 4
 // CK3-NEXT: %[[IDX:[a-zA-Z0-9_\.]+]] = alloca i32, align 4
 // CK3-NEXT: %[[IPRIV:[a-zA-Z0-9_\.]+]] = alloca i32, align 4
-// CK3: %[[NXTSTT:[a-zA-Z0-9\.]+]] = alloca i32
+// CK3: %[[PARNEST:[a-zA-Z0-9_\.]+]] = alloca i32
+// CK3-NEXT: store i32 0, i32* %[[PARNEST]]
+// CK3-NEXT: %[[NXTSTT:[a-zA-Z0-9\.]+]] = alloca i32
 // CK3-NEXT: store i32 0, i32* %[[NXTSTT]]
 // CK3-NEXT: %[[CTLSTTIDX:[a-zA-Z0-9_\.]+]] = alloca i32
 // CK3-NEXT: store i32 0, i32* %[[CTLSTTIDX]]
@@ -318,11 +332,12 @@ int foo() {
 // CK3-NEXT: br label %[[SYNC]]
 
 // CK3: [[FSTSQ]]:
-// CK3-NEXT: call void @__kmpc_kernel_init()
-// CK3-NEXT: store i32 1, i32* addrspacecast (i32 addrspace(3)* getelementptr inbounds ([1024 x %0], [1024 x %0] addrspace(3)* @__omptgt__shared_data_tbl_, i32 0, i32 0, i32 0) to i32*), align 4
+// CK3-NEXT: %[[THLIMGBL:[a-zA-Z0-9_\.]+]] = load i32, i32* @__omptgt__[[KERNUNQ3]]__thread_limit
+// CK3-NEXT: call void @__kmpc_kernel_init(i32 %[[THLIMGBL]])
+// CK3-NEXT: store i32 1, i32* {{.*}} @__omptgt__shared_data_{{.*}} align 4
 // CK3-NEXT: store i32 1, i32 addrspace(3)* @__omptgt__SimdNumLanes
-// CK3-NEXT:  %[[NTIDVAL:[a-zA-Z0-9_\.]+]] = call i32 @llvm.nvvm.read.ptx.sreg.ntid.x()
 // CK3-NEXT: %[[SMDNLNS:[a-zA-Z0-9_\.]+]] = load i32, i32 addrspace(3)* @__omptgt__SimdNumLanes
+// CK3-NEXT: %[[NTIDVAL:[a-zA-Z0-9_\.]+]] = call i32 @llvm.nvvm.read.ptx.sreg.ntid.x()
 // CK3-NEXT: %[[PARTHSVAL:[a-zA-Z0-9_\.]+]] = call i32 @__kmpc_kernel_prepare_parallel(i32 %[[NTIDVAL]], i32 %[[SMDNLNS]])
 // CK3-NEXT: store i32 %[[PARTHSVAL]], i32 addrspace(3)* @__omptgt__CudaThreadsInParallel
 // CK3-NEXT: %[[CTLSTTIDXVAL2:[a-zA-Z0-9_\.]+]] = load i32, i32* %[[CTLSTTIDX]]
@@ -331,6 +346,9 @@ int foo() {
 // CK3-NEXT: br label %[[SYNC]]
 
 // CK3: [[PARREGPRE]]:
+// CK3-NEXT: %[[PARNEST_TMP1:[0-9]+]] = load i32, i32* %[[PARNEST]]
+// CK3-NEXT: %[[PARNEST_TMP2:[0-9]+]] = add i32 %[[PARNEST_TMP1]], 1
+// CK3-NEXT: store i32 %[[PARNEST_TMP2]], i32* %[[PARNEST]]
 // CK3-NEXT: %[[TIDVAL2:[a-zA-Z0-9_\.]+]] = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
 // CK3-NEXT: %[[PARTHSVAL1:[a-zA-Z0-9_\.]+]] = load i32, i32 addrspace(3)* @__omptgt__CudaThreadsInParallel
 // CK3-NEXT: %[[AMITHORLN:[a-zA-Z0-9_\.]+]] = icmp sge i32 %[[TIDVAL2]], %[[PARTHSVAL1]]
@@ -351,10 +369,7 @@ int foo() {
 // CK3-NEXT: call void @__kmpc_kernel_parallel(i32 %[[SMDNUMLNSVAL2]])
 // CK3-NEXT: %[[SIMDLNNMVAL:[a-zA-Z0-9_\.]+]] = load i32, i32* %[[SIMDLNNM]]
 // CK3-NEXT: %[[SIMDLNNMVALISZERO:[a-zA-Z0-9_\.]+]] = icmp ne i32 %[[SIMDLNNMVAL]], 0
-// CK3-NEXT: br i1 %[[SIMDLNNMVALISZERO]], label %[[ISLANE:[a-zA-Z0-9_\.]+]], label %[[PARREGBODY:[a-zA-Z0-9_\.]+]]
-
-// CK3: [[ISLANE]]:
-// CK3-NEXT: br label %[[SYNC]]
+// CK3-NEXT: br i1 %[[SIMDLNNMVALISZERO]], label %[[SYNC]], label %[[PARREGBODY:[a-zA-Z0-9_\.]+]]
 
 // CK3: call void @__kmpc_for_static_fini({ i32, i32, i32, i32, i8* }* %[[TMP:[a-zA-Z0-9_\.]+]], i32 %[[GIDVAL:[a-zA-Z0-9_\.]+]])
 // CK3-NEXT: %[[TIDVAL7:[a-zA-Z0-9_\.]+]] = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
@@ -376,6 +391,9 @@ int foo() {
 // CK3-NEXT: br label %[[LOOPPRECEND:[a-zA-Z0-9_\.]+]]
 
 // CK3: [[LOOPPRECEND]]:
+// CK3-NEXT: %[[PARNEST_TMP3:[0-9]+]] = load i32, i32* %[[PARNEST]]
+// CK3-NEXT: %[[PARNEST_TMP4:[0-9]+]] = sub i32 %[[PARNEST_TMP3]], 1
+// CK3-NEXT: store i32 %[[PARNEST_TMP4]], i32* %[[PARNEST]]
 // CK3-NEXT: call void @__kmpc_kernel_end_parallel()
 // CK3-NEXT: %[[TIDVAL8:[a-zA-Z0-9_\.]+]] = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
 // CK3-NEXT: %[[AMINOTMST1:[a-zA-Z0-9_\.]+]] = icmp ne i32 %[[TIDVAL8]], 0

@@ -431,8 +431,18 @@ StmtProfiler::VisitOMPTargetUpdateDirective(const OMPTargetUpdateDirective *S) {
   VisitOMPExecutableDirective(S);
 }
 
-void
-StmtProfiler::VisitOMPTargetTeamsDirective(const OMPTargetTeamsDirective *S) {
+void StmtProfiler::VisitOMPTargetEnterDataDirective(
+    const OMPTargetEnterDataDirective *S) {
+  VisitOMPExecutableDirective(S);
+}
+
+void StmtProfiler::VisitOMPTargetExitDataDirective(
+    const OMPTargetExitDataDirective *S) {
+  VisitOMPExecutableDirective(S);
+}
+
+void StmtProfiler::VisitOMPTargetTeamsDirective(
+    const OMPTargetTeamsDirective *S) {
   VisitOMPExecutableDirective(S);
 }
 
