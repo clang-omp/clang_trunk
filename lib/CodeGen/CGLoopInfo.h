@@ -29,6 +29,7 @@ class MDNode;
 
 namespace clang {
 class Attr;
+class ASTContext;
 namespace CodeGen {
 
 /// LoopAttributes - Per loop attributes.
@@ -46,10 +47,17 @@ struct LoopAttributes {
     LVEC_DISABLE
   };
 
-  LVEnableState VectorizerEnable;
+  /// \brief Selects no metadata, llvm.unroll.full, or llvm.unroll.disable.
+  LVEnableState UnrollEnable;
 
-  /// llvm.vectorizer.width value
-  unsigned VectorizerWidth;
+  /// \brief Value for llvm.loop.vectorize.width metadata.
+  unsigned VectorizeWidth;
+
+  /// \brief Value for llvm.loop.interleave.count metadata.
+  unsigned InterleaveCount;
+
+  /// \brief llvm.unroll.
+  unsigned UnrollCount;
 };
 
 /// LoopInfo - Information used when generating a structured loop.
@@ -91,8 +99,12 @@ public:
 
   /// \brief Begin a new structured loop. The set of staged attributes will be
   /// applied to the loop and then cleared.
-  void Push(llvm::BasicBlock *Header,
-            llvm::ArrayRef<const Attr *> Attrs = llvm::None);
+  void push(llvm::BasicBlock *Header);
+
+  /// \brief Begin a new structured loop. Stage attributes from the Attrs list.
+  /// The staged attributes are applied to the loop and then cleared.
+  void push(llvm::BasicBlock *Header, clang::ASTContext &Ctx,
+            llvm::ArrayRef<const Attr *> Attrs);
 
   void push(llvm::BasicBlock *Header,
             llvm::ArrayRef<const Attr *> Attrs = llvm::None) {
@@ -127,14 +139,20 @@ public:
                                             LoopAttributes::LVEC_DISABLE;
   }
 
-  /// Set the vectorizer width for the next loop pushed.
-  void SetVectorizerWidth(unsigned W) { StagedAttrs.VectorizerWidth = W; }
+  /// \brief Set the next pushed loop unroll state.
+  void setUnrollEnable(bool Enable = true) {
+    StagedAttrs.UnrollEnable =
+        Enable ? LoopAttributes::Enable : LoopAttributes::Disable;
+  }
 
-  /// Add an aligned variable for 'aligned' clause.
-  void AddAligned(const llvm::Value *Val, int Align);
+  /// \brief Set the vectorize width for the next loop pushed.
+  void setVectorizeWidth(unsigned W) { StagedAttrs.VectorizeWidth = W; }
 
   /// Get alignment of given pointer based on 'aligned' clause.
   int GetAligned(const llvm::Value *Val) const;
+
+  /// \brief Set the unroll count for the next loop pushed.
+  void setUnrollCount(unsigned C) { StagedAttrs.UnrollCount = C; }
 
 private:
   /// Returns true if there is LoopInfo on the stack.
