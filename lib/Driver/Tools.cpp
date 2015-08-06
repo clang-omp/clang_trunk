@@ -969,29 +969,6 @@ static void getARMTargetFeatures(const Driver &D, const llvm::Triple &Triple,
     }
   }
 
-  // Honor -mfpu=. ClangAs gives preference to -Wa,-mfpu=.
-  const Arg *FPUArg = Args.getLastArg(options::OPT_mfpu_EQ);
-  if (WaFPU) {
-    if (FPUArg)
-      D.Diag(clang::diag::warn_drv_unused_argument)
-          << FPUArg->getAsString(Args);
-    getARMFPUFeatures(D, WaFPU, Args, StringRef(WaFPU->getValue()).substr(6),
-                      Features);
-  } else if (FPUArg) {
-    getARMFPUFeatures(D, FPUArg, Args, FPUArg->getValue(), Features);
-  }
-
-  // Honor -mhwdiv=. ClangAs gives preference to -Wa,-mhwdiv=.
-  const Arg *HDivArg = Args.getLastArg(options::OPT_mhwdiv_EQ);
-  if (WaHDiv) {
-    if (HDivArg)
-      D.Diag(clang::diag::warn_drv_unused_argument)
-          << HDivArg->getAsString(Args);
-    getARMHWDivFeatures(D, WaHDiv, Args,
-                        StringRef(WaHDiv->getValue()).substr(8), Features);
-  } else if (HDivArg)
-    getARMHWDivFeatures(D, HDivArg, Args, HDivArg->getValue(), Features);
-
   // Check -march. ClangAs gives preference to -Wa,-march=.
   const Arg *ArchArg = Args.getLastArg(options::OPT_march_EQ);
   StringRef ArchName;
@@ -1021,6 +998,38 @@ static void getARMTargetFeatures(const Driver &D, const llvm::Triple &Triple,
     CPUName = CPUArg->getValue();
     checkARMCPUName(D, CPUArg, Args, CPUName, ArchName, Triple);
   }
+
+  // Add CPU features for generic CPUs
+  if (CPUName == "native") {
+    llvm::StringMap<bool> HostFeatures;
+    if (llvm::sys::getHostCPUFeatures(HostFeatures))
+      for (auto &F : HostFeatures)
+        Features.push_back(
+            Args.MakeArgString((F.second ? "+" : "-") + F.first()));
+  }
+
+  // Honor -mfpu=. ClangAs gives preference to -Wa,-mfpu=.
+  const Arg *FPUArg = Args.getLastArg(options::OPT_mfpu_EQ);
+  if (WaFPU) {
+    if (FPUArg)
+      D.Diag(clang::diag::warn_drv_unused_argument)
+          << FPUArg->getAsString(Args);
+    getARMFPUFeatures(D, WaFPU, Args, StringRef(WaFPU->getValue()).substr(6),
+                      Features);
+  } else if (FPUArg) {
+    getARMFPUFeatures(D, FPUArg, Args, FPUArg->getValue(), Features);
+  }
+
+  // Honor -mhwdiv=. ClangAs gives preference to -Wa,-mhwdiv=.
+  const Arg *HDivArg = Args.getLastArg(options::OPT_mhwdiv_EQ);
+  if (WaHDiv) {
+    if (HDivArg)
+      D.Diag(clang::diag::warn_drv_unused_argument)
+          << HDivArg->getAsString(Args);
+    getARMHWDivFeatures(D, WaHDiv, Args,
+                        StringRef(WaHDiv->getValue()).substr(8), Features);
+  } else if (HDivArg)
+    getARMHWDivFeatures(D, HDivArg, Args, HDivArg->getValue(), Features);
 
   // Setting -msoft-float effectively disables NEON because of the GCC
   // implementation, although the same isn't true of VFP or VFP3.
@@ -4300,9 +4309,11 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (Args.hasFlag(options::OPT_femulated_tls, options::OPT_fno_emulated_tls,
                    EmulatedTLSDefault))
     CmdArgs.push_back("-femulated-tls");
-  // AltiVec language extensions aren't relevant for assembling.
-  if (!isa<PreprocessJobAction>(JA) || Output.getType() != types::TY_PP_Asm)
+  // AltiVec-like language extensions aren't relevant for assembling.
+  if (!isa<PreprocessJobAction>(JA) || Output.getType() != types::TY_PP_Asm) {
     Args.AddLastArg(CmdArgs, options::OPT_faltivec);
+    Args.AddLastArg(CmdArgs, options::OPT_fzvector);
+  }
   Args.AddLastArg(CmdArgs, options::OPT_fdiagnostics_show_template_tree);
   Args.AddLastArg(CmdArgs, options::OPT_fno_elide_type);
 
@@ -4398,6 +4409,12 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       D.Diag(diag::err_drv_argument_only_allowed_with) << A->getAsString(Args)
                                                        << "ppc/ppc64/ppc64le";
   }
+
+  // -fzvector is incompatible with -faltivec.
+  if (Arg *A = Args.getLastArg(options::OPT_fzvector))
+    if (Args.hasArg(options::OPT_faltivec))
+      D.Diag(diag::err_drv_argument_not_allowed_with) << A->getAsString(Args)
+                                                      << "-faltivec";
 
   if (getToolChain().SupportsProfiling())
     Args.AddLastArg(CmdArgs, options::OPT_pg);
