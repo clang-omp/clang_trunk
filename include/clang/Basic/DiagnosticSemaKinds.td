@@ -188,6 +188,8 @@ def ext_flexible_array_init : Extension<
   "flexible array initialization is a GNU extension">, InGroup<GNUFlexibleArrayInitializer>;
 
 // Declarations.
+def err_redeclaration_different_type : Error<
+  "redeclaration of %0 with a different type%diff{: $ vs $|}1,2">;
 def err_bad_variable_name : Error<
   "%0 cannot be the name of a variable or data member">;
 def err_bad_parameter_name : Error<
@@ -2158,6 +2160,10 @@ def warn_objc_redundant_literal_use : Warning<
 
 def err_attr_tlsmodel_arg : Error<"tls_model must be \"global-dynamic\", "
   "\"local-dynamic\", \"initial-exec\" or \"local-exec\"">;
+
+def err_tls_var_aligned_over_maximum : Error<
+  "alignment (%0) of thread-local variable %1 is greater than the maximum supported "
+  "alignment (%2) for a thread-local variable on this target">;
 
 def err_only_annotate_after_access_spec : Error<
   "access specifier can only have annotation attributes">;
