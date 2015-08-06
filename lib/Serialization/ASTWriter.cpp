@@ -3769,6 +3769,9 @@ uint64_t ASTWriter::WriteDeclContextVisibleBlock(ASTContext &Context,
 /// (in C++), for namespaces, and for classes with forward-declared unscoped
 /// enumeration members (in C++11).
 void ASTWriter::WriteDeclContextVisibleUpdate(const DeclContext *DC) {
+  if (isRewritten(cast<Decl>(DC)))
+    return;
+
   StoredDeclsMap *Map = DC->getLookupPtr();
   if (!Map || Map->empty())
     return;
@@ -5715,6 +5718,7 @@ void ASTWriter::AddedVisibleDecl(const DeclContext *DC, const Decl *D) {
   if (!(!D->isFromASTFile() && cast<Decl>(DC)->isFromASTFile()))
     return; // Not a source decl added to a DeclContext from PCH.
 
+  assert(DC == DC->getPrimaryContext() && "added to non-primary context");
   assert(!getDefinitiveDeclContext(DC) && "DeclContext not definitive!");
   assert(!WritingAST && "Already writing the AST!");
   UpdatedDeclContexts.insert(DC);
