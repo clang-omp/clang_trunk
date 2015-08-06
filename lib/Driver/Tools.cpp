@@ -8289,13 +8289,15 @@ static StringRef getLinuxDynamicLinker(const ArgList &Args,
   else if (Arch == llvm::Triple::aarch64_be)
     return "/lib/ld-linux-aarch64_be.so.1";
   else if (Arch == llvm::Triple::arm || Arch == llvm::Triple::thumb) {
-    if (ToolChain.getTriple().getEnvironment() == llvm::Triple::GNUEABIHF)
+    if (ToolChain.getTriple().getEnvironment() == llvm::Triple::GNUEABIHF ||
+        tools::arm::getARMFloatABI(ToolChain.getDriver(), Args, ToolChain.getTriple()) == "hard")
       return "/lib/ld-linux-armhf.so.3";
     else
       return "/lib/ld-linux.so.3";
   } else if (Arch == llvm::Triple::armeb || Arch == llvm::Triple::thumbeb) {
     // TODO: check which dynamic linker name.
-    if (ToolChain.getTriple().getEnvironment() == llvm::Triple::GNUEABIHF)
+    if (ToolChain.getTriple().getEnvironment() == llvm::Triple::GNUEABIHF ||
+        tools::arm::getARMFloatABI(ToolChain.getDriver(), Args, ToolChain.getTriple()) == "hard")
       return "/lib/ld-linux-armhf.so.3";
     else
       return "/lib/ld-linux.so.3";
@@ -9276,17 +9278,31 @@ std::unique_ptr<Command> visualstudio::Compiler::GetCommand(
   Args.AddAllArgs(CmdArgs, options::OPT_I);
 
   // Optimization level.
+  if (Arg *A = Args.getLastArg(options::OPT_fbuiltin, options::OPT_fno_builtin))
+    CmdArgs.push_back(A->getOption().getID() == options::OPT_fbuiltin ? "/Oi"
+                                                                      : "/Oi-");
   if (Arg *A = Args.getLastArg(options::OPT_O, options::OPT_O0)) {
     if (A->getOption().getID() == options::OPT_O0) {
       CmdArgs.push_back("/Od");
     } else {
+      CmdArgs.push_back("/Og");
+
       StringRef OptLevel = A->getValue();
-      if (OptLevel == "1" || OptLevel == "2" || OptLevel == "s")
-        A->render(Args, CmdArgs);
-      else if (OptLevel == "3")
-        CmdArgs.push_back("/Ox");
+      if (OptLevel == "s" || OptLevel == "z")
+        CmdArgs.push_back("/Os");
+      else
+        CmdArgs.push_back("/Ot");
+
+      CmdArgs.push_back("/Ob2");
     }
   }
+  if (Arg *A = Args.getLastArg(options::OPT_fomit_frame_pointer,
+                               options::OPT_fno_omit_frame_pointer))
+    CmdArgs.push_back(A->getOption().getID() == options::OPT_fomit_frame_pointer
+                          ? "/Oy"
+                          : "/Oy-");
+  if (!Args.hasArg(options::OPT_fwritable_strings))
+    CmdArgs.push_back("/GF");
 
   // Flags for which clang-cl has an alias.
   // FIXME: How can we ensure this stays in sync with relevant clang-cl options?

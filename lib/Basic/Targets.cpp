@@ -4011,8 +4011,8 @@ public:
                         MacroBuilder &Builder) const override {
     WindowsX86_64TargetInfo::getTargetDefines(Opts, Builder);
     WindowsX86_64TargetInfo::getVisualStudioDefines(Opts, Builder);
-    Builder.defineMacro("_M_X64");
-    Builder.defineMacro("_M_AMD64");
+    Builder.defineMacro("_M_X64", "100");
+    Builder.defineMacro("_M_AMD64", "100");
   }
 };
 
