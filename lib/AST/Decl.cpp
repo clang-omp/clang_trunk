@@ -3108,33 +3108,35 @@ FunctionDecl::setDependentTemplateSpecialization(ASTContext &Context,
                                     const UnresolvedSetImpl &Templates,
                              const TemplateArgumentListInfo &TemplateArgs) {
   assert(TemplateOrSpecialization.isNull());
-  size_t Size = sizeof(DependentFunctionTemplateSpecializationInfo);
-  Size += TemplateArgs.size() * sizeof(TemplateArgumentLoc);
-  Size += Templates.size() * sizeof(FunctionTemplateDecl *);
-  void *Buffer = Context.Allocate(Size);
   DependentFunctionTemplateSpecializationInfo *Info =
-    new (Buffer) DependentFunctionTemplateSpecializationInfo(Templates,
-                                                             TemplateArgs);
+      DependentFunctionTemplateSpecializationInfo::Create(Context, Templates,
+                                                          TemplateArgs);
   TemplateOrSpecialization = Info;
+}
+
+DependentFunctionTemplateSpecializationInfo *
+DependentFunctionTemplateSpecializationInfo::Create(
+    ASTContext &Context, const UnresolvedSetImpl &Ts,
+    const TemplateArgumentListInfo &TArgs) {
+  void *Buffer = Context.Allocate(
+      totalSizeToAlloc<TemplateArgumentLoc, FunctionTemplateDecl *>(
+          TArgs.size(), Ts.size()));
+  return new (Buffer) DependentFunctionTemplateSpecializationInfo(Ts, TArgs);
 }
 
 DependentFunctionTemplateSpecializationInfo::
 DependentFunctionTemplateSpecializationInfo(const UnresolvedSetImpl &Ts,
                                       const TemplateArgumentListInfo &TArgs)
   : AngleLocs(TArgs.getLAngleLoc(), TArgs.getRAngleLoc()) {
-  static_assert(sizeof(*this) % llvm::AlignOf<void *>::Alignment == 0,
-                "Trailing data is unaligned!");
 
   NumTemplates = Ts.size();
   NumArgs = TArgs.size();
 
-  FunctionTemplateDecl **TsArray =
-    const_cast<FunctionTemplateDecl**>(getTemplates());
+  FunctionTemplateDecl **TsArray = getTrailingObjects<FunctionTemplateDecl *>();
   for (unsigned I = 0, E = Ts.size(); I != E; ++I)
     TsArray[I] = cast<FunctionTemplateDecl>(Ts[I]->getUnderlyingDecl());
 
-  TemplateArgumentLoc *ArgsArray =
-    const_cast<TemplateArgumentLoc*>(getTemplateArgs());
+  TemplateArgumentLoc *ArgsArray = getTrailingObjects<TemplateArgumentLoc>();
   for (unsigned I = 0, E = TArgs.size(); I != E; ++I)
     new (&ArgsArray[I]) TemplateArgumentLoc(TArgs[I]);
 }
@@ -3864,20 +3866,14 @@ BlockDecl *BlockDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
 
 CapturedDecl *CapturedDecl::Create(ASTContext &C, DeclContext *DC,
                                    unsigned NumParams) {
-  unsigned Size = sizeof(CapturedDecl) + NumParams * sizeof(ImplicitParamDecl*);
-  CapturedDecl *CD = new (C, DC, Size) CapturedDecl(DC, NumParams);
-  for (unsigned i = 0; i < NumParams; ++i)
-    CD->setParam(i, 0);
-  return CD;
+  return new (C, DC, additionalSizeToAlloc<ImplicitParamDecl *>(NumParams))
+      CapturedDecl(DC, NumParams);
 }
 
 CapturedDecl *CapturedDecl::CreateDeserialized(ASTContext &C, unsigned ID,
-                                   unsigned NumParams) {
-  unsigned Size = sizeof(CapturedDecl) + NumParams * sizeof(ImplicitParamDecl*);
-  CapturedDecl *CD = new (C, ID, Size) CapturedDecl(0, NumParams);
-  for (unsigned i = 0; i < NumParams; ++i)
-    CD->setParam(i, 0);
-  return CD;
+                                               unsigned NumParams) {
+  return new (C, ID, additionalSizeToAlloc<ImplicitParamDecl *>(NumParams))
+      CapturedDecl(nullptr, NumParams);
 }
 
 EnumConstantDecl *EnumConstantDecl::Create(ASTContext &C, EnumDecl *CD,
@@ -4021,9 +4017,9 @@ ImportDecl::ImportDecl(DeclContext *DC, SourceLocation StartLoc,
     NextLocalImport()
 {
   assert(getNumModuleIdentifiers(Imported) == IdentifierLocs.size());
-  SourceLocation *StoredLocs = reinterpret_cast<SourceLocation *>(this + 1);
-  memcpy(StoredLocs, IdentifierLocs.data(), 
-         IdentifierLocs.size() * sizeof(SourceLocation));
+  SourceLocation *StoredLocs = getTrailingObjects<SourceLocation>();
+  std::uninitialized_copy(IdentifierLocs.begin(), IdentifierLocs.end(),
+                          StoredLocs);
 }
 
 ImportDecl::ImportDecl(DeclContext *DC, SourceLocation StartLoc, 
@@ -4031,13 +4027,14 @@ ImportDecl::ImportDecl(DeclContext *DC, SourceLocation StartLoc,
   : Decl(Import, DC, StartLoc), ImportedAndComplete(Imported, false),
     NextLocalImport()
 {
-  *reinterpret_cast<SourceLocation *>(this + 1) = EndLoc;
+  *getTrailingObjects<SourceLocation>() = EndLoc;
 }
 
 ImportDecl *ImportDecl::Create(ASTContext &C, DeclContext *DC,
                                SourceLocation StartLoc, Module *Imported,
                                ArrayRef<SourceLocation> IdentifierLocs) {
-  return new (C, DC, IdentifierLocs.size() * sizeof(SourceLocation))
+  return new (C, DC,
+              additionalSizeToAlloc<SourceLocation>(IdentifierLocs.size()))
       ImportDecl(DC, StartLoc, Imported, IdentifierLocs);
 }
 
@@ -4045,16 +4042,15 @@ ImportDecl *ImportDecl::CreateImplicit(ASTContext &C, DeclContext *DC,
                                        SourceLocation StartLoc,
                                        Module *Imported,
                                        SourceLocation EndLoc) {
-  ImportDecl *Import =
-      new (C, DC, sizeof(SourceLocation)) ImportDecl(DC, StartLoc,
-                                                     Imported, EndLoc);
+  ImportDecl *Import = new (C, DC, additionalSizeToAlloc<SourceLocation>(1))
+      ImportDecl(DC, StartLoc, Imported, EndLoc);
   Import->setImplicit();
   return Import;
 }
 
 ImportDecl *ImportDecl::CreateDeserialized(ASTContext &C, unsigned ID,
                                            unsigned NumLocations) {
-  return new (C, ID, NumLocations * sizeof(SourceLocation))
+  return new (C, ID, additionalSizeToAlloc<SourceLocation>(NumLocations))
       ImportDecl(EmptyShell());
 }
 
@@ -4062,16 +4058,14 @@ ArrayRef<SourceLocation> ImportDecl::getIdentifierLocs() const {
   if (!ImportedAndComplete.getInt())
     return None;
 
-  const SourceLocation *StoredLocs
-    = reinterpret_cast<const SourceLocation *>(this + 1);
+  const SourceLocation *StoredLocs = getTrailingObjects<SourceLocation>();
   return llvm::makeArrayRef(StoredLocs,
                             getNumModuleIdentifiers(getImportedModule()));
 }
 
 SourceRange ImportDecl::getSourceRange() const {
   if (!ImportedAndComplete.getInt())
-    return SourceRange(getLocation(), 
-                       *reinterpret_cast<const SourceLocation *>(this + 1));
-  
+    return SourceRange(getLocation(), *getTrailingObjects<SourceLocation>());
+
   return SourceRange(getLocation(), getIdentifierLocs().back());
 }
