@@ -502,6 +502,8 @@ Parser::ParseOpenMPDeclarativeDirective(AccessSpecifier AS) {
     Diag(Tok, diag::err_omp_unexpected_directive)
         << getOpenMPDirectiveName(DKind);
     break;
+  case OMPD_target_data:
+    break;
   }
   while (!SkipUntil(tok::annot_pragma_openmp_end))
     ;
