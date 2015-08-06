@@ -2207,7 +2207,7 @@ void ItaniumCXXABI::EmitThreadLocalInitFuncs(
     CGBuilderTy Builder(Entry);
     if (InitIsInitFunc) {
       if (Init)
-        Builder.CreateCall(Init, {});
+        Builder.CreateCall(Init);
     } else {
       // Don't know whether we have an init function. Call it if it exists.
       llvm::Value *Have = Builder.CreateIsNotNull(Init);
@@ -2216,7 +2216,7 @@ void ItaniumCXXABI::EmitThreadLocalInitFuncs(
       Builder.CreateCondBr(Have, InitBB, ExitBB);
 
       Builder.SetInsertPoint(InitBB);
-      Builder.CreateCall(Init, {});
+      Builder.CreateCall(Init);
       Builder.CreateBr(ExitBB);
 
       Builder.SetInsertPoint(ExitBB);
@@ -2245,7 +2245,7 @@ LValue ItaniumCXXABI::EmitThreadLocalVarDeclLValue(CodeGenFunction &CGF,
   llvm::Value *Val = CGF.CGM.GetAddrOfGlobalVar(VD, Ty);
   llvm::Function *Wrapper = getOrCreateThreadLocalWrapper(VD, Val);
 
-  Val = CGF.Builder.CreateCall(Wrapper, {});
+  Val = CGF.Builder.CreateCall(Wrapper);
 
   LValue LV;
   if (VD->getType()->isReferenceType())
@@ -3732,7 +3732,7 @@ static llvm::Constant *getClangCallTerminateFn(CodeGenModule &CGM) {
     catchCall->setCallingConv(CGM.getRuntimeCC());
 
     // Call std::terminate().
-    llvm::CallInst *termCall = builder.CreateCall(CGM.getTerminateFn(), {});
+    llvm::CallInst *termCall = builder.CreateCall(CGM.getTerminateFn());
     termCall->setDoesNotThrow();
     termCall->setDoesNotReturn();
     termCall->setCallingConv(CGM.getRuntimeCC());
