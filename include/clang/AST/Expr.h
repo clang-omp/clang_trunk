@@ -896,8 +896,8 @@ public:
 ///       C++ template keyword and/or template argument list.
 ///   DeclRefExprBits.RefersToEnclosingVariableOrCapture
 ///       Specifies when this declaration reference expression (validly)
-///       refers to a captured variable.
-class DeclRefExpr : public Expr {
+///       refers to an enclosed local or a captured variable.
+class LLVM_ALIGNAS(/*alignof(uint64_t)*/ 8) DeclRefExpr : public Expr {
   /// \brief The declaration that we are referencing.
   ValueDecl *D;
 
@@ -1049,13 +1049,17 @@ public:
     if (!hasTemplateKWAndArgsInfo())
       return nullptr;
 
-    if (hasFoundDecl())
+    if (hasFoundDecl()) {
       return reinterpret_cast<ASTTemplateKWAndArgsInfo *>(
-        &getInternalFoundDecl() + 1);
+          llvm::alignAddr(&getInternalFoundDecl() + 1,
+                          llvm::alignOf<ASTTemplateKWAndArgsInfo>()));
+    }
 
-    if (hasQualifier())
+    if (hasQualifier()) {
       return reinterpret_cast<ASTTemplateKWAndArgsInfo *>(
-        &getInternalQualifierLoc() + 1);
+          llvm::alignAddr(&getInternalQualifierLoc() + 1,
+                          llvm::alignOf<ASTTemplateKWAndArgsInfo>()));
+    }
 
     return reinterpret_cast<ASTTemplateKWAndArgsInfo *>(this + 1);
   }
@@ -2298,9 +2302,9 @@ public:
 
 /// MemberExpr - [C99 6.5.2.3] Structure and Union Members.  X->F and X.F.
 ///
-class MemberExpr : public Expr {
+class LLVM_ALIGNAS(/*alignof(uint64_t)*/ 8) MemberExpr : public Expr {
   /// Extra data stored in some member expressions.
-  struct MemberNameQualifier {
+  struct LLVM_ALIGNAS(/*alignof(uint64_t)*/ 8) MemberNameQualifier {
     /// \brief The nested-name-specifier that qualifies the name, including
     /// source-location information.
     NestedNameSpecifierLoc QualifierLoc;

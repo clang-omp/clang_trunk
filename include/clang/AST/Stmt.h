@@ -2074,8 +2074,10 @@ private:
   /// \brief Construct an empty captured statement.
   CapturedStmt(EmptyShell Empty, unsigned NumCaptures);
 
-  Stmt **getStoredStmts() const {
-    return reinterpret_cast<Stmt **>(const_cast<CapturedStmt *>(this) + 1);
+  Stmt **getStoredStmts() { return reinterpret_cast<Stmt **>(this + 1); }
+
+  Stmt *const *getStoredStmts() const {
+    return reinterpret_cast<Stmt *const *>(this + 1);
   }
 
   Capture *getStoredCaptures() const;
@@ -2094,14 +2096,12 @@ public:
 
   /// \brief Retrieve the statement being captured.
   Stmt *getCapturedStmt() { return getStoredStmts()[NumCaptures]; }
-  const Stmt *getCapturedStmt() const {
-    return const_cast<CapturedStmt *>(this)->getCapturedStmt();
-  }
+  const Stmt *getCapturedStmt() const { return getStoredStmts()[NumCaptures]; }
 
   /// \brief Retrieve the outlined function declaration.
   CapturedDecl *getCapturedDecl() { return TheCapturedDecl; }
   const CapturedDecl *getCapturedDecl() const {
-    return const_cast<CapturedStmt *>(this)->getCapturedDecl();
+    return CapDeclAndKind.getPointer();
   }
 
   /// \brief Set the outlined function declaration.
@@ -2162,18 +2162,36 @@ public:
   typedef Expr **capture_init_iterator;
   typedef llvm::iterator_range<capture_init_iterator> capture_init_range;
 
-  capture_init_range capture_inits() const {
+  /// \brief Const iterator that walks over the capture initialization
+  /// arguments.
+  typedef Expr *const *const_capture_init_iterator;
+  typedef llvm::iterator_range<const_capture_init_iterator>
+      const_capture_init_range;
+
+  capture_init_range capture_inits() {
     return capture_init_range(capture_init_begin(), capture_init_end());
   }
 
+  const_capture_init_range capture_inits() const {
+    return const_capture_init_range(capture_init_begin(), capture_init_end());
+  }
+
   /// \brief Retrieve the first initialization argument.
-  capture_init_iterator capture_init_begin() const {
+  capture_init_iterator capture_init_begin() {
     return reinterpret_cast<Expr **>(getStoredStmts());
+  }
+
+  const_capture_init_iterator capture_init_begin() const {
+    return reinterpret_cast<Expr *const *>(getStoredStmts());
   }
 
   /// \brief Retrieve the iterator pointing one past the last initialization
   /// argument.
-  capture_init_iterator capture_init_end() const {
+  capture_init_iterator capture_init_end() {
+    return capture_init_begin() + NumCaptures;
+  }
+
+  const_capture_init_iterator capture_init_end() const {
     return capture_init_begin() + NumCaptures;
   }
 
