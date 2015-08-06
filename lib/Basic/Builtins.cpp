@@ -15,16 +15,18 @@
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/TargetInfo.h"
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 using namespace clang;
 
 static const Builtin::Info BuiltinInfo[] = {
   { "not a builtin function", nullptr, nullptr, nullptr, ALL_LANGUAGES},
 #define BUILTIN(ID, TYPE, ATTRS) { #ID, TYPE, ATTRS, 0, ALL_LANGUAGES },
-#define LANGBUILTIN(ID, TYPE, ATTRS, BUILTIN_LANG) { #ID, TYPE, ATTRS, 0, BUILTIN_LANG },
-#define LIBBUILTIN(ID, TYPE, ATTRS, HEADER, BUILTIN_LANG) { #ID, TYPE, ATTRS, HEADER,\
-                                                            BUILTIN_LANG },
+#define LANGBUILTIN(ID, TYPE, ATTRS, LANGS)                                    \
+  { #ID, TYPE, ATTRS, 0, LANGS }                                               \
+  ,
+#define LIBBUILTIN(ID, TYPE, ATTRS, HEADER, LANGS)                             \
+  { #ID, TYPE, ATTRS, HEADER, LANGS }                                          \
+  ,
 #include "clang/Basic/Builtins.def"
 };
 
@@ -53,12 +55,10 @@ bool Builtin::Context::BuiltinIsSupported(const Builtin::Info &BuiltinInfo,
   bool MathBuiltinsUnsupported =
     LangOpts.NoMathBuiltin && BuiltinInfo.HeaderName &&      
     llvm::StringRef(BuiltinInfo.HeaderName).equals("math.h");
-  bool GnuModeUnsupported = !LangOpts.GNUMode &&
-                            (BuiltinInfo.builtin_lang & GNU_LANG);
-  bool MSModeUnsupported = !LangOpts.MicrosoftExt &&
-                           (BuiltinInfo.builtin_lang & MS_LANG);
-  bool ObjCUnsupported = !LangOpts.ObjC1 &&
-                         BuiltinInfo.builtin_lang == OBJC_LANG;
+  bool GnuModeUnsupported = !LangOpts.GNUMode && (BuiltinInfo.Langs & GNU_LANG);
+  bool MSModeUnsupported =
+      !LangOpts.MicrosoftExt && (BuiltinInfo.Langs & MS_LANG);
+  bool ObjCUnsupported = !LangOpts.ObjC1 && BuiltinInfo.Langs == OBJC_LANG;
   return !BuiltinsUnsupported && !MathBuiltinsUnsupported &&
          !GnuModeUnsupported && !MSModeUnsupported && !ObjCUnsupported;
 }
@@ -78,19 +78,6 @@ void Builtin::Context::InitializeBuiltins(IdentifierTable &Table,
   for (unsigned i = 0, e = NumTSRecords; i != e; ++i)
     if (BuiltinIsSupported(TSRecords[i], LangOpts))
       Table.get(TSRecords[i].Name).setBuiltinID(i+Builtin::FirstTSBuiltin);
-}
-
-void
-Builtin::Context::GetBuiltinNames(SmallVectorImpl<const char *> &Names) {
-  // Final all target-independent names
-  for (unsigned i = Builtin::NotBuiltin+1; i != Builtin::FirstTSBuiltin; ++i)
-    if (!strchr(BuiltinInfo[i].Attributes, 'f'))
-      Names.push_back(BuiltinInfo[i].Name);
-
-  // Find target-specific names.
-  for (unsigned i = 0, e = NumTSRecords; i != e; ++i)
-    if (!strchr(TSRecords[i].Attributes, 'f'))
-      Names.push_back(TSRecords[i].Name);
 }
 
 void Builtin::Context::ForgetBuiltin(unsigned ID, IdentifierTable &Table) {

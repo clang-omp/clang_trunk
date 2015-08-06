@@ -16,7 +16,6 @@
 #ifndef LLVM_CLANG_BASIC_BUILTINS_H
 #define LLVM_CLANG_BASIC_BUILTINS_H
 
-#include "clang/Basic/LLVM.h"
 #include <cstring>
 
 // VC++ defines 'alloca' as an object-like macro, which interferes with our
@@ -51,14 +50,7 @@ enum ID {
 
 struct Info {
   const char *Name, *Type, *Attributes, *HeaderName;
-  LanguageID builtin_lang;
-
-  bool operator==(const Info &RHS) const {
-    return !strcmp(Name, RHS.Name) &&
-           !strcmp(Type, RHS.Type) &&
-           !strcmp(Attributes, RHS.Attributes);
-  }
-  bool operator!=(const Info &RHS) const { return !(*this == RHS); }
+  LanguageID Langs;
 };
 
 /// \brief Holds information about both target-independent and
@@ -76,9 +68,6 @@ public:
   /// appropriate builtin ID # and mark any non-portable builtin identifiers as
   /// such.
   void InitializeBuiltins(IdentifierTable &Table, const LangOptions& LangOpts);
-
-  /// \brief Populate the vector with the names of all of the builtins.
-  void GetBuiltinNames(SmallVectorImpl<const char *> &Names);
 
   /// \brief Return the identifier name for the specified builtin,
   /// e.g. "__builtin_abs".

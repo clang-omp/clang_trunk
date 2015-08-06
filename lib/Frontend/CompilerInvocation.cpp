@@ -411,15 +411,19 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
       Opts.setDebugInfo(CodeGenOptions::LimitedDebugInfo);
   }
   Opts.DebugColumnInfo = Args.hasArg(OPT_dwarf_column_info);
+  if (Args.hasArg(OPT_gcodeview)) {
+    Opts.EmitCodeView = true;
+    Opts.DwarfVersion = 0;
+  } else if (Opts.getDebugInfo() != CodeGenOptions::NoDebugInfo) {
+    // Default Dwarf version is 4 if we are generating debug information.
+    Opts.DwarfVersion = 4;
+  }
   Opts.SplitDwarfFile = Args.getLastArgValue(OPT_split_dwarf_file);
   if (Args.hasArg(OPT_gdwarf_2))
     Opts.DwarfVersion = 2;
   else if (Args.hasArg(OPT_gdwarf_3))
     Opts.DwarfVersion = 3;
   else if (Args.hasArg(OPT_gdwarf_4))
-    Opts.DwarfVersion = 4;
-  else if (Opts.getDebugInfo() != CodeGenOptions::NoDebugInfo)
-    // Default Dwarf version is 4 if we are generating debug information.
     Opts.DwarfVersion = 4;
 
   if (const Arg *A =
@@ -1082,13 +1086,11 @@ std::string CompilerInvocation::GetResourcesPath(const char *Argv0,
   // Compute the path to the resource directory.
   StringRef ClangResourceDir(CLANG_RESOURCE_DIR);
   SmallString<128> P(Dir);
-  if (ClangResourceDir != "") {
+  if (ClangResourceDir != "")
     llvm::sys::path::append(P, ClangResourceDir);
-  } else {
-    StringRef ClangLibdirSuffix(CLANG_LIBDIR_SUFFIX);
-    llvm::sys::path::append(P, "..", Twine("lib") + ClangLibdirSuffix, "clang",
-                            CLANG_VERSION_STRING);
-  }
+  else
+    llvm::sys::path::append(P, "..", Twine("lib") + CLANG_LIBDIR_SUFFIX,
+                            "clang", CLANG_VERSION_STRING);
 
   return P.str();
 }
