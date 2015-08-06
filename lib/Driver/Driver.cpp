@@ -2633,7 +2633,7 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
                                     IsOpenMPTargetToolchain);
       break;
     case llvm::Triple::NaCl:
-      TC = new toolchains::NaCl_TC(*this, Target, Args);
+      TC = new toolchains::NaClToolChain(*this, Target, Args);
       break;
     case llvm::Triple::Solaris:
       TC = new toolchains::Solaris(*this, Target, Args);
@@ -2672,9 +2672,9 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
       if (Target.getArchName() == "tce")
         TC = new toolchains::TCEToolChain(*this, Target, Args);
       else if (Target.getArch() == llvm::Triple::hexagon)
-        TC = new toolchains::Hexagon_TC(*this, Target, Args);
+        TC = new toolchains::HexagonToolChain(*this, Target, Args);
       else if (Target.getArch() == llvm::Triple::xcore)
-        TC = new toolchains::XCore(*this, Target, Args);
+        TC = new toolchains::XCoreToolChain(*this, Target, Args);
       else if (Target.getArch() == llvm::Triple::nvptx ||
                Target.getArch() == llvm::Triple::nvptx64)
         TC = new toolchains::NVPTX_TC(*this, Target, Args,
