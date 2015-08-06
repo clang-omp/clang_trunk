@@ -313,7 +313,6 @@ class VerifyJobAction : public JobAction {
 public:
   VerifyJobAction(ActionClass Kind, std::unique_ptr<Action> Input,
                   types::ID Type);
-  VerifyJobAction(ActionClass Kind, ActionList &Inputs, types::ID Type);
   static bool classof(const Action *A) {
     return A->getKind() == VerifyDebugInfoJobClass ||
            A->getKind() == VerifyPCHJobClass;
