@@ -2637,6 +2637,9 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
     case llvm::Triple::Solaris:
       TC = new toolchains::Solaris(*this, Target, Args);
       break;
+    case llvm::Triple::AMDHSA:
+      TC = new toolchains::AMDGPUToolChain(*this, Target, Args);
+      break;
     case llvm::Triple::Win32:
       switch (Target.getEnvironment()) {
       default:
