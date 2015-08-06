@@ -1308,8 +1308,7 @@ void ASTDeclReader::VisitBlockDecl(BlockDecl *BD) {
 
     captures.push_back(BlockDecl::Capture(decl, byRef, nested, copyExpr));
   }
-  BD->setCaptures(Reader.getContext(), captures.begin(),
-                  captures.end(), capturesCXXThis);
+  BD->setCaptures(Reader.getContext(), captures, capturesCXXThis);
 }
 
 void ASTDeclReader::VisitCapturedDecl(CapturedDecl *CD) {

@@ -200,5 +200,6 @@ the source code. You can access versions of these documents specific to
 this release by going into the "``clang/docs/``" directory in the Clang
 tree.
 
-If you have any questions or comments about Clang, please feel free to contact
-us via the `mailing list <http://lists.cs.uiuc.edu/mailman/listinfo/cfe-dev>`_.
+If you have any questions or comments about Clang, please feel free to
+contact us via the `mailing
+list <http://lists.llvm.org/mailman/listinfo/cfe-dev>`_.
