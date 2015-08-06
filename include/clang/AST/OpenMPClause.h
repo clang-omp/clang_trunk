@@ -60,9 +60,15 @@ public:
 
   bool isImplicit() { return StartLoc.isInvalid(); }
 
-  StmtRange children();
-  ConstStmtRange children() const {
-    return const_cast<OMPClause *>(this)->children();
+  typedef StmtIterator child_iterator;
+  typedef ConstStmtIterator const_child_iterator;
+  typedef llvm::iterator_range<child_iterator> child_range;
+  typedef llvm::iterator_range<const_child_iterator> const_child_range;
+
+  child_range children();
+  const_child_range children() const {
+    auto Children = const_cast<OMPClause *>(this)->children();
+    return const_child_range(Children.begin(), Children.end());
   }
 
   /// \brief Prints the clause using OMPClausePrinter
@@ -182,7 +188,7 @@ public:
     return T->getClauseKind() == OMPC_if;
   }
 
-  StmtRange children() { return StmtRange(&Condition, &Condition + 1); }
+  child_range children() { return child_range(&Condition, &Condition + 1); }
 };
 
 /// \brief This represents 'final' clause in the '#pragma omp ...' directive.
@@ -228,7 +234,7 @@ public:
     return T->getClauseKind() == OMPC_final;
   }
 
-  StmtRange children() { return StmtRange(&Condition, &Condition + 1); }
+  child_range children() { return child_range(&Condition, &Condition + 1); }
 };
 
 /// \brief This represents 'num_threads' clause in the '#pragma omp ...'
@@ -276,7 +282,7 @@ public:
     return T->getClauseKind() == OMPC_num_threads;
   }
 
-  StmtRange children() { return StmtRange(&NumThreads, &NumThreads + 1); }
+  child_range children() { return child_range(&NumThreads, &NumThreads + 1); }
 };
 
 /// \brief This represents 'collapse' clause in the '#pragma omp ...'
@@ -322,7 +328,7 @@ public:
     return T->getClauseKind() == OMPC_collapse;
   }
 
-  StmtRange children() { return StmtRange(&NumForLoops, &NumForLoops + 1); }
+  child_range children() { return child_range(&NumForLoops, &NumForLoops + 1); }
 };
 
 /// \brief This represents 'device' clause in the '#pragma omp ...'
@@ -369,7 +375,7 @@ public:
     return T->getClauseKind() == OMPC_device;
   }
 
-  StmtRange children() { return StmtRange(&Device, &Device + 1); }
+  child_range children() { return child_range(&Device, &Device + 1); }
 };
 
 /// \brief This represents 'default' clause in the '#pragma omp ...' directive.
@@ -429,7 +435,9 @@ public:
     return T->getClauseKind() == OMPC_default;
   }
 
-  StmtRange children() { return StmtRange(); }
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
 };
 
 /// \brief This represents 'proc_bind' clause in the '#pragma omp ...'
@@ -493,7 +501,9 @@ public:
     return T->getClauseKind() == OMPC_proc_bind;
   }
 
-  StmtRange children() { return StmtRange(); }
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
 };
 
 /// \brief This represents clause 'private' in the '#pragma omp ...' directives.
@@ -559,9 +569,9 @@ public:
     return llvm::makeArrayRef(varlist_end(), numberOfVariables());
   }
 
-  StmtRange children() {
-    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
-                     reinterpret_cast<Stmt **>(getDefaultInits().end()));
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(getDefaultInits().end()));
   }
 };
 
@@ -646,9 +656,9 @@ public:
     return llvm::makeArrayRef(getPseudoVars().end(), numberOfVariables());
   }
 
-  StmtRange children() {
-    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
-                     reinterpret_cast<Stmt **>(getInits().end()));
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(getInits().end()));
   }
 };
 
@@ -761,9 +771,9 @@ public:
     return T->getClauseKind() == OMPC_lastprivate;
   }
 
-  StmtRange children() {
-    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
-                     reinterpret_cast<Stmt **>(getAssignments().end()));
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(getAssignments().end()));
   }
 };
 
@@ -814,9 +824,9 @@ public:
     return T->getClauseKind() == OMPC_shared;
   }
 
-  StmtRange children() {
-    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
-                     reinterpret_cast<Stmt **>(varlist_end()));
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
   }
 };
 
@@ -913,9 +923,9 @@ public:
     return llvm::makeArrayRef(getPseudoVars2().end(), numberOfVariables());
   }
 
-  StmtRange children() {
-    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
-                     reinterpret_cast<Stmt **>(getAssignments().end()));
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(getAssignments().end()));
   }
 };
 
@@ -1014,9 +1024,9 @@ public:
     return T->getClauseKind() == OMPC_copyprivate;
   }
 
-  StmtRange children() {
-    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
-                     reinterpret_cast<Stmt **>(getAssignments().end()));
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(getAssignments().end()));
   }
 };
 
@@ -1170,9 +1180,9 @@ public:
                               numberOfVariables());
   }
 
-  StmtRange children() {
-    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
-                     reinterpret_cast<Stmt **>(getDefaultInits().end()));
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(getDefaultInits().end()));
   }
 };
 
@@ -1317,8 +1327,8 @@ public:
     return T->getClauseKind() == OMPC_map;
   }
 
-  StmtRange children() {
-    return StmtRange(
+  child_range children() {
+    return child_range(
         reinterpret_cast<Stmt **>(varlist_begin()),
         reinterpret_cast<Stmt **>(getCopyingSizesEndAddresses().end()));
   }
@@ -1439,8 +1449,8 @@ public:
     return T->getClauseKind() == OMPC_to;
   }
 
-  StmtRange children() {
-    return StmtRange(
+  child_range children() {
+    return child_range(
         reinterpret_cast<Stmt **>(varlist_begin()),
         reinterpret_cast<Stmt **>(getCopyingSizesEndAddresses().end()));
   }
@@ -1561,8 +1571,8 @@ public:
     return T->getClauseKind() == OMPC_from;
   }
 
-  StmtRange children() {
-    return StmtRange(
+  child_range children() {
+    return child_range(
         reinterpret_cast<Stmt **>(varlist_begin()),
         reinterpret_cast<Stmt **>(getCopyingSizesEndAddresses().end()));
   }
@@ -1639,7 +1649,7 @@ public:
     return T->getClauseKind() == OMPC_schedule;
   }
 
-  StmtRange children() { return StmtRange(&ChunkSize, &ChunkSize + 1); }
+  child_range children() { return child_range(&ChunkSize, &ChunkSize + 1); }
 };
 
 /// \brief This represents 'dist_schedule' clause in the '#pragma omp ...'
@@ -1715,7 +1725,7 @@ public:
     return T->getClauseKind() == OMPC_dist_schedule;
   }
 
-  StmtRange children() { return StmtRange(&ChunkSize, &ChunkSize + 1); }
+  child_range children() { return child_range(&ChunkSize, &ChunkSize + 1); }
 };
 
 /// \brief This represents 'ordered' clause in the '#pragma omp ...'
@@ -1745,7 +1755,7 @@ public:
     return T->getClauseKind() == OMPC_ordered;
   }
 
-  StmtRange children() { return StmtRange(); }
+  child_range children() { return child_range(); }
 };
 
 /// \brief This represents 'nowait' clause in the '#pragma omp ...'
@@ -1775,7 +1785,7 @@ public:
     return T->getClauseKind() == OMPC_nowait;
   }
 
-  StmtRange children() { return StmtRange(); }
+  child_range children() { return child_range(); }
 };
 
 /// \brief This represents 'untied' clause in the '#pragma omp ...'
@@ -1805,7 +1815,7 @@ public:
     return T->getClauseKind() == OMPC_untied;
   }
 
-  StmtRange children() { return StmtRange(); }
+  child_range children() { return child_range(); }
 };
 
 /// \brief This represents 'mergeable' clause in the '#pragma omp ...'
@@ -1835,7 +1845,7 @@ public:
     return T->getClauseKind() == OMPC_mergeable;
   }
 
-  StmtRange children() { return StmtRange(); }
+  child_range children() { return child_range(); }
 };
 
 /// \brief This represents 'read' clause in the '#pragma omp ...'
@@ -1865,7 +1875,7 @@ public:
     return T->getClauseKind() == OMPC_read;
   }
 
-  StmtRange children() { return StmtRange(); }
+  child_range children() { return child_range(); }
 };
 
 /// \brief This represents 'write' clause in the '#pragma omp ...'
@@ -1895,7 +1905,7 @@ public:
     return T->getClauseKind() == OMPC_write;
   }
 
-  StmtRange children() { return StmtRange(); }
+  child_range children() { return child_range(); }
 };
 
 /// \brief This represents 'update' clause in the '#pragma omp ...'
@@ -1925,7 +1935,7 @@ public:
     return T->getClauseKind() == OMPC_update;
   }
 
-  StmtRange children() { return StmtRange(); }
+  child_range children() { return child_range(); }
 };
 
 /// \brief This represents 'capture' clause in the '#pragma omp ...'
@@ -1955,7 +1965,7 @@ public:
     return T->getClauseKind() == OMPC_capture;
   }
 
-  StmtRange children() { return StmtRange(); }
+  child_range children() { return child_range(); }
 };
 
 /// \brief This represents 'seq_cst' clause in the '#pragma omp ...'
@@ -1986,7 +1996,7 @@ public:
     return T->getClauseKind() == OMPC_seq_cst;
   }
 
-  StmtRange children() { return StmtRange(); }
+  child_range children() { return child_range(); }
 };
 
 /// \brief This represents 'inbranch' clause in the '#pragma omp ...'
@@ -2016,7 +2026,7 @@ public:
     return T->getClauseKind() == OMPC_inbranch;
   }
 
-  StmtRange children() { return StmtRange(); }
+  child_range children() { return child_range(); }
 };
 
 /// \brief This represents 'notinbranch' clause in the '#pragma omp ...'
@@ -2047,7 +2057,7 @@ public:
     return T->getClauseKind() == OMPC_notinbranch;
   }
 
-  StmtRange children() { return StmtRange(); }
+  child_range children() { return child_range(); }
 };
 
 /// \brief This represents clause 'flush' in the '#pragma omp ...' directives.
@@ -2097,9 +2107,9 @@ public:
     return T->getClauseKind() == OMPC_flush;
   }
 
-  StmtRange children() {
-    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
-                     reinterpret_cast<Stmt **>(varlist_end()));
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
   }
 };
 
@@ -2203,9 +2213,9 @@ public:
     return T->getClauseKind() == OMPC_depend;
   }
 
-  StmtRange children() {
-    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
-                     reinterpret_cast<Stmt **>(varlist_end()) +
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()) +
                          2 * varlist_size());
   }
 };
@@ -2257,9 +2267,9 @@ public:
     return T->getClauseKind() == OMPC_uniform;
   }
 
-  StmtRange children() {
-    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
-                     reinterpret_cast<Stmt **>(varlist_end()));
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end()));
   }
 };
 
@@ -2310,7 +2320,7 @@ public:
     return T->getClauseKind() == OMPC_safelen;
   }
 
-  StmtRange children() { return StmtRange(&Safelen, &Safelen + 1); }
+  child_range children() { return child_range(&Safelen, &Safelen + 1); }
 };
 
 /// \brief This represents 'simdlen' clause in the '#pragma omp ...'
@@ -2356,7 +2366,7 @@ public:
     return T->getClauseKind() == OMPC_simdlen;
   }
 
-  StmtRange children() { return StmtRange(&Simdlen, &Simdlen + 1); }
+  child_range children() { return child_range(&Simdlen, &Simdlen + 1); }
 };
 
 /// \brief This represents 'num_teams' clause in the '#pragma omp ...'
@@ -2402,7 +2412,7 @@ public:
     return T->getClauseKind() == OMPC_num_teams;
   }
 
-  StmtRange children() { return StmtRange(&NumTeams, &NumTeams + 1); }
+  child_range children() { return child_range(&NumTeams, &NumTeams + 1); }
 };
 
 /// \brief This represents 'thread_limit' clause in the '#pragma omp ...'
@@ -2448,7 +2458,7 @@ public:
     return T->getClauseKind() == OMPC_thread_limit;
   }
 
-  StmtRange children() { return StmtRange(&ThreadLimit, &ThreadLimit + 1); }
+  child_range children() { return child_range(&ThreadLimit, &ThreadLimit + 1); }
 };
 
 /// \brief This represents clause 'linear' in the '#pragma omp ...'
@@ -2535,9 +2545,9 @@ public:
     return T->getClauseKind() == OMPC_linear;
   }
 
-  StmtRange children() {
-    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
-                     reinterpret_cast<Stmt **>(varlist_end() + 1));
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end() + 1));
   }
 };
 
@@ -2625,9 +2635,9 @@ public:
     return T->getClauseKind() == OMPC_aligned;
   }
 
-  StmtRange children() {
-    return StmtRange(reinterpret_cast<Stmt **>(varlist_begin()),
-                     reinterpret_cast<Stmt **>(varlist_end() + 1));
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(varlist_begin()),
+                       reinterpret_cast<Stmt **>(varlist_end() + 1));
   }
 };
 
