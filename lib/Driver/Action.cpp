@@ -66,9 +66,10 @@ BindTargetAction::BindTargetAction(std::unique_ptr<Action> Input, const char *_T
 void CudaDeviceAction::anchor() {}
 
 CudaDeviceAction::CudaDeviceAction(std::unique_ptr<Action> Input,
-                                   const char *ArchName, bool AtTopLevel)
+                                   const char *ArchName,
+                                   const char *DeviceTriple, bool AtTopLevel)
     : Action(CudaDeviceClass, std::move(Input)), GpuArchName(ArchName),
-      AtTopLevel(AtTopLevel) {}
+      DeviceTriple(DeviceTriple), AtTopLevel(AtTopLevel) {}
 
 void CudaHostAction::anchor() {}
 
