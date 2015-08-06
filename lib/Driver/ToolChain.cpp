@@ -153,6 +153,8 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
   case Action::InputClass:
   case Action::BindArchClass:
   case Action::BindTargetClass:
+  case Action::CudaDeviceClass:
+  case Action::CudaHostClass:
   case Action::LipoJobClass:
   case Action::DsymutilJobClass:
   case Action::VerifyDebugInfoJobClass:
