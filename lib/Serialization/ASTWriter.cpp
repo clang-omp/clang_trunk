@@ -3125,7 +3125,6 @@ class ASTIdentifierTableTrait {
   bool isInterestingIdentifier(IdentifierInfo *II, uint64_t MacroOffset) {
     if (MacroOffset ||
         II->isPoisoned() ||
-        II->isExtensionToken() ||
         II->getObjCOrBuiltinID() ||
         II->hasRevertedTokenIDToIdentifier() ||
         II->getFETokenInfo<void>())
