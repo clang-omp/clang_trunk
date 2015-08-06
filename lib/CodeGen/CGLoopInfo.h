@@ -18,8 +18,8 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Support/Compiler.h"
 #include "llvm/IR/Value.h"
+#include "llvm/Support/Compiler.h"
 
 namespace llvm {
 class BasicBlock;
@@ -32,20 +32,19 @@ class Attr;
 class ASTContext;
 namespace CodeGen {
 
-/// LoopAttributes - Per loop attributes.
+/// \brief Attributes that may be specified on loops.
 struct LoopAttributes {
   explicit LoopAttributes(bool IsParallel = false);
-  void Clear();
+  void clear();
 
-  /// llvm.loop.parallel metadata generation for loads and stores.
+  /// \brief Generate llvm.loop.parallel metadata for loads and stores.
   bool IsParallel;
 
-  /// llvm.vectorizer.enable value:
-  enum LVEnableState {
-    LVEC_UNSPECIFIED,
-    LVEC_ENABLE,
-    LVEC_DISABLE
-  };
+  /// \brief State of loop vectorization or unrolling.
+  enum LVEnableState { Unspecified, Enable, Disable };
+
+  /// \brief Value for llvm.loop.vectorize.enable metadata.
+  LVEnableState VectorizeEnable;
 
   /// \brief Selects no metadata, llvm.unroll.full, or llvm.unroll.disable.
   LVEnableState UnrollEnable;
@@ -60,36 +59,36 @@ struct LoopAttributes {
   unsigned UnrollCount;
 };
 
-/// LoopInfo - Information used when generating a structured loop.
+/// \brief Information used when generating a structured loop.
 class LoopInfo {
 public:
-  /// Construct a new LoopInfo for the loop with entry Header.
+  /// \brief Construct a new LoopInfo for the loop with entry Header.
   LoopInfo(llvm::BasicBlock *Header, const LoopAttributes &Attrs);
 
   /// Construct a new LoopInfo with a given loop id metadata.
   LoopInfo(llvm::MDNode *LoopID, const LoopAttributes &Attrs);
 
-  /// Get the loop id metadata for this loop.
-  llvm::MDNode *GetLoopID() const { return LoopID; }
+  /// \brief Get the loop id metadata for this loop.
+  llvm::MDNode *getLoopID() const { return LoopID; }
 
-  /// Get the header block of this loop.
-  llvm::BasicBlock *GetHeader() const { return Header; }
+  /// \brief Get the header block of this loop.
+  llvm::BasicBlock *getHeader() const { return Header; }
 
-  /// Get the set of attributes active for this loop.
-  const LoopAttributes &GetAttributes() const { return Attrs; }
+  /// \brief Get the set of attributes active for this loop.
+  const LoopAttributes &getAttributes() const { return Attrs; }
 
 private:
-  /// Loop ID metadata.
-  mutable llvm::MDNode *LoopID;
-  /// Header block of this loop.
+  /// \brief Loop ID metadata.
+  llvm::MDNode *LoopID;
+  /// \brief Header block of this loop.
   llvm::BasicBlock *Header;
-  /// The attributes for this loop.
+  /// \brief The attributes for this loop.
   LoopAttributes Attrs;
 };
 
-/// LoopInfoStack - A stack of loop information corresponding to loop
-/// nesting levels. This stack can be used to prepare attributes which are
-/// applied when a loop is emitted.
+/// \brief A stack of loop information corresponding to loop nesting levels.
+/// This stack can be used to prepare attributes which are applied when a loop
+/// is emitted.
 class LoopInfoStack {
   LoopInfoStack(const LoopInfoStack &) = delete;
   void operator=(const LoopInfoStack &) = delete;
@@ -106,37 +105,32 @@ public:
   void push(llvm::BasicBlock *Header, clang::ASTContext &Ctx,
             llvm::ArrayRef<const Attr *> Attrs);
 
-  void push(llvm::BasicBlock *Header,
-            llvm::ArrayRef<const Attr *> Attrs = llvm::None) {
-    Push(Header, Attrs);
-  }
-
   /// Extend the code region as part of a parallel loop which might be inside
-  /// another llvm function.
-  void Push(llvm::MDNode *LoopID, bool IsParallel);
+  /// another llvm function.  
+  void push(llvm::MDNode *LoopID, bool IsParallel);
 
-  /// End the current loop.
-  void Pop();
+  /// \brief End the current loop.
+  void pop();
 
-  /// Return the top loop id metadata.
-  llvm::MDNode *GetCurLoopID() const { return GetInfo().GetLoopID(); }
+  /// \brief Return the top loop id metadata.
+  llvm::MDNode *getCurLoopID() const { return getInfo().getLoopID(); }
 
-  /// Return true if the top loop is parallel.
-  bool GetCurLoopParallel() const {
-    return HasInfo() ?
-           GetInfo().GetAttributes().IsParallel : false;
+  /// \brief Return true if the top loop is parallel.
+  bool getCurLoopParallel() const {
+    return hasInfo() ? getInfo().getAttributes().IsParallel : false;
   }
 
-  /// Function called by the CodeGenFunction when an instruction is created.
+  /// \brief Function called by the CodeGenFunction when an instruction is
+  /// created.
   void InsertHelper(llvm::Instruction *I) const;
 
-  /// Set the next pushed loop as parallel.
-  void SetParallel(bool Enable = true) { StagedAttrs.IsParallel = Enable; }
+  /// \brief Set the next pushed loop as parallel.
+  void setParallel(bool Enable = true) { StagedAttrs.IsParallel = Enable; }
 
-  /// Set the next pushed loop 'vectorizer.enable'
-  void SetVectorizerEnable(bool Enable = true) {
-    StagedAttrs.VectorizerEnable = Enable ? LoopAttributes::LVEC_ENABLE :
-                                            LoopAttributes::LVEC_DISABLE;
+  /// \brief Set the next pushed loop 'vectorize.enable'
+  void setVectorizeEnable(bool Enable = true) {
+    StagedAttrs.VectorizeEnable =
+        Enable ? LoopAttributes::Enable : LoopAttributes::Disable;
   }
 
   /// \brief Set the next pushed loop unroll state.
@@ -148,21 +142,27 @@ public:
   /// \brief Set the vectorize width for the next loop pushed.
   void setVectorizeWidth(unsigned W) { StagedAttrs.VectorizeWidth = W; }
 
-  /// Get alignment of given pointer based on 'aligned' clause.
-  int GetAligned(const llvm::Value *Val) const;
+  /// \brief Set the interleave count for the next loop pushed.
+  void setInterleaveCount(unsigned C) { StagedAttrs.InterleaveCount = C; }
 
   /// \brief Set the unroll count for the next loop pushed.
   void setUnrollCount(unsigned C) { StagedAttrs.UnrollCount = C; }
 
+  /// Add an aligned variable for 'aligned' clause.
+  void addAligned(const llvm::Value *Val, int Align);
+
+  /// Get alignment of given pointer based on 'aligned' clause.
+  int getAligned(const llvm::Value *Val) const;
+
 private:
-  /// Returns true if there is LoopInfo on the stack.
-  bool HasInfo() const { return !Active.empty(); }
-  /// Return the LoopInfo for the current loop. HasInfo should be called first
-  /// to ensure LoopInfo is present.
-  const LoopInfo &GetInfo() const { return Active.back(); }
-  /// The set of attributes that will be applied to the next pushed loop.
+  /// \brief Returns true if there is LoopInfo on the stack.
+  bool hasInfo() const { return !Active.empty(); }
+  /// \brief Return the LoopInfo for the current loop. HasInfo should be called
+  /// first to ensure LoopInfo is present.
+  const LoopInfo &getInfo() const { return Active.back(); }
+  /// \brief The set of attributes that will be applied to the next pushed loop.
   LoopAttributes StagedAttrs;
-  /// Stack of active loops.
+  /// \brief Stack of active loops.
   llvm::SmallVector<LoopInfo, 4> Active;
   // 'Aligned' information.
   llvm::DenseMap<const llvm::Value *, int> Aligneds;

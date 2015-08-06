@@ -1774,9 +1774,9 @@ void Sema::CheckDeclIsAllowedInOpenMPTarget(Expr *E, Decl *D) {
 void Sema::MarkOpenMPClauses(ArrayRef<OMPClause *> Clauses) {
   for (ArrayRef<OMPClause *>::iterator I = Clauses.begin(), E = Clauses.end();
        I != E; ++I)
-    for (Stmt::child_range S = (*I)->children(); S; ++S) {
-      if (*S && isa<Expr>(*S))
-        MarkDeclarationsReferencedInExpr(cast<Expr>(*S));
+    for (Stmt *S : (*I)->children()) {
+      if (S && isa<Expr>(S))
+        MarkDeclarationsReferencedInExpr(cast<Expr>(S));
     }
 }
 
@@ -1893,16 +1893,15 @@ public:
                                          E = S->clauses().end();
          I != E; ++I) {
       if (OMPClause *C = *I)
-        for (StmtRange R = C->children(); R; ++R) {
-          if (Stmt *Child = *R)
+        for (Stmt *Child : C->children()) {
+          if (Child)
             Visit(Child);
         }
     }
   }
   void VisitStmt(Stmt *S) {
-    for (Stmt::child_iterator I = S->child_begin(), E = S->child_end(); I != E;
-         ++I) {
-      if (Stmt *Child = *I) {
+    for (Stmt *Child : S->children()) {
+      if (Child) {
         if (!isa<OMPExecutableDirective>(Child))
           Visit(Child);
       }
@@ -3362,10 +3361,11 @@ StmtResult Sema::ActOnOpenMPSectionsDirective(OpenMPDirectiveKind Kind,
   }
   // All associated statements must be '#pragma omp section' except for
   // the first one.
-  Stmt::child_range S = C->children();
-  if (!S)
+  Stmt::child_range SR = C->children();
+  if (SR.begin() == SR.end())
     return StmtError();
-  for (++S; S; ++S) {
+  auto S = SR.begin();
+  for (++S; S != SR.end(); ++S) {
     Stmt *SectionStmt = *S;
     if (!SectionStmt || !isa<OMPSectionDirective>(SectionStmt)) {
       if (SectionStmt)
@@ -3395,10 +3395,11 @@ StmtResult Sema::ActOnOpenMPParallelSectionsDirective(
   }
   // All associated statements must be '#pragma omp section' except for
   // the first one.
-  Stmt::child_range S = C->children();
-  if (!S)
+  Stmt::child_range SR = C->children();
+  if (SR.begin() == SR.end())
     return StmtError();
-  for (++S; S; ++S) {
+  auto S = SR.begin();
+  for (++S; S != SR.end(); ++S) {
     Stmt *SectionStmt = *S;
     if (!SectionStmt || !isa<OMPSectionDirective>(SectionStmt)) {
       if (SectionStmt)
@@ -3514,8 +3515,8 @@ public:
   bool VisitStmt(Stmt *S) {
     if (!S)
       return false;
-    for (Stmt::child_range R = S->children(); R; ++R) {
-      if (Visit(*R))
+    for (Stmt *R : S->children()) {
+      if (Visit(R))
         return true;
     }
     llvm::FoldingSetNodeID ID;
@@ -4161,8 +4162,8 @@ public:
   }
   bool VisitCompoundStmt(CompoundStmt *S) {
     bool Flag = false;
-    for (Stmt::child_range R = S->children(); R; ++R) {
-      Flag |= Visit(*R);
+    for (Stmt *R : S->children()) {
+      Flag |= Visit(R);
       if (Flag && FoundTeams)
         return true;
     }

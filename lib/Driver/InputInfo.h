@@ -64,6 +64,13 @@ public:
       HasTargetSuffixApended(_HasTargetSuffixApended)  {
     Data.Filename = _Filename;
   }
+  InputInfo(const char *_Filename, types::ID _Type,
+            const char *_BaseInput, bool _HasTargetSuffixApended)
+    : Kind(Filename), Type(_Type), BaseInput(_BaseInput),
+      OrigAction(nullptr),
+      HasTargetSuffixApended(_HasTargetSuffixApended)  {
+    Data.Filename = _Filename;
+  }
   InputInfo(const llvm::opt::Arg *_InputArg, const Action* _OrigAction,
             const char *_BaseInput, bool _HasTargetSuffixApended)
       : Kind(InputArg), Type(_OrigAction->getType()), BaseInput(_BaseInput),

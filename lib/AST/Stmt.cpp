@@ -1035,7 +1035,7 @@ SEHFinallyStmt* SEHFinallyStmt::Create(const ASTContext &C, SourceLocation Loc,
   return new(C)SEHFinallyStmt(Loc,Block);
 }
 
-child_range OMPClause::children() {
+Stmt::child_range OMPClause::children() {
   switch(getClauseKind()) {
   default : break;
 #define OPENMP_CLAUSE(Name, Class)                                       \

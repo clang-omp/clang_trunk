@@ -722,7 +722,8 @@ public:
 
   llvm::opt::DerivedArgList *
   TranslateArgs(const llvm::opt::DerivedArgList &Args,
-                const char *BoundArch) const override;
+                const char *BoundArch, bool isOpenMPTarget,
+                bool &isSuccess) const override;
   void addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
                              llvm::opt::ArgStringList &CC1Args) const override;
 };
@@ -827,7 +828,8 @@ public:
 
   llvm::opt::DerivedArgList *
   TranslateArgs(const llvm::opt::DerivedArgList &Args,
-                const char *BoundArch) const override;
+                const char *BoundArch, bool isOpenMPTarget,
+                bool &isSuccess) const override;
 
   bool IsIntegratedAssemblerDefault() const override;
   bool IsUnwindTablesDefault() const override;

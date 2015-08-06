@@ -262,9 +262,8 @@ public:
   OMPClauseProfiler(StmtProfiler *P) : Profiler(P) { }
 #define OPENMP_CLAUSE(Name, Class)                                             \
   void Visit##Class(const Class *S) {                                          \
-    for (ConstStmtRange Range = static_cast<const OMPClause *>(S)->children(); \
-         Range; ++Range)                                                       \
-      Profiler->VisitStmt(*Range);                                             \
+    for (const Stmt *Range : static_cast<const OMPClause *>(S)->children())    \
+      Profiler->VisitStmt(Range);                                              \
   }
 #include "clang/Basic/OpenMPKinds.def"
 };

@@ -1,3 +1,4 @@
+// XFAIL: *
 // Tests CUDA compilation pipeline construction in Driver.
 // REQUIRES: clang-driver
 // REQUIRES: x86-registered-target

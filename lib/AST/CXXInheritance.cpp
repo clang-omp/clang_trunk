@@ -426,13 +426,12 @@ FindNestedNameSpecifierMember(const CXXBaseSpecifier *Specifier,
 
 bool CXXRecordDecl::FindOMPDeclareReductionMember(const CXXBaseSpecifier *Specifier, 
                                                   CXXBasePath &Path,
-                                                  void *Name) {
+                                                  DeclarationName Name) {
   RecordDecl *BaseRecord =
     Specifier->getType()->castAs<RecordType>()->getDecl();
   
   const unsigned IDNS = IDNS_OMPDeclareReduction;
-  DeclarationName N = DeclarationName::getFromOpaquePtr(Name);
-  for (Path.Decls = BaseRecord->lookup(N);
+  for (Path.Decls = BaseRecord->lookup(Name);
        !Path.Decls.empty();
        Path.Decls = Path.Decls.slice(1)) {
     if (Path.Decls.front()->isInIdentifierNamespace(IDNS))

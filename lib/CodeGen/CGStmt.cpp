@@ -731,7 +731,7 @@ void CodeGenFunction::EmitWhileStmt(const WhileStmt &S,
   // Branch to the loop header again.
   EmitBranch(LoopHeader.getBlock());
 
-  LoopStack.Pop();
+  LoopStack.pop();
 
   // Emit the exit block.
   EmitBlock(LoopExit.getBlock(), true);
@@ -790,7 +790,7 @@ void CodeGenFunction::EmitDoStmt(const DoStmt &S,
         createProfileWeightsForLoop(S.getCond(), BackedgeCount));
   }
 
-  LoopStack.Pop();
+  LoopStack.pop();
 
   // Emit the exit block.
   EmitBlock(LoopExit.getBlock());
@@ -890,7 +890,7 @@ void CodeGenFunction::EmitForStmt(const ForStmt &S,
 
   ForScope.ForceCleanup();
 
-  LoopStack.Pop();
+  LoopStack.pop();
 
   // Emit the fall-through block.
   EmitBlock(LoopExit.getBlock(), true);
@@ -963,7 +963,7 @@ CodeGenFunction::EmitCXXForRangeStmt(const CXXForRangeStmt &S,
 
   ForScope.ForceCleanup();
 
-  LoopStack.Pop();
+  LoopStack.pop();
 
   // Emit the fall-through block.
   EmitBlock(LoopExit.getBlock(), true);
@@ -2254,8 +2254,8 @@ void CodeGenFunction::EmitSIMDForHelperCall(llvm::Function *BodyFunc,
 llvm::Function *CodeGenFunction::EmitSimdFunction(CGPragmaSimdWrapper &W) {
   const CapturedStmt &CS = *W.getAssociatedStmt();
 
-  CGSIMDForStmtInfo CSInfo(W, LoopStack.GetCurLoopID(),
-                              LoopStack.GetCurLoopParallel());
+  CGSIMDForStmtInfo CSInfo(W, LoopStack.getCurLoopID(),
+                              LoopStack.getCurLoopParallel());
   CodeGenFunction CGF(CGM, true);
   CGF.CapturedStmtInfo = &CSInfo;
 
@@ -2347,7 +2347,7 @@ void CodeGenFunction::EmitPragmaSimd(CodeGenFunction::CGPragmaSimdWrapper &W) {
     // later.
     JumpDest Continue = getJumpDestInCurrentScope("for.cond");
     llvm::BasicBlock *CondBlock = Continue.getBlock();
-    LoopStack.Push(CondBlock);
+    LoopStack.push(CondBlock);
 
     EmitBlock(CondBlock);
 
@@ -2409,7 +2409,7 @@ void CodeGenFunction::EmitPragmaSimd(CodeGenFunction::CGPragmaSimdWrapper &W) {
     if (DI)
       DI->EmitLexicalBlockEnd(Builder, W.getSourceRange().getEnd());
 
-    LoopStack.Pop();
+    LoopStack.pop();
 
     // Emit the fall-through block.
     EmitBlock(LoopExit.getBlock(), true);
@@ -2442,7 +2442,7 @@ void CodeGenFunction::EmitSIMDForHelperBody(const Stmt *S) {
   CGSIMDForStmtInfo *Info = cast<CGSIMDForStmtInfo>(CapturedStmtInfo);
 
   // Mark the loop body as an extended region of this SIMD loop.
-  LoopStack.Push(Info->getLoopID(), Info->getLoopParallel());
+  LoopStack.push(Info->getLoopID(), Info->getLoopParallel());
   {
     RunCleanupsScope Scope(*this);
 
@@ -2510,7 +2510,7 @@ void CodeGenFunction::EmitSIMDForHelperBody(const Stmt *S) {
   }
 
   // Leave the loop body.
-  LoopStack.Pop();
+  LoopStack.pop();
 }
 
 void CodeGenFunction::InitOpenMPFunction(llvm::Value *Context,
@@ -2526,7 +2526,7 @@ void CodeGenFunction::InitOpenMPFunction(llvm::Value *Context,
   LValue Base = MakeNaturalAlignAddrLValue(Context, TagType);
   RecordDecl::field_iterator CurField = RD->field_begin();
   CapturedStmt::const_capture_iterator C = CS.capture_begin();
-  for (CapturedStmt::capture_init_iterator I = CS.capture_init_begin(),
+  for (CapturedStmt::const_capture_init_iterator I = CS.capture_init_begin(),
                                            E = CS.capture_init_end();
        I != E; ++I, ++C, ++CurField) {
 
@@ -2590,7 +2590,7 @@ void CodeGenFunction::InitOpenMPTargetFunction(const OMPExecutableDirective &D,
   llvm::Function::arg_iterator Arg = this->CurFn->arg_begin();
   RecordDecl::field_iterator CurField = RD->field_begin();
   CapturedStmt::const_capture_iterator C = S.capture_begin();
-  for (CapturedStmt::capture_init_iterator I = S.capture_init_begin(),
+  for (CapturedStmt::const_capture_init_iterator I = S.capture_init_begin(),
                                            E = S.capture_init_end();
        I != E; ++I, ++C, ++CurField) {
 
@@ -2665,7 +2665,7 @@ void CodeGenFunction::InitOpenMPSharedizeParameters(
 	// for each captured arg
 	RecordDecl::field_iterator CurField = RD->field_begin();
 	CapturedStmt::const_capture_iterator C = S.capture_begin();
-	for (CapturedStmt::capture_init_iterator I = S.capture_init_begin(),
+	for (CapturedStmt::const_capture_init_iterator I = S.capture_init_begin(),
 	    E = S.capture_init_end();
 	    I != E; ++I, ++C, ++CurField) {
 

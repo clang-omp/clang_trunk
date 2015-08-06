@@ -288,7 +288,7 @@ static bool AddLTOInputs(Compilation &C, const JobAction &JA, const Tool &T,
       const char *LLVMLinkExec =
           Args.MakeArgString(TC.getDriver().Dir + "/llvm-link");
       C.addCommand(
-          llvm::make_unique<Command>(JA, T, LLVMLinkExec, LLVMLinkCmdArgs));
+          llvm::make_unique<Command>(JA, T, LLVMLinkExec, LLVMLinkCmdArgs, Inputs));
 
       // Optimize resulting bitcode file using opt.
       ArgStringList OptCmdArgs;
@@ -297,7 +297,7 @@ static bool AddLTOInputs(Compilation &C, const JobAction &JA, const Tool &T,
       OptCmdArgs.push_back("-o");
       OptCmdArgs.push_back(ResultingBitcodeF);
       const char *OptExec = Args.MakeArgString(TC.getDriver().Dir + "/opt");
-      C.addCommand(llvm::make_unique<Command>(JA, T, OptExec, OptCmdArgs));
+      C.addCommand(llvm::make_unique<Command>(JA, T, OptExec, OptCmdArgs, Inputs));
     } else {
       // Single object file, no LTO.
       ResultingBitcodeF = C.getArgs().MakeArgString(LLVMLinkCmdArgs.back());
@@ -312,7 +312,7 @@ static bool AddLTOInputs(Compilation &C, const JobAction &JA, const Tool &T,
     LlcCmdArgs.push_back(ObjectF);
     LlcCmdArgs.push_back("-filetype=obj");
     const char *LlcExec = Args.MakeArgString(TC.getDriver().Dir + "/llc");
-    C.addCommand(llvm::make_unique<Command>(JA, T, LlcExec, LlcCmdArgs));
+    C.addCommand(llvm::make_unique<Command>(JA, T, LlcExec, LlcCmdArgs, Inputs));
 
     // Add object file to linker inputs
     CmdArgs.push_back(ObjectF);
@@ -1875,12 +1875,6 @@ static std::string getCPUName(const ArgList &Args, const llvm::Triple &T,
     return CPUName;
   }
 
-  case llvm::Triple::nvptx:
-  case llvm::Triple::nvptx64:
-    if (const Arg *A = Args.getLastArg(options::OPT_march_EQ))
-      return A->getValue();
-    return "";
-
   case llvm::Triple::ppc:
   case llvm::Triple::ppc64:
   case llvm::Triple::ppc64le: {
@@ -2930,7 +2924,7 @@ static void SplitDebugInfo(const ToolChain &TC, Compilation &C, const Tool &T,
   ExtractArgs.push_back(OutFile);
 
   const char *Exec = Args.MakeArgString(TC.GetProgramPath("objcopy"));
-  InputInfo II(Output.getFilename(), types::TY_Object, Output.getFilename());
+  InputInfo II(Output.getFilename(), types::TY_Object, Output.getFilename(), false);
 
   // First extract the dwo sections.
   C.addCommand(llvm::make_unique<Command>(JA, T, Exec, ExtractArgs, II));
@@ -3204,7 +3198,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // device-side compilations). All other jobs are expected to have exactly one
   // input.
   bool IsCuda = types::isCuda(Input.getType());
+#if 0
   assert((IsCuda || Inputs.size() == 1) && "Unable to handle multiple inputs.");
+#endif
 
   // Invoke ourselves in -cc1 mode.
   //
@@ -5960,7 +5956,7 @@ void gcc::Common::ConstructJob(Compilation &C, const JobAction &JA,
 
   const char *Exec =
     Args.MakeArgString(getToolChain().GetProgramPath(GCCName));
-  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
+  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
 }
 
 void gcc::Preprocessor::RenderExtraToolArgs(const JobAction &JA,
@@ -6277,7 +6273,8 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back("gnu");
   CmdArgs.push_back("-target");
   CmdArgs.push_back(Args.MakeArgString(getToolChain().getTripleString()));
-  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs);
+  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs,
+                  JA.getOffloadingDevice());
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());
   C.addCommand(llvm::make_unique<Command>(JA, *this, Args.MakeArgString(Linker),
@@ -7225,7 +7222,7 @@ void solaris::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   const char *Exec =
     Args.MakeArgString(getToolChain().GetLinkerPath());
-  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
+  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
 }
 
 void openbsd::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
@@ -7460,7 +7457,7 @@ void openbsd::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   const char *Exec =
     Args.MakeArgString(getToolChain().GetLinkerPath());
-  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
+  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
 }
 
 void bitrig::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
@@ -7597,7 +7594,7 @@ void bitrig::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   const char *Exec =
     Args.MakeArgString(getToolChain().GetLinkerPath());
-  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
+  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
 }
 
 void freebsd::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
@@ -7866,7 +7863,7 @@ void freebsd::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   const char *Exec =
     Args.MakeArgString(getToolChain().GetLinkerPath());
-  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
+  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
 }
 
 void netbsd::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
@@ -8790,7 +8787,7 @@ void gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   AddOpenMPLinkerScript(getToolChain(), C, JA, Output, Inputs, Args, CmdArgs);
 
   C.addCommand(
-      llvm::make_unique<Command>(JA, *this, ToolChain.Linker.c_str(), CmdArgs));
+      llvm::make_unique<Command>(JA, *this, ToolChain.Linker.c_str(), CmdArgs, Inputs));
 }
 
 // NaCl ARM assembly (inline or standalone) can be written with a set of macros
@@ -8802,8 +8799,8 @@ void nacltools::AssemblerARM::ConstructJob(Compilation &C, const JobAction &JA,
                                            const InputInfoList &Inputs,
                                            const ArgList &Args,
                                            const char *LinkingOutput) const {
-  const toolchains::NaCl_TC& ToolChain =
-    static_cast<const toolchains::NaCl_TC&>(getToolChain());
+  const toolchains::NaClToolChain& ToolChain =
+    static_cast<const toolchains::NaClToolChain&>(getToolChain());
   InputInfo NaClMacros(ToolChain.GetNaClArmMacrosPath(), &JA,
                        "nacl-arm-macros.s", false);
   InputInfoList NewInputs;
@@ -9812,14 +9809,14 @@ void NVPTX::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
 
   const char *Exec =
     Args.MakeArgString(getToolChain().GetProgramPath("ptxas"));
-  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
+  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
 }
 
 /// Helper function to generate *.cubin from *.bc file.
 static void BitcodeToCubin(Compilation &C, const JobAction &JA, const Tool &T,
                            const ToolChain &TC, std::string Name,
                            const char *BitcodeF, const ArgList &Args,
-                           ArgStringList &CmdArgs) {
+                           ArgStringList &CmdArgs, const InputInfoList &Inputs) {
   std::string CPU = getCPUName(Args, TC.getTriple(), JA.getOffloadingDevice());
 
   // Generate PTX.
@@ -9835,7 +9832,7 @@ static void BitcodeToCubin(Compilation &C, const JobAction &JA, const Tool &T,
     LlcCmdArgs.push_back(C.getArgs().MakeArgString("-mattr=ptx40"));
   }
   const char *LlcExec = Args.MakeArgString(TC.getDriver().Dir + "/llc");
-  C.addCommand(llvm::make_unique<Command>(JA, T, LlcExec, LlcCmdArgs));
+  C.addCommand(llvm::make_unique<Command>(JA, T, LlcExec, LlcCmdArgs, Inputs));
 
   // Assemble PTX.
   TmpName = C.getDriver().GetTemporaryPath(Name, "cubin");
@@ -9850,7 +9847,7 @@ static void BitcodeToCubin(Compilation &C, const JobAction &JA, const Tool &T,
     AsCmdArgs.push_back(Args.MakeArgString(CPU));
   }
   const char *AsExec = Args.MakeArgString(TC.GetProgramPath("ptxas"));
-  C.addCommand(llvm::make_unique<Command>(JA, T, AsExec, AsCmdArgs));
+  C.addCommand(llvm::make_unique<Command>(JA, T, AsExec, AsCmdArgs, Inputs));
 
   // Pass .cubin to nvlink
   CmdArgs.push_back(CubinF);
@@ -9946,7 +9943,7 @@ void NVPTX::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     const char *OptExec =
       Args.MakeArgString(getToolChain().getDriver().Dir + "/opt");
     C.addCommand(
-      llvm::make_unique<Command>(JA, *this, OptExec, OptCmdArgs));
+      llvm::make_unique<Command>(JA, *this, OptExec, OptCmdArgs, Inputs));
     LibDevice = ResultingBitcodeF;
   }
 
@@ -9968,7 +9965,7 @@ void NVPTX::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       LLVMLinkCmdArgs.push_back(Args.MakeArgString(LibDevice));
     } else {
       BitcodeToCubin(C, JA, *this, getToolChain(), "libdevice",
-                     LibDevice.c_str(), Args, CmdArgs);
+                     LibDevice.c_str(), Args, CmdArgs, Inputs);
     }
   }
 
@@ -9990,7 +9987,7 @@ void NVPTX::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       const char *LLVMLinkExec =
           Args.MakeArgString(getToolChain().getDriver().Dir + "/llvm-link");
       C.addCommand(
-          llvm::make_unique<Command>(JA, *this, LLVMLinkExec, LLVMLinkCmdArgs));
+          llvm::make_unique<Command>(JA, *this, LLVMLinkExec, LLVMLinkCmdArgs, Inputs));
 
       // Optimize resulting bitcode file using opt.
       ArgStringList OptCmdArgs;
@@ -10000,14 +9997,14 @@ void NVPTX::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       OptCmdArgs.push_back(ResultingBitcodeF);
       const char *OptExec =
           Args.MakeArgString(getToolChain().getDriver().Dir + "/opt");
-      C.addCommand(llvm::make_unique<Command>(JA, *this, OptExec, OptCmdArgs));
+      C.addCommand(llvm::make_unique<Command>(JA, *this, OptExec, OptCmdArgs, Inputs));
     } else {
       // Single object file, no LTO.
       ResultingBitcodeF = C.getArgs().MakeArgString(LLVMLinkCmdArgs.back());
     }
 
     BitcodeToCubin(C, JA, *this, getToolChain(), FileName, ResultingBitcodeF,
-                   Args, CmdArgs);
+                   Args, CmdArgs, Inputs);
   }
 
   // nvlink relies on the extension used by the input files
@@ -10051,7 +10048,7 @@ void NVPTX::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     ArgStringList CopyCmdArgs;
     CopyCmdArgs.push_back(II.getFilename());
     CopyCmdArgs.push_back(CubinF);
-    C.addCommand(llvm::make_unique<Command>(JA, *this, CopyExec, CopyCmdArgs));
+    C.addCommand(llvm::make_unique<Command>(JA, *this, CopyExec, CopyCmdArgs, Inputs));
 
     CmdArgs.push_back(CubinF);
   }
@@ -10063,7 +10060,7 @@ void NVPTX::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   const char *Exec =
     Args.MakeArgString(getToolChain().GetProgramPath("nvlink"));
-  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs));
+  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
 }
 
 void CrossWindows::Assembler::ConstructJob(Compilation &C, const JobAction &JA,

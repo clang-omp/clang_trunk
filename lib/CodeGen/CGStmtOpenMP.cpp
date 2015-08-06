@@ -1553,7 +1553,7 @@ CodeGenFunction::EmitOMPDirectiveWithLoop(OpenMPDirectiveKind DKind,
 
       if (HasSimd) {
         // Push current LoopInfo onto the LoopStack.
-        LoopStack.Push(MainBB);
+        LoopStack.push(MainBB);
       }
 
       {
@@ -1669,7 +1669,7 @@ CodeGenFunction::EmitOMPDirectiveWithLoop(OpenMPDirectiveKind DKind,
         //      }
         EmitBranch(MainBB);
         if (HasSimd) {
-          LoopStack.Pop();
+          LoopStack.pop();
         }
         EmitBlock(FiniBB);
         if (IsStaticSchedule && ChunkSize != 0) {
@@ -6624,8 +6624,8 @@ static void EmitOMPAlignedClause(CodeGenFunction &CGF, CodeGenModule &CGM,
 // Simd wrappers implementation for '#pragma omp simd'.
 bool CodeGenFunction::CGPragmaOmpSimd::emitSafelen(CodeGenFunction *CGF) const {
   bool SeparateLastIter = false;
-  CGF->LoopStack.SetParallel();
-  CGF->LoopStack.SetVectorizerEnable(true);
+  CGF->LoopStack.setParallel();
+  CGF->LoopStack.setVectorizeEnable(true);
   for (ArrayRef<OMPClause *>::iterator I = SimdOmp->clauses().begin(),
                                        E = SimdOmp->clauses().end();
        I != E; ++I) {
@@ -6636,11 +6636,11 @@ bool CodeGenFunction::CGPragmaOmpSimd::emitSafelen(CodeGenFunction *CGF) const {
                                     AggValueSlot::ignored(), true);
       llvm::ConstantInt *Val = dyn_cast<llvm::ConstantInt>(Len.getScalarVal());
       assert(Val);
-      CGF->LoopStack.SetVectorizerWidth(Val->getZExtValue());
+      CGF->LoopStack.setVectorizeWidth(Val->getZExtValue());
       // In presence of finite 'safelen', it may be unsafe to mark all
       // the memory instructions parallel, because loop-carried
       // dependences of 'safelen' iterations are possible.
-      CGF->LoopStack.SetParallel(false);
+      CGF->LoopStack.setParallel(false);
       break;
     }
     case OMPC_lastprivate: {
@@ -6781,7 +6781,7 @@ bool CodeGenFunction::CGPragmaOmpSimd::walkLocalVariablesToEmit(
                                               F = A->varlist_end();
            J != F; ++J) {
         LValue LVal = CGF->EmitLValue(*J);
-        CGF->LoopStack.AddAligned(LVal.getAddress(),
+        CGF->LoopStack.addAligned(LVal.getAddress(),
                                   (int)(AVal->getZExtValue()));
       }
       break;

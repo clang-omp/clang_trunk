@@ -3766,7 +3766,11 @@ CudaToolChain::addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
 
 llvm::opt::DerivedArgList *
 CudaToolChain::TranslateArgs(const llvm::opt::DerivedArgList &Args,
-                             const char *BoundArch) const {
+                             const char *BoundArch,
+                             bool isOpenMPTarget,
+                             bool &isSuccess) const {
+  isSuccess = true;
+
   DerivedArgList *DAL = new DerivedArgList(Args.getBaseArgs());
   const OptTable &Opts = getDriver().getOpts();
 

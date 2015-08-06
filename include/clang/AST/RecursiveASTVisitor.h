@@ -2379,8 +2379,8 @@ public:
   RecursiveOMPClauseVisitor(RecursiveASTVisitor<T> *V) : Visitor(V) { }
 #define OPENMP_CLAUSE(Name, Class)                                      \
   bool Visit##Class(Class *S) {                                         \
-    for (Stmt::child_range Range = S->children(); Range; ++Range) {     \
-      if (!Visitor->TraverseStmt(*Range)) return false;                 \
+    for (Stmt *CS : S->children()) {                                    \
+      if (!Visitor->TraverseStmt(CS)) return false;                     \
     }                                                                   \
     return true;                                                        \
   }

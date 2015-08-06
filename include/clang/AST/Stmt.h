@@ -2096,7 +2096,7 @@ public:
   /// \brief Retrieve the outlined function declaration.
   CapturedDecl *getCapturedDecl() { return TheCapturedDecl; }
   const CapturedDecl *getCapturedDecl() const {
-    return CapDeclAndKind.getPointer();
+    return TheCapturedDecl;
   }
 
   /// \brief Set the outlined function declaration.

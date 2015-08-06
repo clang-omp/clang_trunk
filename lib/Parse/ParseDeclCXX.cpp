@@ -2845,9 +2845,9 @@ Parser::DeclGroupPtrTy Parser::ParseCXXClassMemberDeclarationWithPragmas(
 
   if (Tok.is(tok::annot_pragma_openmp)) {
     if (TagDecl)
-      LateParseOpenMPDeclarativeDirective(CurAS);
+      LateParseOpenMPDeclarativeDirective(AS);
     else
-      ParseOpenMPDeclarativeDirective(CurAS);
+      ParseOpenMPDeclarativeDirective(AS);
     return DeclGroupPtrTy();
   }
 

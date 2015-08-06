@@ -2021,6 +2021,7 @@ static const Tool *SelectToolForJob(Compilation &C, bool SaveTemps,
     assert(PrevSingleAction);
 
     // Extract real host action, if it's a CudaHostAction.
+    JobAction *CompileJA;
     if (CudaHostAction *CudaHA = dyn_cast<CudaHostAction>(PrevSingleAction))
       CompileJA = cast<CompileJobAction>(*CudaHA->begin());
     else
@@ -2629,7 +2630,7 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
       break;
     case llvm::Triple::Linux:
       if (Target.getArch() == llvm::Triple::hexagon)
-        TC = new toolchains::Hexagon_TC(*this, Target, Args);
+        TC = new toolchains::HexagonToolChain(*this, Target, Args);
       else if (Target.getArch() == llvm::Triple::nvptx64 )
         TC = new toolchains::NVPTX_TC(*this, Target, Args,
             IsOpenMPTargetToolchain);
@@ -2668,9 +2669,11 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
         break;
       }
       break;
+#if 0
     case llvm::Triple::CUDA:
       TC = new toolchains::CudaToolChain(*this, Target, Args);
       break;
+#endif
     default:
       // Of these targets, Hexagon is the only one that might have
       // an OS of Linux, in which case it got handled above already.

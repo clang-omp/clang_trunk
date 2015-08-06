@@ -1755,7 +1755,7 @@ public:
     return T->getClauseKind() == OMPC_ordered;
   }
 
-  child_range children() { return child_range(); }
+  child_range children() { return child_range(child_iterator(), child_iterator()); }
 };
 
 /// \brief This represents 'nowait' clause in the '#pragma omp ...'
@@ -1785,7 +1785,7 @@ public:
     return T->getClauseKind() == OMPC_nowait;
   }
 
-  child_range children() { return child_range(); }
+  child_range children() { return child_range(child_iterator(), child_iterator()); }
 };
 
 /// \brief This represents 'untied' clause in the '#pragma omp ...'
@@ -1815,7 +1815,7 @@ public:
     return T->getClauseKind() == OMPC_untied;
   }
 
-  child_range children() { return child_range(); }
+  child_range children() { return child_range(child_iterator(), child_iterator()); }
 };
 
 /// \brief This represents 'mergeable' clause in the '#pragma omp ...'
@@ -1845,7 +1845,7 @@ public:
     return T->getClauseKind() == OMPC_mergeable;
   }
 
-  child_range children() { return child_range(); }
+  child_range children() { return child_range(child_iterator(), child_iterator()); }
 };
 
 /// \brief This represents 'read' clause in the '#pragma omp ...'
@@ -1875,7 +1875,7 @@ public:
     return T->getClauseKind() == OMPC_read;
   }
 
-  child_range children() { return child_range(); }
+  child_range children() { return child_range(child_iterator(), child_iterator()); }
 };
 
 /// \brief This represents 'write' clause in the '#pragma omp ...'
@@ -1905,7 +1905,7 @@ public:
     return T->getClauseKind() == OMPC_write;
   }
 
-  child_range children() { return child_range(); }
+  child_range children() { return child_range(child_iterator(), child_iterator()); }
 };
 
 /// \brief This represents 'update' clause in the '#pragma omp ...'
@@ -1935,7 +1935,7 @@ public:
     return T->getClauseKind() == OMPC_update;
   }
 
-  child_range children() { return child_range(); }
+  child_range children() { return child_range(child_iterator(), child_iterator()); }
 };
 
 /// \brief This represents 'capture' clause in the '#pragma omp ...'
@@ -1965,7 +1965,7 @@ public:
     return T->getClauseKind() == OMPC_capture;
   }
 
-  child_range children() { return child_range(); }
+  child_range children() { return child_range(child_iterator(), child_iterator()); }
 };
 
 /// \brief This represents 'seq_cst' clause in the '#pragma omp ...'
@@ -1996,7 +1996,7 @@ public:
     return T->getClauseKind() == OMPC_seq_cst;
   }
 
-  child_range children() { return child_range(); }
+  child_range children() { return child_range(child_iterator(), child_iterator()); }
 };
 
 /// \brief This represents 'inbranch' clause in the '#pragma omp ...'
@@ -2026,7 +2026,7 @@ public:
     return T->getClauseKind() == OMPC_inbranch;
   }
 
-  child_range children() { return child_range(); }
+  child_range children() { return child_range(child_iterator(), child_iterator()); }
 };
 
 /// \brief This represents 'notinbranch' clause in the '#pragma omp ...'
@@ -2057,7 +2057,7 @@ public:
     return T->getClauseKind() == OMPC_notinbranch;
   }
 
-  child_range children() { return child_range(); }
+  child_range children() { return child_range(child_iterator(), child_iterator()); }
 };
 
 /// \brief This represents clause 'flush' in the '#pragma omp ...' directives.

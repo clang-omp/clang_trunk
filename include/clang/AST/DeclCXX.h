@@ -1577,7 +1577,7 @@ public:
   /// of the given name within a C++ class hierarchy. The user data pointer
   /// is an opaque \c DeclarationName pointer.
   static bool FindOMPDeclareReductionMember(const CXXBaseSpecifier *Specifier,
-                                            CXXBasePath &Path, void *Name);
+                                            CXXBasePath &Path, DeclarationName Name);
 
   /// \brief Retrieve the final overriders for each virtual member
   /// function in the class hierarchy where this class is the

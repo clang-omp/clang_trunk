@@ -531,7 +531,20 @@ SanitizerMask MSVCToolChain::getSupportedSanitizers() const {
 
 llvm::opt::DerivedArgList *
 MSVCToolChain::TranslateArgs(const llvm::opt::DerivedArgList &Args,
-                             const char *BoundArch) const {
+                             const char *BoundArch,
+                             bool isOpenMPTarget,
+                             bool &isSuccess) const {
+  if (isOpenMPTarget){
+        // This translation is not dealing with OpenMP target directives yet
+    isSuccess = false;
+
+    getDriver().Diag(diag::err_drv_omp_target_translation_not_available)
+        << BoundArch;
+    return 0;
+  }
+
+  isSuccess = true;
+
   DerivedArgList *DAL = new DerivedArgList(Args.getBaseArgs());
   const OptTable &Opts = getDriver().getOpts();
 
