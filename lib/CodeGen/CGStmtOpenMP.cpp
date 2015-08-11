@@ -1768,6 +1768,7 @@ CodeGenFunction::EmitOMPDistributeDirective(const OMPDistributeDirective &S) {
 void CodeGenFunction::EmitOMPDirectiveWithTeams(OpenMPDirectiveKind DKind,
                                                 OpenMPDirectiveKind SKind,
                                                 const OMPExecutableDirective &S) {
+  CGM.OpenMPSupport.setTeams(true);
   if (CGM.getOpenMPRuntime().requiresMicroTaskForTeams())
     EmitOMPDirectiveWithTeamsMicrotask(DKind, SKind, S);
   else
@@ -2275,6 +2276,7 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
   // The team and thread number is the only information that we need to share
   // from what is enclosed in the target regions so we need to save it before
   // we erase the OpenMP region.
+  bool HasTeams = false;
   Expr *NumTeamsExpr = nullptr;
   Expr *ThreadLimitExpr = nullptr;
 
@@ -2282,6 +2284,7 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
   if (!Fn){
     CGM.OpenMPSupport.startOpenMPRegion(true);
     CGM.OpenMPSupport.setTarget(true);
+    CGM.OpenMPSupport.setTeams(false);
 
     if (isTargetMode)
       CGM.getOpenMPRuntime().StartNewTargetRegion();
@@ -2428,6 +2431,7 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
       CGF.FinishFunction();
     }
 
+    HasTeams = CGM.OpenMPSupport.getTeams();
     NumTeamsExpr = CGM.OpenMPSupport.getNumTeams();
     ThreadLimitExpr = CGM.OpenMPSupport.getThreadLimit();
     CGM.OpenMPSupport.endOpenMPRegion();
@@ -2704,30 +2708,17 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
     llvm::Value *TgtTargetFn = 0;
 
     bool hasNoWait = CGM.OpenMPSupport.getNoWait() || ArraySize > 0;
-    if (NumTeamsExpr && ThreadLimitExpr){
+    if (HasTeams) {
       TgtTargetFn = hasNoWait ? OPENMPRTL_FUNC(target_teams_nowait) :
                                 OPENMPRTL_FUNC(target_teams);
-      TgtArgs.push_back(EmitScalarExpr(NumTeamsExpr,true));
-      TgtArgs.push_back(EmitScalarExpr(ThreadLimitExpr,true));
-    }
-    else if (NumTeamsExpr) {
-      TgtTargetFn = hasNoWait ? OPENMPRTL_FUNC(target_teams_nowait) :
-                                OPENMPRTL_FUNC(target_teams);
-      TgtArgs.push_back(EmitScalarExpr(NumTeamsExpr,true));
-      TgtArgs.push_back(Builder.getInt32(0));
-    }
-    else if (ThreadLimitExpr) {
-      TgtTargetFn = hasNoWait ? OPENMPRTL_FUNC(target_teams_nowait) :
-                                OPENMPRTL_FUNC(target_teams);
-      TgtArgs.push_back(Builder.getInt32(0));
-      TgtArgs.push_back(EmitScalarExpr(ThreadLimitExpr,true));
-    }
-    else if (DKind == OMPD_target_teams) {
-      // target teams without teams clauses
-      TgtTargetFn = hasNoWait ? OPENMPRTL_FUNC(target_teams_nowait) :
-                                OPENMPRTL_FUNC(target_teams);
-      TgtArgs.push_back(Builder.getInt32(0));
-      TgtArgs.push_back(Builder.getInt32(0));
+      if (NumTeamsExpr)
+        TgtArgs.push_back(EmitScalarExpr(NumTeamsExpr,true));
+      else
+        TgtArgs.push_back(Builder.getInt32(0));
+      if (ThreadLimitExpr)
+        TgtArgs.push_back(EmitScalarExpr(ThreadLimitExpr,true));
+      else
+        TgtArgs.push_back(Builder.getInt32(0));
     }
     else {
       TgtTargetFn = hasNoWait ? OPENMPRTL_FUNC(target_nowait) :
