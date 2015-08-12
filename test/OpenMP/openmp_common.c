@@ -14,3 +14,8 @@ for (int i = 0; i < 1; ++i) ++i;
 for (int i = 0; i < 1; ++i) ++i;
 foo();
 }
+
+typedef struct S {
+#pragma omp parallel for private(j) schedule(static) if (tree1->totleaf > 1024) // expected-error {{unexpected OpenMP directive '#pragma omp parallel for'}}
+} St;
+
