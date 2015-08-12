@@ -1623,7 +1623,8 @@ void MicrosoftCXXNameMangler::mangleType(const FunctionProtoType *T, Qualifiers,
 }
 void MicrosoftCXXNameMangler::mangleType(const FunctionNoProtoType *T,
                                          Qualifiers, SourceRange) {
-  llvm_unreachable("Can't mangle K&R function prototypes");
+  Out << "$$A6";
+  mangleFunctionType(T);
 }
 
 void MicrosoftCXXNameMangler::mangleFunctionType(const FunctionType *T,
@@ -1631,7 +1632,7 @@ void MicrosoftCXXNameMangler::mangleFunctionType(const FunctionType *T,
                                                  bool ForceThisQuals) {
   // <function-type> ::= <this-cvr-qualifiers> <calling-convention>
   //                     <return-type> <argument-list> <throw-spec>
-  const FunctionProtoType *Proto = cast<FunctionProtoType>(T);
+  const FunctionProtoType *Proto = dyn_cast<FunctionProtoType>(T);
 
   SourceRange Range;
   if (D) Range = D->getSourceRange();
@@ -1702,7 +1703,7 @@ void MicrosoftCXXNameMangler::mangleFunctionType(const FunctionType *T,
     }
     Out << '@';
   } else {
-    QualType ResultType = Proto->getReturnType();
+    QualType ResultType = T->getReturnType();
     if (const auto *AT =
             dyn_cast_or_null<AutoType>(ResultType->getContainedAutoType())) {
       Out << '?';
@@ -1720,7 +1721,12 @@ void MicrosoftCXXNameMangler::mangleFunctionType(const FunctionType *T,
   // <argument-list> ::= X # void
   //                 ::= <type>+ @
   //                 ::= <type>* Z # varargs
-  if (Proto->getNumParams() == 0 && !Proto->isVariadic()) {
+  if (!Proto) {
+    // Function types without prototypes can arise when mangling a function type
+    // within an overloadable function in C. We mangle these as the absence of
+    // any parameter types (not even an empty parameter list).
+    Out << '@';
+  } else if (Proto->getNumParams() == 0 && !Proto->isVariadic()) {
     Out << 'X';
   } else {
     // Happens for function pointer type arguments for example.
