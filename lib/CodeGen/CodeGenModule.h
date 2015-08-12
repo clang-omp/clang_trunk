@@ -1254,6 +1254,7 @@ public:
       bool TargetDeclare;
       bool Target;
       bool HasLastPrivate;
+      bool Teams;
       bool Distribute;
       llvm::DenseMap<const ValueDecl *, FieldDecl *> TaskFields;
       llvm::Type *TaskPrivateTy;
@@ -1389,6 +1390,8 @@ public:
     bool getTargetDeclare();
     void setTarget(bool Flag);
     bool getTarget();
+    void setTeams(bool Flag);
+    bool getTeams();
     void setDistribute(bool Flag);
     bool getDistribute();
     bool getParentUntied();

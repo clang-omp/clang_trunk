@@ -4098,6 +4098,14 @@ bool CodeGenModule::OpenMPSupportStackTy::getTarget() {
   return false;
 }
 
+void CodeGenModule::OpenMPSupportStackTy::setTeams(bool Flag) {
+  OpenMPStack.back().Teams = Flag;
+}
+
+bool CodeGenModule::OpenMPSupportStackTy::getTeams() {
+  return OpenMPStack.back().Teams;
+}
+
 void CodeGenModule::OpenMPSupportStackTy::setDistribute(bool Flag){
   OpenMPStack.back().Distribute = Flag;
 }
