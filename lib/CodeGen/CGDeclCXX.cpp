@@ -782,7 +782,8 @@ void CodeGenModule::CreateOpenMPCXXInit(const VarDecl *Var,
 //                                                   AggValueSlot::IsNotAliased));
 //    //CGF.EmitCXXConstructorCall(CtorDecl, Ctor_Complete, false, false,
 //    //                           Fn->arg_begin(), 0, 0);
-    llvm::Value *Arg = CGF.EmitScalarConversion(Fn->arg_begin(), getContext().VoidPtrTy, getContext().getPointerType(Var->getType()));
+    llvm::Value *Arg = CGF.EmitScalarConversion(Fn->arg_begin(), getContext().VoidPtrTy,
+                         getContext().getPointerType(Var->getType()), SourceLocation());
     CGF.EmitAnyExprToMem(Init, Arg, Init->getType().getQualifiers(), true);
     CGF.Builder.CreateStore(Fn->arg_begin(), CGF.ReturnValue);
     CGF.FinishFunction();
@@ -955,7 +956,8 @@ void CodeGenModule::CreateOpenMPArrCXXInit(const VarDecl *Var,
 //                                          AggValueSlot::DoesNotNeedGCBarriers,
 //                                          AggValueSlot::IsNotAliased));
 //    CGF.Builder.CreateStore(Fn->arg_begin(), CGF.ReturnValue);
-    llvm::Value *Arg = CGF.EmitScalarConversion(Fn->arg_begin(), getContext().VoidPtrTy, getContext().getPointerType(Var->getType()));
+    llvm::Value *Arg = CGF.EmitScalarConversion(Fn->arg_begin(), getContext().VoidPtrTy,
+                         getContext().getPointerType(Var->getType()), SourceLocation());
     CGF.EmitAnyExprToMem(Init, Arg, Init->getType().getQualifiers(), true);
     CGF.Builder.CreateStore(Fn->arg_begin(), CGF.ReturnValue);
     CGF.FinishFunction();

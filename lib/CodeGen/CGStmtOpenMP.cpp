@@ -5573,7 +5573,8 @@ void CodeGenFunction::EmitOMPConditionalIfHelper(
   llvm::CallInst *Call = EmitOMPCallWithLocAndTidHelper(Func, Loc);
   // Convert Call's result to bool, to use in IF-stmt
   llvm::Value *CallBool =
-      EmitScalarConversion(Call, getContext().IntTy, getContext().BoolTy);
+      EmitScalarConversion(Call, getContext().IntTy, getContext().BoolTy,
+                           SourceLocation());
   // Generate the basic blocks
   llvm::BasicBlock *ThenBlock = createBasicBlock((NameStr + ".then").c_str());
   llvm::BasicBlock *ContBlock = createBasicBlock((NameStr + ".end").c_str());
@@ -5772,7 +5773,8 @@ void CodeGenFunction::EmitOMPAtomicDirective(const OMPAtomicDirective &S) {
             Builder.CreatePointerCast(X.getAddress(), ATy->getPointerTo()));
         llvm::Value *Res = EmitRuntimeCall(AtomicFunc, Args);
         // v = x;
-        Res = EmitScalarConversion(Res, AQTy, S.getV()->getType());
+        Res = EmitScalarConversion(Res, AQTy, S.getV()->getType(),
+                                   SourceLocation());
         EmitStoreOfScalar(Res, EmitLValue(S.getV()));
       } else {
         EmitRuntimeCall(OPENMPRTL_FUNC(atomic_start));
@@ -5805,7 +5807,7 @@ void CodeGenFunction::EmitOMPAtomicDirective(const OMPAtomicDirective &S) {
             Builder.CreatePointerCast(X.getAddress(), ATy->getPointerTo()));
         Args.push_back(
             EmitScalarConversion(EmitAnyExpr(S.getExpr()).getScalarVal(),
-                                 S.getExpr()->getType(), AQTy));
+                                 S.getExpr()->getType(), AQTy, SourceLocation()));
         EmitRuntimeCall(AtomicFunc, Args);
       } else {
         RValue Val = EmitAnyExpr(S.getExpr());
@@ -5943,7 +5945,8 @@ void CodeGenFunction::EmitOMPAtomicDirective(const OMPAtomicDirective &S) {
         Args.push_back(Builder.getInt32(S.isCaptureAfter() ? 1 : 0));
         llvm::Value *Res = EmitRuntimeCall(AtomicFunc, Args);
         // v = x;
-        Res = EmitScalarConversion(Res, AQTyRes, S.getV()->getType());
+        Res = EmitScalarConversion(Res, AQTyRes, S.getV()->getType(),
+                                   SourceLocation());
         EmitStoreOfScalar(Res, EmitLValue(S.getV()));
       } else {
         EmitRuntimeCall(OPENMPRTL_FUNC(atomic_start));

@@ -3617,7 +3617,7 @@ void Parser::ParseStructUnionBody(SourceLocation RecordLoc,
 
     if (Tok.is(tok::annot_pragma_openmp)) {
       // Result can be ignored, because it must be always empty.
-      auto Res = ParseOpenMPDeclarativeDirective();
+      auto Res = ParseOpenMPDeclarativeDirective(AS_none);
       assert(!Res);
       // Silence possible warnings.
       (void)Res;
