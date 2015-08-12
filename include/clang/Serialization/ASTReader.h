@@ -1928,8 +1928,9 @@ public:
                                 unsigned &Idx);
 
   /// \brief Read a template argument.
-  TemplateArgument ReadTemplateArgument(ModuleFile &F,
-                                        const RecordData &Record,unsigned &Idx);
+  TemplateArgument ReadTemplateArgument(ModuleFile &F, const RecordData &Record,
+                                        unsigned &Idx,
+                                        bool Canonicalize = false);
 
   /// \brief Read a template parameter list.
   TemplateParameterList *ReadTemplateParameterList(ModuleFile &F,
@@ -1937,10 +1938,9 @@ public:
                                                    unsigned &Idx);
 
   /// \brief Read a template argument array.
-  void
-  ReadTemplateArgumentList(SmallVectorImpl<TemplateArgument> &TemplArgs,
-                           ModuleFile &F, const RecordData &Record,
-                           unsigned &Idx);
+  void ReadTemplateArgumentList(SmallVectorImpl<TemplateArgument> &TemplArgs,
+                                ModuleFile &F, const RecordData &Record,
+                                unsigned &Idx, bool Canonicalize = false);
 
   /// \brief Read a UnresolvedSet structure.
   void ReadUnresolvedSet(ModuleFile &F, LazyASTUnresolvedSet &Set,
