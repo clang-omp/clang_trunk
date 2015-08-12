@@ -143,17 +143,19 @@ public:
   /// Emit a check that a conversion to or from a floating-point type does not
   /// overflow.
   void EmitFloatConversionCheck(Value *OrigSrc, QualType OrigSrcType,
-                                Value *Src, QualType SrcType,
-                                QualType DstType, llvm::Type *DstTy);
+                                Value *Src, QualType SrcType, QualType DstType,
+                                llvm::Type *DstTy, SourceLocation Loc);
 
   /// Emit a conversion from the specified type to the specified destination
   /// type, both of which are LLVM scalar types.
-  Value *EmitScalarConversion(Value *Src, QualType SrcTy, QualType DstTy);
+  Value *EmitScalarConversion(Value *Src, QualType SrcTy, QualType DstTy,
+                              SourceLocation Loc);
 
   /// Emit a conversion from the specified complex type to the specified
   /// destination type, where the destination type is an LLVM scalar type.
   Value *EmitComplexToScalarConversion(CodeGenFunction::ComplexPairTy Src,
-                                       QualType SrcTy, QualType DstTy);
+                                       QualType SrcTy, QualType DstTy,
+                                       SourceLocation Loc);
 
   /// EmitNullValue - Emit a value that corresponds to null for the given type.
   Value *EmitNullValue(QualType Ty);
@@ -598,11 +600,9 @@ Value *ScalarExprEmitter::EmitConversionToBool(Value *Src, QualType SrcType) {
   return EmitPointerToBoolConversion(Src);
 }
 
-void ScalarExprEmitter::EmitFloatConversionCheck(Value *OrigSrc,
-                                                 QualType OrigSrcType,
-                                                 Value *Src, QualType SrcType,
-                                                 QualType DstType,
-                                                 llvm::Type *DstTy) {
+void ScalarExprEmitter::EmitFloatConversionCheck(
+    Value *OrigSrc, QualType OrigSrcType, Value *Src, QualType SrcType,
+    QualType DstType, llvm::Type *DstTy, SourceLocation Loc) {
   CodeGenFunction::SanitizerScope SanScope(&CGF);
   using llvm::APFloat;
   using llvm::APSInt;
@@ -726,11 +726,9 @@ void ScalarExprEmitter::EmitFloatConversionCheck(Value *OrigSrc,
     }
   }
 
-  // FIXME: Provide a SourceLocation.
-  llvm::Constant *StaticArgs[] = {
-    CGF.EmitCheckTypeDescriptor(OrigSrcType),
-    CGF.EmitCheckTypeDescriptor(DstType)
-  };
+  llvm::Constant *StaticArgs[] = {CGF.EmitCheckSourceLocation(Loc),
+                                  CGF.EmitCheckTypeDescriptor(OrigSrcType),
+                                  CGF.EmitCheckTypeDescriptor(DstType)};
   CGF.EmitCheck(std::make_pair(Check, SanitizerKind::FloatCastOverflow),
                 "float_cast_overflow", StaticArgs, OrigSrc);
 }
@@ -738,7 +736,8 @@ void ScalarExprEmitter::EmitFloatConversionCheck(Value *OrigSrc,
 /// Emit a conversion from the specified type to the specified destination type,
 /// both of which are LLVM scalar types.
 Value *ScalarExprEmitter::EmitScalarConversion(Value *Src, QualType SrcType,
-                                               QualType DstType) {
+                                               QualType DstType,
+                                               SourceLocation Loc) {
   SrcType = CGF.getContext().getCanonicalType(SrcType);
   DstType = CGF.getContext().getCanonicalType(DstType);
   if (SrcType == DstType) return Src;
@@ -813,7 +812,7 @@ Value *ScalarExprEmitter::EmitScalarConversion(Value *Src, QualType SrcType,
   if (DstType->isExtVectorType() && !SrcType->isVectorType()) {
     // Cast the scalar to element type
     QualType EltTy = DstType->getAs<ExtVectorType>()->getElementType();
-    llvm::Value *Elt = EmitScalarConversion(Src, SrcType, EltTy);
+    llvm::Value *Elt = EmitScalarConversion(Src, SrcType, EltTy, Loc);
 
     // Splat the element across to all elements
     unsigned NumElements = cast<llvm::VectorType>(DstTy)->getNumElements();
@@ -833,8 +832,8 @@ Value *ScalarExprEmitter::EmitScalarConversion(Value *Src, QualType SrcType,
   // or the destination type is a floating-point type.
   if (CGF.SanOpts.has(SanitizerKind::FloatCastOverflow) &&
       (OrigSrcType->isFloatingType() || DstType->isFloatingType()))
-    EmitFloatConversionCheck(OrigSrc, OrigSrcType, Src, SrcType, DstType,
-                             DstTy);
+    EmitFloatConversionCheck(OrigSrc, OrigSrcType, Src, SrcType, DstType, DstTy,
+                             Loc);
 
   // Cast to half through float if half isn't a native type.
   if (DstType->isHalfType() && !CGF.getContext().getLangOpts().NativeHalfType) {
@@ -890,17 +889,17 @@ Value *ScalarExprEmitter::EmitScalarConversion(Value *Src, QualType SrcType,
 
 /// Emit a conversion from the specified complex type to the specified
 /// destination type, where the destination type is an LLVM scalar type.
-Value *ScalarExprEmitter::
-EmitComplexToScalarConversion(CodeGenFunction::ComplexPairTy Src,
-                              QualType SrcTy, QualType DstTy) {
+Value *ScalarExprEmitter::EmitComplexToScalarConversion(
+    CodeGenFunction::ComplexPairTy Src, QualType SrcTy, QualType DstTy,
+    SourceLocation Loc) {
   // Get the source element type.
   SrcTy = SrcTy->castAs<ComplexType>()->getElementType();
 
   // Handle conversions to bool first, they are special: comparisons against 0.
   if (DstTy->isBooleanType()) {
     //  Complex != 0  -> (Real != 0) | (Imag != 0)
-    Src.first  = EmitScalarConversion(Src.first, SrcTy, DstTy);
-    Src.second = EmitScalarConversion(Src.second, SrcTy, DstTy);
+    Src.first = EmitScalarConversion(Src.first, SrcTy, DstTy, Loc);
+    Src.second = EmitScalarConversion(Src.second, SrcTy, DstTy, Loc);
     return Builder.CreateOr(Src.first, Src.second, "tobool");
   }
 
@@ -908,7 +907,7 @@ EmitComplexToScalarConversion(CodeGenFunction::ComplexPairTy Src,
   // the imaginary part of the complex value is discarded and the value of the
   // real part is converted according to the conversion rules for the
   // corresponding real type.
-  return EmitScalarConversion(Src.first, SrcTy, DstTy);
+  return EmitScalarConversion(Src.first, SrcTy, DstTy, Loc);
 }
 
 Value *ScalarExprEmitter::EmitNullValue(QualType Ty) {
@@ -1564,7 +1563,8 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     llvm::Type *DstTy = ConvertType(DestTy);
     Value *Elt = Visit(const_cast<Expr*>(E));
     Elt = EmitScalarConversion(Elt, E->getType(),
-                               DestTy->getAs<VectorType>()->getElementType());
+                               DestTy->getAs<VectorType>()->getElementType(),
+                               CE->getExprLoc());
 
     // Splat the element across to all elements
     unsigned NumElements = cast<llvm::VectorType>(DstTy)->getNumElements();
@@ -1575,7 +1575,8 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
   case CK_IntegralToFloating:
   case CK_FloatingToIntegral:
   case CK_FloatingCast:
-    return EmitScalarConversion(Visit(E), E->getType(), DestTy);
+    return EmitScalarConversion(Visit(E), E->getType(), DestTy,
+                                CE->getExprLoc());
   case CK_IntegralToBoolean:
     return EmitIntToBoolConversion(Visit(E));
   case CK_PointerToBoolean:
@@ -1597,7 +1598,8 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     CodeGenFunction::ComplexPairTy V = CGF.EmitComplexExpr(E);
 
     // TODO: kill this function off, inline appropriate case here
-    return EmitComplexToScalarConversion(V, E->getType(), DestTy);
+    return EmitComplexToScalarConversion(V, E->getType(), DestTy,
+                                         CE->getExprLoc());
   }
 
   case CK_ZeroToOCLEvent: {
@@ -2174,8 +2176,10 @@ LValue ScalarExprEmitter::EmitCompoundAssignLValue(
           llvm_unreachable("Invalid compound assignment type");
       }
       if (aop != llvm::AtomicRMWInst::BAD_BINOP) {
-        llvm::Value *amt = CGF.EmitToMemory(EmitScalarConversion(OpInfo.RHS,
-              E->getRHS()->getType(), LHSTy), LHSTy);
+        llvm::Value *amt = CGF.EmitToMemory(
+            EmitScalarConversion(OpInfo.RHS, E->getRHS()->getType(), LHSTy,
+                                 E->getExprLoc()),
+            LHSTy);
         Builder.CreateAtomicRMW(aop, LHSLV.getAddress(), amt,
             llvm::SequentiallyConsistent);
         return LHSLV;
@@ -2196,14 +2200,16 @@ LValue ScalarExprEmitter::EmitCompoundAssignLValue(
   else
     OpInfo.LHS = EmitLoadOfLValue(LHSLV, E->getExprLoc());
 
-  OpInfo.LHS = EmitScalarConversion(OpInfo.LHS, LHSTy,
-                                    E->getComputationLHSType());
+  SourceLocation Loc = E->getExprLoc();
+  OpInfo.LHS =
+      EmitScalarConversion(OpInfo.LHS, LHSTy, E->getComputationLHSType(), Loc);
 
   // Expand the binary operator.
   Result = (this->*Func)(OpInfo);
 
   // Convert the result back to the LHS type.
-  Result = EmitScalarConversion(Result, E->getComputationResultType(), LHSTy);
+  Result =
+      EmitScalarConversion(Result, E->getComputationResultType(), LHSTy, Loc);
 
   if (atomicPHI) {
     llvm::BasicBlock *opBB = Builder.GetInsertBlock();
@@ -2928,7 +2934,8 @@ Value *ScalarExprEmitter::EmitCompare(const BinaryOperator *E,unsigned UICmpOpc,
       Value *CR6Param = Builder.getInt32(CR6);
       llvm::Function *F = CGF.CGM.getIntrinsic(ID);
       Result = Builder.CreateCall(F, {CR6Param, FirstVecArg, SecondVecArg});
-      return EmitScalarConversion(Result, CGF.getContext().BoolTy, E->getType());
+      return EmitScalarConversion(Result, CGF.getContext().BoolTy, E->getType(),
+                                  E->getExprLoc());
     }
 
     if (LHS->getType()->isFPOrFPVectorTy()) {
@@ -2997,7 +3004,8 @@ Value *ScalarExprEmitter::EmitCompare(const BinaryOperator *E,unsigned UICmpOpc,
     }
   }
 
-  return EmitScalarConversion(Result, CGF.getContext().BoolTy, E->getType());
+  return EmitScalarConversion(Result, CGF.getContext().BoolTy, E->getType(),
+                              E->getExprLoc());
 }
 
 Value *ScalarExprEmitter::VisitBinAssign(const BinaryOperator *E) {
@@ -3479,21 +3487,23 @@ Value *CodeGenFunction::EmitScalarExpr(const Expr *E, bool IgnoreResultAssign) {
 /// Emit a conversion from the specified type to the specified destination type,
 /// both of which are LLVM scalar types.
 Value *CodeGenFunction::EmitScalarConversion(Value *Src, QualType SrcTy,
-                                             QualType DstTy) {
+                                             QualType DstTy,
+                                             SourceLocation Loc) {
   assert(hasScalarEvaluationKind(SrcTy) && hasScalarEvaluationKind(DstTy) &&
          "Invalid scalar expression to emit");
-  return ScalarExprEmitter(*this).EmitScalarConversion(Src, SrcTy, DstTy);
+  return ScalarExprEmitter(*this).EmitScalarConversion(Src, SrcTy, DstTy, Loc);
 }
 
 /// Emit a conversion from the specified complex type to the specified
 /// destination type, where the destination type is an LLVM scalar type.
 Value *CodeGenFunction::EmitComplexToScalarConversion(ComplexPairTy Src,
                                                       QualType SrcTy,
-                                                      QualType DstTy) {
+                                                      QualType DstTy,
+                                                      SourceLocation Loc) {
   assert(SrcTy->isAnyComplexType() && hasScalarEvaluationKind(DstTy) &&
          "Invalid complex -> scalar conversion");
-  return ScalarExprEmitter(*this).EmitComplexToScalarConversion(Src, SrcTy,
-                                                                DstTy);
+  return ScalarExprEmitter(*this)
+      .EmitComplexToScalarConversion(Src, SrcTy, DstTy, Loc);
 }
 
 
