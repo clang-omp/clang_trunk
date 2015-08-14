@@ -859,6 +859,7 @@ public:
     CharUnits Alignment;
 
     ByrefHelpers(CharUnits alignment) : Alignment(alignment) {}
+    ByrefHelpers(const ByrefHelpers &) = default;
     virtual ~ByrefHelpers();
 
     void Profile(llvm::FoldingSetNodeID &id) const {
