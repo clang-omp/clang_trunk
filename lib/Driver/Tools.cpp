@@ -5707,7 +5707,6 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back(Clang::getBaseInputName(Args, Input));
 
   // Add the target cpu
-  const llvm::Triple Triple(TripleStr);
   std::string CPU = getCPUName(Args, Triple, JA.getOffloadingDevice(),
                                /*FromAs*/ true);
   if (!CPU.empty()) {
