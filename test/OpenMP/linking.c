@@ -14,3 +14,4 @@
 // CHECK-LD-64: "{{.*}}ld{{(.exe)?}}"
 // CHECK-LD-64: "-lomp" "-lgcc"
 // CHECK-LD-64: "-lpthread" "-lc"
+
