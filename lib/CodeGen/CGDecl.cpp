@@ -410,7 +410,7 @@ void CodeGenFunction::EmitStaticVarDecl(const VarDecl &D,
 }
 
 namespace {
-  struct DestroyObject : EHScopeStack::Cleanup {
+  struct DestroyObject final : EHScopeStack::Cleanup {
     DestroyObject(llvm::Value *addr, QualType type,
                   CodeGenFunction::Destroyer *destroyer,
                   bool useEHCleanupForArray)
@@ -431,7 +431,7 @@ namespace {
     }
   };
 
-  struct DestroyNRVOVariable : EHScopeStack::Cleanup {
+  struct DestroyNRVOVariable final : EHScopeStack::Cleanup {
     DestroyNRVOVariable(llvm::Value *addr,
                         const CXXDestructorDecl *Dtor,
                         llvm::Value *NRVOFlag)
@@ -464,7 +464,7 @@ namespace {
     }
   };
 
-  struct CallStackRestore : EHScopeStack::Cleanup {
+  struct CallStackRestore final : EHScopeStack::Cleanup {
     llvm::Value *Stack;
     CallStackRestore(llvm::Value *Stack) : Stack(Stack) {}
     void Emit(CodeGenFunction &CGF, Flags flags) override {
@@ -474,7 +474,7 @@ namespace {
     }
   };
 
-  struct ExtendGCLifetime : EHScopeStack::Cleanup {
+  struct ExtendGCLifetime final : EHScopeStack::Cleanup {
     const VarDecl &Var;
     ExtendGCLifetime(const VarDecl *var) : Var(*var) {}
 
@@ -489,7 +489,7 @@ namespace {
     }
   };
 
-  struct CallCleanupFunction : EHScopeStack::Cleanup {
+  struct CallCleanupFunction final : EHScopeStack::Cleanup {
     llvm::Constant *CleanupFn;
     const CGFunctionInfo &FnInfo;
     const VarDecl &Var;
@@ -523,7 +523,7 @@ namespace {
   };
 
   /// A cleanup to call @llvm.lifetime.end.
-  class CallLifetimeEnd : public EHScopeStack::Cleanup {
+  class CallLifetimeEnd final : public EHScopeStack::Cleanup {
     llvm::Value *Addr;
     llvm::Value *Size;
   public:
@@ -1558,7 +1558,7 @@ namespace {
   /// RegularPartialArrayDestroy - a cleanup which performs a partial
   /// array destroy where the end pointer is regularly determined and
   /// does not need to be loaded from a local.
-  class RegularPartialArrayDestroy : public EHScopeStack::Cleanup {
+  class RegularPartialArrayDestroy final : public EHScopeStack::Cleanup {
     llvm::Value *ArrayBegin;
     llvm::Value *ArrayEnd;
     QualType ElementType;
@@ -1579,7 +1579,7 @@ namespace {
   /// IrregularPartialArrayDestroy - a cleanup which performs a
   /// partial array destroy where the end pointer is irregularly
   /// determined and must be loaded from a local.
-  class IrregularPartialArrayDestroy : public EHScopeStack::Cleanup {
+  class IrregularPartialArrayDestroy final : public EHScopeStack::Cleanup {
     llvm::Value *ArrayBegin;
     llvm::Value *ArrayEndPointer;
     QualType ElementType;
@@ -1651,7 +1651,7 @@ namespace {
   /// function.  This is used to balance out the incoming +1 of a
   /// ns_consumed argument when we can't reasonably do that just by
   /// not doing the initial retain for a __block argument.
-  struct ConsumeARCParameter : EHScopeStack::Cleanup {
+  struct ConsumeARCParameter final : EHScopeStack::Cleanup {
     ConsumeARCParameter(llvm::Value *param,
                         ARCPreciseLifetime_t precise)
       : Param(param), Precise(precise) {}
