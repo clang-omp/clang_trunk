@@ -5059,6 +5059,11 @@ public:
   }
   SourceLocation getLocStart() const LLVM_READONLY { return SourceLocation(); }
   SourceLocation getLocEnd() const LLVM_READONLY { return SourceLocation(); }
+  
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == TypoExprClass;
+  }
+
 };
 }  // end namespace clang
 

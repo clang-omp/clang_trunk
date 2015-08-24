@@ -755,6 +755,12 @@ static bool readBit(unsigned &Bits) {
   return Value;
 }
 
+IdentID ASTIdentifierLookupTrait::ReadIdentifierID(const unsigned char *d) {
+  using namespace llvm::support;
+  unsigned RawID = endian::readNext<uint32_t, little, unaligned>(d);
+  return Reader.getGlobalIdentifierID(F, RawID >> 1);
+}
+
 IdentifierInfo *ASTIdentifierLookupTrait::ReadData(const internal_key_type& k,
                                                    const unsigned char* d,
                                                    unsigned DataLen) {
@@ -3100,22 +3106,6 @@ ASTReader::ReadASTBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
       break;
     }
 
-    case LOCAL_REDECLARATIONS: {
-      F.RedeclarationChains.swap(Record);
-      break;
-    }
-        
-    case LOCAL_REDECLARATIONS_MAP: {
-      if (F.LocalNumRedeclarationsInMap != 0) {
-        Error("duplicate LOCAL_REDECLARATIONS_MAP record in AST file");
-        return Failure;
-      }
-      
-      F.LocalNumRedeclarationsInMap = Record[0];
-      F.RedeclarationsMap = (const LocalRedeclarationsInfo *)Blob.data();
-      break;
-    }
-        
     case MACRO_OFFSET: {
       if (F.LocalNumMacros != 0) {
         Error("duplicate MACRO_OFFSET record in AST file");
@@ -3471,7 +3461,20 @@ ASTReader::ASTReadResult ASTReader::ReadAST(const std::string &FileName,
       ASTIdentifierLookupTrait Trait(*this, F);
       auto KeyDataLen = Trait.ReadKeyDataLength(Data);
       auto Key = Trait.ReadKey(Data, KeyDataLen.first);
-      PP.getIdentifierTable().getOwn(Key).setOutOfDate(true);
+      auto &II = PP.getIdentifierTable().getOwn(Key);
+      II.setOutOfDate(true);
+
+      // Mark this identifier as being from an AST file so that we can track
+      // whether we need to serialize it.
+      if (!II.isFromAST()) {
+        II.setIsFromAST();
+        if (isInterestingIdentifier(*this, II, F.isModule()))
+          II.setChangedSinceDeserialization();
+      }
+
+      // Associate the ID with the identifier so that the writer can reuse it.
+      auto ID = Trait.ReadIdentifierID(Data + KeyDataLen.first);
+      SetIdentifierInfo(ID, &II);
     }
   }
 
@@ -8138,7 +8141,7 @@ void ASTReader::finishPendingActions() {
 
     // Load pending declaration chains.
     for (unsigned I = 0; I != PendingDeclChains.size(); ++I)
-      loadPendingDeclChain(PendingDeclChains[I]);
+      loadPendingDeclChain(PendingDeclChains[I].first, PendingDeclChains[I].second);
     PendingDeclChains.clear();
 
     // Make the most recent of the top-level declarations visible.

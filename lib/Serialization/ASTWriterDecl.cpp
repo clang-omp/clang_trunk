@@ -1568,8 +1568,6 @@ void ASTDeclWriter::VisitRedeclarable(Redeclarable<T> *D) {
     // first local declaration in the chain.
     const Decl *FirstLocal = Writer.getFirstLocalDecl(DAsT);
     if (DAsT == FirstLocal) {
-      Writer.Redeclarations.push_back(DAsT);
-
       // Emit a list of all imported first declarations so that we can be sure
       // that all redeclarations visible to this module are before D in the
       // redecl chain.
@@ -1579,6 +1577,23 @@ void ASTDeclWriter::VisitRedeclarable(Redeclarable<T> *D) {
         AddFirstDeclFromEachModule(DAsT, /*IncludeLocal*/false);
       // This is the number of imported first declarations + 1.
       Record[I] = Record.size() - I;
+
+      // Collect the set of local redeclarations of this declaration, from
+      // newest to oldest.
+      RecordData LocalRedecls;
+      for (const Decl *Prev = FirstLocal->getMostRecentDecl();
+           Prev != FirstLocal; Prev = Prev->getPreviousDecl())
+        if (!Prev->isFromASTFile())
+          Writer.AddDeclRef(Prev, LocalRedecls);
+
+      // If we have any redecls, write them now as a separate record preceding
+      // the declaration itself.
+      if (LocalRedecls.empty())
+        Record.push_back(0);
+      else {
+        Record.push_back(Writer.Stream.GetCurrentBitNo());
+        Writer.Stream.EmitRecord(LOCAL_REDECLARATIONS, LocalRedecls);
+      }
     } else {
       Record.push_back(0);
       Writer.AddDeclRef(FirstLocal, Record);
@@ -2164,6 +2179,13 @@ void ASTWriter::WriteDecl(ASTContext &Context, Decl *D) {
     VisibleOffset = WriteDeclContextVisibleBlock(Context, DC);
   }
   
+  // Build a record for this declaration
+  Record.clear();
+  W.Code = (serialization::DeclCode)0;
+  W.AbbrevToUse = 0;
+  W.Visit(D);
+  if (DC) W.VisitDeclContext(DC, LexicalOffset, VisibleOffset);
+
   if (isReplacingADecl) {
     // We're replacing a decl in a previous file.
     ReplacedDecls.push_back(ReplacedDeclInfo(ID, Stream.GetCurrentBitNo(),
@@ -2180,18 +2202,11 @@ void ASTWriter::WriteDecl(ASTContext &Context, Decl *D) {
       DeclOffsets[Index].setLocation(Loc);
       DeclOffsets[Index].BitOffset = Stream.GetCurrentBitNo();
     }
-    
+
     SourceManager &SM = Context.getSourceManager();
     if (Loc.isValid() && SM.isLocalSourceLocation(Loc))
       associateDeclWithFile(D, ID);
   }
-
-  // Build and emit a record for this declaration
-  Record.clear();
-  W.Code = (serialization::DeclCode)0;
-  W.AbbrevToUse = 0;
-  W.Visit(D);
-  if (DC) W.VisitDeclContext(DC, LexicalOffset, VisibleOffset);
 
   if (!W.Code)
     llvm::report_fatal_error(StringRef("unexpected declaration kind '") +
