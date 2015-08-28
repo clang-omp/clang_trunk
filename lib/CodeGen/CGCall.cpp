@@ -1412,7 +1412,8 @@ void CodeGenModule::ConstructAttributeList(const CGFunctionInfo &FI,
 
     if (const FunctionDecl *Fn = dyn_cast<FunctionDecl>(TargetDecl)) {
       const FunctionProtoType *FPT = Fn->getType()->getAs<FunctionProtoType>();
-      if (FPT && FPT->isNothrow(getContext()))
+      if (FPT && !isUnresolvedExceptionSpec(FPT->getExceptionSpecType()) &&
+          FPT->isNothrow(getContext()))
         FuncAttrs.addAttribute(llvm::Attribute::NoUnwind);
       // Don't use [[noreturn]] or _Noreturn for a call to a virtual function.
       // These attributes are not inherited by overloads.
@@ -1502,8 +1503,8 @@ void CodeGenModule::ConstructAttributeList(const CGFunctionInfo &FI,
       const auto *TD = FD->getAttr<TargetAttr>();
 
       // Make a copy of the features as passed on the command line.
-      std::vector<std::string> FnFeatures(
-          getTarget().getTargetOpts().FeaturesAsWritten);
+      std::vector<std::string> FnFeatures =
+          getTarget().getTargetOpts().FeaturesAsWritten;
 
       // Grab the target attribute string.
       StringRef FeaturesStr = TD->getFeatures();
@@ -1537,8 +1538,7 @@ void CodeGenModule::ConstructAttributeList(const CGFunctionInfo &FI,
       // the default or a new one from the target attribute string. Then we'll
       // use the passed in features (FeaturesAsWritten) along with the new ones
       // from the attribute.
-      getTarget().initDefaultFeatures(FeatureMap, TargetCPU);
-      getTarget().handleUserFeatures(FeatureMap, FnFeatures, Diags);
+      getTarget().initFeatureMap(FeatureMap, Diags, TargetCPU, FnFeatures);
 
       // Produce the canonical string for this set of features.
       std::vector<std::string> Features;
