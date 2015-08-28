@@ -1273,11 +1273,13 @@ void Driver::BuildInputs(const ToolChain &TC, DerivedArgList &Args,
   }
 }
 
-// For each unique --cuda-gpu-arch= argument creates a TY_CUDA_DEVICE input
-// action and then wraps each in CudaDeviceAction paired with appropriate GPU
-// arch name. If we're only building device-side code, each action remains
-// independent. Otherwise we pass device-side actions as inputs to a new
-// CudaHostAction which combines both host and device side actions.
+// For each unique --cuda-gpu-arch= argument creates a TY_CUDA_DEVICE
+// input action and then wraps each in CudaDeviceAction paired with
+// appropriate GPU arch name. In case of partial (i.e preprocessing
+// only) or device-only compilation, each device action is added to /p
+// Actions and /p Current is released. Otherwise the function creates
+// and returns a new CudaHostAction which wraps /p Current and device
+// side actions.
 static std::unique_ptr<Action>
 buildCudaActions(const Driver &D, const ToolChain &TC, DerivedArgList &Args,
                  const Arg *InputArg, std::unique_ptr<Action> HostAction,
@@ -1466,22 +1468,14 @@ void Driver::BuildActions(const ToolChain &TC, DerivedArgList &Args,
     }
 
     phases::ID CudaInjectionPhase;
-    if (isSaveTempsEnabled()) {
-      // All phases are done independently, inject GPU blobs during compilation
-      // phase as that's where we generate glue code to init them.
-      CudaInjectionPhase = phases::Compile;
-    } else {
-      // Assumes that clang does everything up until linking phase, so we inject
-      // cuda device actions at the last step before linking. Otherwise CUDA
-      // host action forces preprocessor into a separate invocation.
-      CudaInjectionPhase = FinalPhase;
-      if (FinalPhase == phases::Link)
-        for (auto PI = PL.begin(), PE = PL.end(); PI != PE; ++PI) {
-          auto next = PI + 1;
-          if (next != PE && *next == phases::Link)
-            CudaInjectionPhase = *PI;
-        }
-    }
+    bool InjectCuda = (InputType == types::TY_CUDA &&
+                       !Args.hasArg(options::OPT_cuda_host_only));
+    CudaInjectionPhase = FinalPhase;
+    for (auto &Phase : PL)
+      if (Phase <= FinalPhase && Phase == phases::Compile) {
+        CudaInjectionPhase = Phase;
+        break;
+      }
 
     // Build the pipeline for this file.
 
@@ -1646,8 +1640,7 @@ void Driver::BuildActions(const ToolChain &TC, DerivedArgList &Args,
                                  std::move(DepAction))
                 .release());
 
-        if (tgt == 0 && ActionsForTarget[tgt]->getType() == types::TY_CUDA &&
-            Phase == CudaInjectionPhase &&
+        if (tgt == 0 && InjectCuda && Phase == CudaInjectionPhase &&
             !Args.hasArg(options::OPT_cuda_host_only)) {
           ActionsForTarget[tgt].reset(
             buildCudaActions(*this, TC, Args, InputArg,
@@ -1960,11 +1953,18 @@ static Action* GetPreviousSingleAction(const ActionList *&Inputs){
   return PrevSingleAction;
 }
 
-static const Tool *SelectToolForJob(Compilation &C, bool SaveTemps,
+// Returns a Tool for a given JobAction.  In case the action and its
+// predecessors can be combined, updates Inputs with the inputs of the
+// first combined action. If one of the collapsed actions is a
+// CudaHostAction, updates CollapsedCHA with the pointer to it so the
+// caller can deal with extra handling such action requires.
+static const Tool *selectToolForJob(Compilation &C, bool SaveTemps,
                                     bool isLegalToMergeCompilerAndBackend,
                                     const ToolChain *TC, const JobAction *JA,
-                                    const ActionList *&Inputs) {
+                                    const ActionList *&Inputs,
+                                    const CudaHostAction *&CollapsedCHA) {
   const Tool *ToolForJob = nullptr;
+  CollapsedCHA = nullptr;
   Action *PrevSingleAction = GetPreviousSingleAction(Inputs);
 
   // See if we should look for a compiler with an integrated assembler. We match
@@ -1987,20 +1987,21 @@ static const Tool *SelectToolForJob(Compilation &C, bool SaveTemps,
       const ActionList *BackendInputs = &PrevSingleAction->getInputs();
       Action *PrevPrevSingleAction = GetPreviousSingleAction(BackendInputs);
 
-      JobAction *CompileJA;
-      // Extract real host action, if it's a CudaHostAction.
-      if (CudaHostAction *CudaHA = dyn_cast<CudaHostAction>(PrevPrevSingleAction))
-        CompileJA = cast<CompileJobAction>(*CudaHA->begin());
-      else
-        CompileJA = cast<CompileJobAction>(PrevPrevSingleAction);
+      // Compile job may be wrapped in CudaHostAction, extract it if
+      // that's the case and update CollapsedCHA if we combine phases.
+      CudaHostAction *CHA = dyn_cast<CudaHostAction>(PrevPrevSingleAction);
+      JobAction *CompileJA =
+          cast<CompileJobAction>(CHA ? *CHA->begin() : PrevPrevSingleAction);
+      assert(CompileJA && "Backend job is not preceeded by compile job.");
 
       const Tool *Compiler = TC->SelectTool(*CompileJA);
       if (!Compiler)
         return nullptr;
       if (Compiler->hasIntegratedAssembler()) {
-        Inputs = &PrevPrevSingleAction->getInputs();
+        Inputs = &CompileJA->getInputs();
         PrevSingleAction = GetPreviousSingleAction(Inputs);
         ToolForJob = Compiler;
+        CollapsedCHA = CHA;
       }
     } else {
       JobAction *BackendJA = cast<BackendJobAction>(PrevSingleAction);
@@ -2021,20 +2022,20 @@ static const Tool *SelectToolForJob(Compilation &C, bool SaveTemps,
     // Check if the compiler supports emitting LLVM IR.
     assert(PrevSingleAction);
 
-    // Extract real host action, if it's a CudaHostAction.
-    JobAction *CompileJA;
-    if (CudaHostAction *CudaHA = dyn_cast<CudaHostAction>(PrevSingleAction))
-      CompileJA = cast<CompileJobAction>(*CudaHA->begin());
-    else
-      CompileJA = cast<CompileJobAction>(PrevSingleAction);
-
+    // Compile job may be wrapped in CudaHostAction, extract it if
+    // that's the case and update CollapsedCHA if we combine phases.
+    CudaHostAction *CHA = dyn_cast<CudaHostAction>(PrevSingleAction);
+    JobAction *CompileJA =
+        cast<CompileJobAction>(CHA ? *CHA->begin() : PrevSingleAction);
+    assert(CompileJA && "Backend job is not preceeded by compile job.");
     const Tool *Compiler = TC->SelectTool(*CompileJA);
     if (!Compiler)
       return nullptr;
     if (!Compiler->canEmitIR() || !SaveTemps) {
-      Inputs = &PrevSingleAction->getInputs();
+      Inputs = &CompileJA->getInputs();
       PrevSingleAction = GetPreviousSingleAction(Inputs);
       ToolForJob = Compiler;
+      CollapsedCHA = CHA;
     }
   }
 
@@ -2178,15 +2179,27 @@ void Driver::BuildJobsForAction(Compilation &C, const Action *A,
   const ActionList *Inputs = &A->getInputs();
 
   const JobAction *JA = cast<JobAction>(A);
-  const Tool *T = SelectToolForJob(
+  const CudaHostAction *CollapsedCHA = nullptr;
+  const Tool *T = selectToolForJob(
       C, isSaveTempsEnabled(),
       /*isLegalToMergeCompilerAndBackend=*/OpenMPTargetToolChains.empty(),
       (JA->getOffloadingDevice() && TC->UseHostToolChainInstead(JA))
           ? HostToolChain
           : TC,
-      JA, Inputs);
+      JA, Inputs, CollapsedCHA);
   if (!T)
     return;
+
+  // If we've collapsed action list that contained CudaHostAction we
+  // need to build jobs for device-side inputs it may have held.
+  if (CollapsedCHA) {
+    InputInfo II;
+    for (const Action *DA : CollapsedCHA->getDeviceActions()) {
+      BuildJobsForAction(C, DA, TC, "", AtTopLevel,
+                         /*MultipleArchs*/ false, LinkingOutput, II);
+      CudaDeviceInputInfos.push_back(II);
+    }
+  }
 
   // Only use pipes when there is exactly one input.
   InputInfoList InputInfos;
