@@ -3008,7 +3008,7 @@ Solaris::Solaris(const Driver &D, const llvm::Triple &Triple,
                  const ArgList &Args)
     : Generic_GCC(D, Triple, Args) {
 
-  GCCInstallation.init(D, Triple, Args);
+  GCCInstallation.init(D, Triple, Args, /*IsOpenMPTargetToolchain*/ false);
 
   path_list &Paths = getFilePaths();
   if (GCCInstallation.isValid())
