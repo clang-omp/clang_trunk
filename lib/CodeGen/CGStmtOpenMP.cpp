@@ -2460,6 +2460,7 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
     llvm::SmallVector<llvm::Value*, 8> RealArgPointerValues;
     llvm::SmallVector<llvm::Value*, 8> RealArgSizeValues;
     llvm::SmallVector<unsigned, 8> RealArgTypeValues;
+    llvm::SmallVector<unsigned, 8> RealArgIdentifierValues;
 
 
     llvm::SmallVector<llvm::Value*, 8> HostArgs;
@@ -2473,10 +2474,11 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
       ArrayRef<llvm::Value*> MapClausePointersArray;
       ArrayRef<llvm::Value*> MapClauseSizesArray;
       ArrayRef<unsigned> MapClauseTypesArray;
+      ArrayRef<unsigned> MapClauseIdentifiersArray;
 
       CGM.OpenMPSupport.getOffloadingMapArrays(MapClauseDecls,
           MapClauseBasePointersArray, MapClausePointersArray, MapClauseSizesArray,
-          MapClauseTypesArray);
+          MapClauseTypesArray, MapClauseIdentifiersArray);
 
       // Scan the captured declarations
       unsigned EFidx = 0;
@@ -2529,6 +2531,7 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
             RealArgPointerValues.push_back(MapClausePointersArray[i]);
             RealArgSizeValues.push_back(MapClauseSizesArray[i]);
             RealArgTypeValues.push_back(MapClauseTypesArray[i]);
+            RealArgIdentifierValues.push_back(MapClauseIdentifiersArray[i]);
 
             dealtWithByMapClause = true;
             break;
@@ -2547,6 +2550,7 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
         RealArgPointerValues.push_back(Arg);
         RealArgSizeValues.push_back(Builder.getInt64(VS));
         RealArgTypeValues.push_back( DefaultType);
+        RealArgIdentifierValues.push_back(CGM.OpenMPSupport.getOffloadingMapCurrentIdentifier());
 
         // If this is a lambda structure with pointer fields, translate
         // the host pointer and replace the field with the device address.
@@ -2578,6 +2582,7 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
                 RealArgSizeValues.push_back(Builder.getInt64(VS));
                 RealArgTypeValues.push_back( OMP_TGT_MAPTYPE_POINTER |
                     OMP_TGT_MAPTYPE_EXTRA );
+                RealArgIdentifierValues.push_back(CGM.OpenMPSupport.getOffloadingMapCurrentIdentifier());
               }
             }
           }
@@ -2623,6 +2628,7 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
     llvm::Value *FinalArgPointers = 0;
     llvm::Value *FinalArgSizes = 0;
     llvm::Value *FinalArgTypes = 0;
+    llvm::Value *FinalArgIdentifiers = 0;
 
     if (!RealArgBasePointerValues.empty()) {
 
@@ -2679,11 +2685,23 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
       FinalArgTypes = Builder.CreateConstInBoundsGEP2_32(
           FinalArgTypesInit->getType(),FinalArgTypesTmp, 0,0);
 
+      // For the identifiers, we don't need to allocate everything, we just create a
+      // constant array
+      llvm::Constant *FinalArgIdentifiersInit = llvm::ConstantDataArray::get(
+          Builder.getContext(), RealArgIdentifierValues);
+      llvm::GlobalVariable *FinalArgIdentifiersTmp = new llvm::GlobalVariable(
+          CGM.getModule(), FinalArgIdentifiersInit->getType(), true,
+          llvm::GlobalValue::PrivateLinkage, FinalArgIdentifiersInit, ".tgt_ids");
+
+      FinalArgIdentifiers = Builder.CreateConstInBoundsGEP2_32(
+          FinalArgIdentifiersInit->getType(),FinalArgIdentifiersTmp, 0,0);
+
     } else {
       FinalArgBasePointers = llvm::Constant::getNullValue(CGM.VoidPtrPtrTy);
       FinalArgPointers = llvm::Constant::getNullValue(CGM.VoidPtrPtrTy);
       FinalArgSizes = llvm::Constant::getNullValue(CGM.Int64Ty->getPointerTo());
       FinalArgTypes = llvm::Constant::getNullValue(CGM.Int32Ty->getPointerTo());
+      FinalArgIdentifiers = llvm::Constant::getNullValue(CGM.Int32Ty->getPointerTo());
     }
 
     // Obtain region arguments' references and fill the arguments ptr and size array
@@ -2704,6 +2722,7 @@ void CodeGenFunction::EmitOMPDirectiveWithTarget(OpenMPDirectiveKind DKind,
     TgtArgs.push_back(FinalArgPointers);
     TgtArgs.push_back(FinalArgSizes);
     TgtArgs.push_back(FinalArgTypes);
+    TgtArgs.push_back(FinalArgIdentifiers);
 
     llvm::Value *TgtTargetFn = 0;
 
@@ -4000,10 +4019,11 @@ void CodeGenFunction::EmitAfterOMPMapClause(const OMPMapClause &C,
   ArrayRef<llvm::Value*> MapClausePointersArray;
   ArrayRef<llvm::Value*> MapClauseSizesArray;
   ArrayRef<unsigned> MapClauseTypesArray;
+  ArrayRef<unsigned> MapClauseIdentifiersArray;
 
   CGM.OpenMPSupport.getOffloadingMapArrays(MapClauseDecls,
       MapClauseBasePointersArray, MapClausePointersArray, MapClauseSizesArray,
-      MapClauseTypesArray);
+      MapClauseTypesArray, MapClauseIdentifiersArray);
 
   assert(
       MapClauseBasePointersArray.size() == MapClauseDecls.size()
@@ -4035,6 +4055,16 @@ void CodeGenFunction::EmitAfterOMPMapClause(const OMPMapClause &C,
   llvm::Value *MapClauseTypes = Builder.CreateConstInBoundsGEP2_32(
       MapClauseTypesInit->getType(),
       MapClauseTypesTmp, 0, 0);
+  llvm::Constant *MapClauseIdentifiersInit = llvm::ConstantDataArray::get(
+
+      Builder.getContext(), MapClauseIdentifiersArray);
+  llvm::GlobalVariable *MapClauseIdentifiersTmp = new llvm::GlobalVariable(
+      CGM.getModule(), MapClauseIdentifiersInit->getType(), true,
+      llvm::GlobalValue::PrivateLinkage, MapClauseIdentifiersInit, ".mapped_ids");
+
+  llvm::Value *MapClauseIdentifiers = Builder.CreateConstInBoundsGEP2_32(
+      MapClauseIdentifiersInit->getType(),
+      MapClauseIdentifiersTmp, 0, 0);
 
   for (unsigned i = 0; i < MapClauseBasePointersArray.size(); ++i) {
 
@@ -4089,6 +4119,7 @@ void CodeGenFunction::EmitAfterOMPMapClause(const OMPMapClause &C,
                            MapClausePointers,
                            MapClauseSizes,
                            MapClauseTypes,
+                           MapClauseIdentifiers,
                            llvm::ConstantInt::get(Int32Ty, ArraySize),
                            DependenceAddresses,
                            llvm::ConstantInt::get(Int32Ty, 0),
@@ -4100,7 +4131,8 @@ void CodeGenFunction::EmitAfterOMPMapClause(const OMPMapClause &C,
                            MapClauseBasePointers,
                            MapClausePointers,
                            MapClauseSizes,
-                           MapClauseTypes};
+                           MapClauseTypes,
+                           MapClauseIdentifiers};
     CGM.OpenMPSupport.setOffloadingMapArguments(makeArrayRef(Args));
   }
 
@@ -7284,10 +7316,11 @@ void CodeGenFunction::EmitOMPTargetUpdateDirective(
   ArrayRef<llvm::Value*> MapClausePointersArray;
   ArrayRef<llvm::Value*> MapClauseSizesArray;
   ArrayRef<unsigned> MapClauseTypesArray;
+  ArrayRef<unsigned> MapClauseIdentifiersArray;
 
   CGM.OpenMPSupport.getOffloadingMapArrays(MapClauseDecls,
       MapClauseBasePointersArray, MapClausePointersArray, MapClauseSizesArray,
-      MapClauseTypesArray);
+      MapClauseTypesArray, MapClauseIdentifiersArray);
 
   // for pointers we use the pointee address as base address and the pointee
   // start section as buffer address
@@ -7298,6 +7331,7 @@ void CodeGenFunction::EmitOMPTargetUpdateDirective(
           && MapClauseBasePointersArray.size() == MapClausePointersArray.size()
           && MapClauseBasePointersArray.size() == MapClauseSizesArray.size()
           && MapClauseBasePointersArray.size() == MapClauseTypesArray.size()
+          && MapClauseBasePointersArray.size() == MapClauseIdentifiersArray.size()
           && "Array size mismatch!");
 
   if (MapClauseBasePointersArray.empty())

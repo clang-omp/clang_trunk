@@ -3966,7 +3966,7 @@ CodeGenModule::OpenMPSupportStackTy::OMPStackElemTy::OMPStackElemTy(
       Mergeable(false), Schedule(0), ChunkSize(0), NewTask(false),
       Untied(false), HasLastPrivate(false), TaskPrivateTy(0), TaskPrivateQTy(),
       TaskPrivateBase(0), NumTeams(0), ThreadLimit(0), WaitDepsArgs(0),
-      MapsBegin(0), MapsEnd(0), OffloadingDevice(0),
+      CurrentIdentifier(0), MapsBegin(0), MapsEnd(0), OffloadingDevice(0),
       OffloadingHostFunctionCall(0) {}
 
 CodeGenFunction &CodeGenModule::OpenMPSupportStackTy::getCGFForReductionFunction() {
@@ -4379,12 +4379,13 @@ void CodeGenModule::OpenMPSupportStackTy::addOffloadingMap(const Expr* DExpr, ll
   OpenMPStack.back().OffloadingMapSizes.push_back(Size);
   OpenMPStack.back().OffloadingMapTypes.push_back(Type);
 }
-void CodeGenModule::OpenMPSupportStackTy::getOffloadingMapArrays(ArrayRef<const Expr*> &DExprs, ArrayRef<llvm::Value*> &BasePtrs, ArrayRef<llvm::Value*> &Ptrs, ArrayRef<llvm::Value*> &Sizes, ArrayRef<unsigned> &Types){
+void CodeGenModule::OpenMPSupportStackTy::getOffloadingMapArrays(ArrayRef<const Expr*> &DExprs, ArrayRef<llvm::Value*> &BasePtrs, ArrayRef<llvm::Value*> &Ptrs, ArrayRef<llvm::Value*> &Sizes, ArrayRef<unsigned> &Types, ArrayRef<unsigned> &Identifiers){
   DExprs = OpenMPStack.back().OffloadingMapDecls;
   BasePtrs = OpenMPStack.back().OffloadingMapBasePtrs;
   Ptrs  = OpenMPStack.back().OffloadingMapPtrs;
   Sizes = OpenMPStack.back().OffloadingMapSizes;
   Types = OpenMPStack.back().OffloadingMapTypes;
+  Identifiers = OpenMPStack.back().OffloadingMapIdentifiers;
 }
 void CodeGenModule::OpenMPSupportStackTy::setMapsBegin(bool Flag){
   OpenMPStack.back().MapsBegin = Flag;
