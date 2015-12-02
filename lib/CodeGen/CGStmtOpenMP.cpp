@@ -4554,47 +4554,52 @@ void CodeGenFunction::EmitPreOMPPrivateClause(const OMPPrivateClause &C,
     // CodeGen for classes with the default constructor.
     if (((!PTask || CurFn != PTask) && !isTrivialInitializer(*InitIter)) ||
         (MainTy->isVariablyModifiedType() && !MainTy->isPointerType())) {
-      RunCleanupsScope InitBlock(*this);
-      if (const ArrayType *ArrayTy = MainTy->getAsArrayTypeUnsafe()) {
-        // Create array.
-        QualType ElementTy;
-        llvm::Value *ArrayBeg = Private;
-        llvm::Value *NumElements =
+
+      if (*InitIter) {
+        RunCleanupsScope InitBlock(*this);
+        if (const ArrayType *ArrayTy = MainTy->getAsArrayTypeUnsafe()) {
+          // Create array.
+          QualType ElementTy;
+          llvm::Value *ArrayBeg = Private;
+          llvm::Value *NumElements =
             emitArrayLength(ArrayTy, ElementTy, ArrayBeg);
-        llvm::Value *ArrayEnd =
+          llvm::Value *ArrayEnd =
             Builder.CreateGEP(ArrayBeg, NumElements, "omp.arrayctor.end");
-        // The basic structure here is a do-while loop, because we don't
-        // need to check for the zero-element case.
-        llvm::BasicBlock *BodyBB = createBasicBlock("omp.arrayctor.body");
-        llvm::BasicBlock *DoneBB = createBasicBlock("omp.arrayctor.done");
-        llvm::Value *IsEmpty =
+          // The basic structure here is a do-while loop, because we don't
+          // need to check for the zero-element case.
+          llvm::BasicBlock *BodyBB = createBasicBlock("omp.arrayctor.body");
+          llvm::BasicBlock *DoneBB = createBasicBlock("omp.arrayctor.done");
+          llvm::Value *IsEmpty =
             Builder.CreateICmpEQ(ArrayBeg, ArrayEnd, "omp.arrayctor.isempty");
-        Builder.CreateCondBr(IsEmpty, DoneBB, BodyBB);
+          Builder.CreateCondBr(IsEmpty, DoneBB, BodyBB);
 
-        // Enter the loop body, making that address the current address.
-        llvm::BasicBlock *EntryBB = Builder.GetInsertBlock();
-        EmitBlock(BodyBB);
-        llvm::PHINode *ElementPast = Builder.CreatePHI(
-            ArrayBeg->getType(), 2, "omp.arrayctor.elementPast");
-        ElementPast->addIncoming(ArrayEnd, EntryBB);
+          // Enter the loop body, making that address the current address.
+          llvm::BasicBlock *EntryBB = Builder.GetInsertBlock();
+          EmitBlock(BodyBB);
+          llvm::PHINode *ElementPast = Builder.CreatePHI(
+              ArrayBeg->getType(), 2, "omp.arrayctor.elementPast");
+          ElementPast->addIncoming(ArrayEnd, EntryBB);
 
-        // Shift the address back by one element.
-        llvm::Value *NegativeOne = llvm::ConstantInt::get(SizeTy, -1, true);
-        llvm::Value *Element = Builder.CreateGEP(ElementPast, NegativeOne,
-                                                 "omp.arrayctor.element");
-        EmitAnyExprToMem(*InitIter, Element,
-                         (*InitIter)->getType().getQualifiers(), false);
-        //// Check whether we've reached the end.
-        llvm::Value *Done =
+          // Shift the address back by one element.
+          llvm::Value *NegativeOne = llvm::ConstantInt::get(SizeTy, -1, true);
+          llvm::Value *Element = Builder.CreateGEP(ElementPast, NegativeOne,
+              "omp.arrayctor.element");
+          EmitAnyExprToMem(*InitIter, Element,
+              (*InitIter)->getType().getQualifiers(), false);
+          //// Check whether we've reached the end.
+          llvm::Value *Done =
             Builder.CreateICmpEQ(Element, ArrayBeg, "omp.arrayctor.done");
-        Builder.CreateCondBr(Done, DoneBB, BodyBB);
-        ElementPast->addIncoming(Element, Builder.GetInsertBlock());
+          Builder.CreateCondBr(Done, DoneBB, BodyBB);
+          ElementPast->addIncoming(Element, Builder.GetInsertBlock());
 
-        // Done.
-        EmitBlock(DoneBB, true);
+          // Done.
+          EmitBlock(DoneBB, true);
+        } else {
+          EmitAnyExprToMem(*InitIter, Private,
+              (*InitIter)->getType().getQualifiers(), false);
+        }
       } else {
-        EmitAnyExprToMem(*InitIter, Private,
-                         (*InitIter)->getType().getQualifiers(), false);
+        //Do nothing?
       }
     }
     CGM.OpenMPSupport.addOpenMPPrivateVar(VD, Private);
