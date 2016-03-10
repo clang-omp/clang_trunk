@@ -26,8 +26,7 @@ enum kmp_proc_bind_t {};
 enum target_size_t {};
 enum target_intptr_t {};
 typedef void (*kmpc_micro)(int32_t *global_tid, int32_t *bound_tid, ...);
-typedef void(__kmpc_fork_call)(ident_t *loc, int32_t argc, kmpc_micro microtask,
-                               void *);
+typedef void(__kmpc_fork_call)(ident_t *loc, int32_t argc, kmpc_micro microtask, ...);
 typedef void(__kmpc_push_num_threads)(ident_t *loc, int32_t global_tid,
                                       int32_t num_threads);
 typedef void(__kmpc_push_proc_bind)(ident_t *loc, int32_t global_tid,
