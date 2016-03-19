@@ -163,6 +163,9 @@ protected:
   // Number of globals processed so far that are to be mapped into a target
   unsigned NumTargetGlobals;
 
+  // True if target data region was processed
+  bool HasTargetDataRegions;
+
   // Name of the current function whose target regions are being identified
   std::string CurTargetParentFunctionName;
 
@@ -288,10 +291,16 @@ public:
   // entry point
   bool isValidOtherTargetFunction(StringRef name);
 
+  // Register target data region
+  void setHasTargetDataRegions(bool val) {
+    HasTargetDataRegions = val;
+  }
+
   // Return true if the current module requires a the target descriptor to be
   // registered
   bool requiresTargetDescriptorRegistry(){
-    return NumTargetRegions != 0 || !TargetGlobalInitializers.empty();
+    return NumTargetRegions != 0 || !TargetGlobalInitializers.empty() ||
+           HasTargetDataRegions;
   }
 
   // Register global initializer for OpenMP Target offloading

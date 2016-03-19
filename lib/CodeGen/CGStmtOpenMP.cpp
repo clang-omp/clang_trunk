@@ -7103,6 +7103,7 @@ void CodeGenFunction::EmitOMPTargetDataDirective(
       EmitFinalOMPClause(*(*I), S);
 
   CGM.OpenMPSupport.endOpenMPRegion();
+  CGM.getOpenMPRuntime().setHasTargetDataRegions(true);
 }
 
 // Generate the instructions for '#pragma omp target enter data' directive.

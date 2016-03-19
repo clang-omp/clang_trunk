@@ -112,8 +112,8 @@ void CGOpenMPRuntime::registerEntryForDeclaration(const Decl *D,
 
 CGOpenMPRuntime::CGOpenMPRuntime(CodeGenModule &CGM)
     : CGM(CGM), DefaultOpenMPPSource(nullptr), NumTargetRegions(0),
-      NumTargetGlobals(0), HasTargetInfoLoaded(false),
-      TargetRegionsDescriptor(nullptr) {
+      NumTargetGlobals(0), HasTargetDataRegions(false),
+      HasTargetInfoLoaded(false), TargetRegionsDescriptor(nullptr) {
   IdentTy = llvm::StructType::create(
       "ident_t", CGM.Int32Ty /* reserved_1 */, CGM.Int32Ty /* flags */,
       CGM.Int32Ty /* reserved_2 */, CGM.Int32Ty /* reserved_3 */,
